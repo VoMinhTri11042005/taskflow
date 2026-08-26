@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("member") // admin, manager, member
+  avatar    String?
+  color     String   @default("#6366f1")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks    Task[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String   @default("#10b981")
+  status      String   @default("active") // active, archived
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks Task[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("todo") // todo, in_progress, review, done
+  priority    String   @default("medium") // low, medium, high, urgent
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId    String
+  project      Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assigneeId   String?
+  assignee     TeamMember? @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  links TaskLink[]
+}
+
+model TaskLink {
+  id        String   @id @default(cuid())
+  title     String
+  url       String
+  type      String   // google_doc, google_sheet, other
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
