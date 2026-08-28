@@ -50,6 +50,8 @@ import {
   GripVertical,
   FileText,
   Table2,
+  Presentation,
+  FileQuestion,
   Link as LinkIcon,
   ExternalLink,
   Trash2,
@@ -79,6 +81,8 @@ const priorityConfig: Record<string, { label: string; className: string }> = {
 const linkTypeConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   google_doc: { label: 'Google Doc', icon: FileText, color: 'text-blue-600' },
   google_sheet: { label: 'Google Sheet', icon: Table2, color: 'text-emerald-600' },
+  google_slide: { label: 'Google Slides', icon: Presentation, color: 'text-orange-600' },
+  google_form: { label: 'Google Form', icon: FileQuestion, color: 'text-violet-600' },
   other: { label: 'Liên kết', icon: LinkIcon, color: 'text-slate-600' },
 };
 
@@ -109,7 +113,7 @@ export function BoardView() {
   // Link form state
   const [linkTitle, setLinkTitle] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
-  const [linkType, setLinkType] = useState<'google_doc' | 'google_sheet' | 'other'>('google_doc');
+  const [linkType, setLinkType] = useState<'google_doc' | 'google_sheet' | 'google_slide' | 'google_form' | 'other'>('google_doc');
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
   const fetchTasks = useCallback(async () => {
@@ -397,6 +401,39 @@ export function BoardView() {
                               <p className="text-xs text-muted-foreground line-clamp-1">
                                 {task.description}
                               </p>
+                            )}
+
+                            {/* Link badges */}
+                            {hasLinks && (
+                              <div className="flex flex-wrap gap-1">
+                                {task.links!.slice(0, 3).map((link) => {
+                                  const config = linkTypeConfig[link.type] || linkTypeConfig.other;
+                                  const LIcon = config.icon;
+                                  return (
+                                    <a
+                                      key={link.id}
+                                      href={link.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex"
+                                    >
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] h-5 px-1.5 gap-0.5 hover:bg-accent cursor-pointer transition-colors"
+                                      >
+                                        <LIcon className={cn('h-3 w-3', config.color)} />
+                                        {link.title}
+                                      </Badge>
+                                    </a>
+                                  );
+                                })}
+                                {task.links!.length > 3 && (
+                                  <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                                    +{task.links!.length - 3}
+                                  </Badge>
+                                )}
+                              </div>
                             )}
 
                             {/* Bottom row */}
@@ -722,7 +759,7 @@ export function BoardView() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Loại tài liệu</Label>
-              <Select value={linkType} onValueChange={(v) => setLinkType(v as 'google_doc' | 'google_sheet' | 'other')}>
+              <Select value={linkType} onValueChange={(v) => setLinkType(v as 'google_doc' | 'google_sheet' | 'google_slide' | 'google_form' | 'other')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="google_doc">
@@ -735,6 +772,18 @@ export function BoardView() {
                     <div className="flex items-center gap-2">
                       <Table2 className="h-4 w-4 text-emerald-600" />
                       Google Sheet
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="google_slide">
+                    <div className="flex items-center gap-2">
+                      <Presentation className="h-4 w-4 text-orange-600" />
+                      Google Slides
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="google_form">
+                    <div className="flex items-center gap-2">
+                      <FileQuestion className="h-4 w-4 text-violet-600" />
+                      Google Form
                     </div>
                   </SelectItem>
                   <SelectItem value="other">

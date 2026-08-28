@@ -96,3 +96,23 @@ Stage Summary:
 - Seed data provides realistic time log entries for immediate verification
 - All lint checks pass
 - Verified via Agent Browser: admin shows 3 members ranked by hours (Lan 4h > Hoa 3h > Minh 46min), member Chấm công view shows check-in button and history
+
+---
+Task ID: 4
+Agent: main
+Task: Nâng cấp tích hợp Google Docs/Sheets/Slides/Forms
+
+Work Log:
+- Added google_slide (Presentation icon, orange) and google_form (FileQuestion icon, violet) to linkTypeConfig in board-view.tsx
+- Updated 'Thêm tài liệu' dropdown: now has 5 options (Google Doc, Google Sheet, Google Slides, Google Form, Liên kết khác)
+- Updated linkType state type to include google_slide and google_form
+- Added clickable link badges directly on admin board-view task cards (shows up to 3, with +N overflow)
+- Made link badges in member my-tasks-view clickable (wrapped in <a> with target=_blank, stops event propagation)
+- Both admin and member views now show Google link badges on task cards with proper icons and colors
+
+Stage Summary:
+- All 4 Google types (Doc, Sheet, Slides, Form) + 'other' supported in dropdown
+- Link badges visible and clickable on task cards in both Admin Board and Member My Tasks
+- 6 seed links (including 1 Google Slide) all visible and verified via Agent Browser
+- Links open in new tab, don't interfere with card click/drag events
+- All lint checks pass

@@ -314,20 +314,33 @@ export function MyTasksView() {
                             {/* Link badges */}
                             {hasLinks && (
                               <div className="flex flex-wrap gap-1">
-                                {task.links!.map((link) => {
+                                {task.links!.slice(0, 3).map((link) => {
                                   const config = linkTypeConfig[link.type] || linkTypeConfig.other;
                                   const LIcon = config.icon;
                                   return (
-                                    <Badge
+                                    <a
                                       key={link.id}
-                                      variant="outline"
-                                      className="text-[10px] h-5 px-1.5 gap-0.5"
+                                      href={link.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex"
                                     >
-                                      <LIcon className={cn('h-3 w-3', config.color)} />
-                                      {link.title}
-                                    </Badge>
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] h-5 px-1.5 gap-0.5 hover:bg-accent cursor-pointer transition-colors"
+                                      >
+                                        <LIcon className={cn('h-3 w-3', config.color)} />
+                                        {link.title}
+                                      </Badge>
+                                    </a>
                                   );
                                 })}
+                                {task.links!.length > 3 && (
+                                  <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                                    +{task.links!.length - 3}
+                                  </Badge>
+                                )}
                               </div>
                             )}
 
