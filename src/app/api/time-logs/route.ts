@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { cookies } from 'next/headers'
-
-async function getSession() {
-  try {
-    const cookieStore = await cookies()
-    const sessionCookie = cookieStore.get('session')
-    if (!sessionCookie?.value) return null
-    const parsed = JSON.parse(sessionCookie.value)
-    return parsed // { id, email, name, role, ... }
-  } catch {
-    return null
-  }
-}
+import { getSession } from '@/lib/auth'
 
 /* GET /api/time-logs?mode=admin-summary or ?userId=xxx */
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession()
+    const session = getSession(req)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -124,7 +112,7 @@ export async function GET(req: NextRequest) {
 /* POST /api/time-logs — Check-in or Check-out */
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession()
+    const session = getSession(req)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

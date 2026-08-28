@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { cookies } from 'next/headers'
-
-async function getAdminRole(): Promise<string | null> {
-  const cookieStore = await cookies()
-  const sessionCookie = cookieStore.get('session')
-  if (!sessionCookie?.value) return null
-  try {
-    const session = JSON.parse(sessionCookie.value)
-    return session.role || null
-  } catch {
-    return null
-  }
-}
+import { isAdmin, getSession } from '@/lib/auth'
 
 export async function GET(
   request: NextRequest,
@@ -68,8 +56,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const role = await getAdminRole()
-    if (role !== 'admin') {
+    if (!isAdmin(request)) {
       return NextResponse.json(
         { error: 'Bạn không có quyền thực hiện thao tác này' },
         { status: 403 }
@@ -121,8 +108,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const role = await getAdminRole()
-    if (role !== 'admin') {
+    if (!isAdmin(request)) {
       return NextResponse.json(
         { error: 'Bạn không có quyền thực hiện thao tác này' },
         { status: 403 }

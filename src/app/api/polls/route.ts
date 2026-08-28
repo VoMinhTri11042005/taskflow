@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { cookies } from 'next/headers'
-
-async function getAdminRole(): Promise<string | null> {
-  const cookieStore = await cookies()
-  const sessionCookie = cookieStore.get('session')
-  if (!sessionCookie?.value) return null
-  try {
-    const session = JSON.parse(sessionCookie.value)
-    return session.role || null
-  } catch {
-    return null
-  }
-}
+import { isAdmin, getUserId } from '@/lib/auth'
 
 export async function GET() {
   try {
@@ -47,8 +35,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const role = await getAdminRole()
-    if (role !== 'admin') {
+    if (!isAdmin(request)) {
       return NextResponse.json(
         { error: 'Bạn không có quyền thực hiện thao tác này' },
         { status: 403 }
@@ -65,10 +52,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const cookieStore = await cookies()
-    const sessionCookie = cookieStore.get('session')
-    const session = JSON.parse(sessionCookie!.value)
-    const userId = session.userId
+    const userId = getUserId(request)
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Phiên đăng nhập không hợp lệ' },
+        { status: 401 }
+      )
+    }
 
     const poll = await db.poll.create({
       data: {

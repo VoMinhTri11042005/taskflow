@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { isAdmin } from '@/lib/auth'
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!isAdmin(request)) {
+      return NextResponse.json({ error: 'Không có quyền' }, { status: 403 })
+    }
+
     const { id } = await params
     await db.taskLink.delete({ where: { id } })
     return NextResponse.json({ success: true })
