@@ -194,7 +194,7 @@ export function AdminReportsView() {
         </CardContent>
       </Card>
 
-      {/* Member performance table */}
+      {/* Member performance table / cards */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Hiệu suất thành viên</CardTitle>
@@ -205,63 +205,34 @@ export function AdminReportsView() {
               Chưa có thành viên nào
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Thành viên</TableHead>
-                  <TableHead className="text-right">Việc được gán</TableHead>
-                  <TableHead className="text-right">Hoàn thành</TableHead>
-                  <TableHead className="text-right">Tỷ lệ</TableHead>
-                  <TableHead className="w-[120px]">Tiến độ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Mobile: Card layout */}
+              <div className="space-y-3 md:hidden">
                 {memberPerformance.map((member) => (
-                  <TableRow key={member.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                          style={{ backgroundColor: member.color }}
+                  <div key={member.id} className="flex items-center gap-3 rounded-lg border p-3">
+                    <div
+                      className="h-10 w-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                      style={{ backgroundColor: member.color }}
+                    >
+                      {member.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm truncate">{member.name}</span>
+                        <Badge
+                          variant={
+                            member.completionRate >= 70
+                              ? 'default'
+                              : member.completionRate >= 40
+                                ? 'secondary'
+                                : 'destructive'
+                          }
+                          className="text-xs shrink-0 ml-2"
                         >
-                          {member.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-medium text-sm truncate">
-                            {member.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {member.role === 'admin'
-                              ? 'Quản trị viên'
-                              : member.role === 'manager'
-                                ? 'Quản lý'
-                                : 'Thành viên'}
-                          </span>
-                        </div>
+                          {member.completionRate}%
+                        </Badge>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {member.assignedCount}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {member.completedCount}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge
-                        variant={
-                          member.completionRate >= 70
-                            ? 'default'
-                            : member.completionRate >= 40
-                              ? 'secondary'
-                              : 'destructive'
-                        }
-                        className="text-xs"
-                      >
-                        {member.completionRate}%
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="h-2 w-full rounded-full bg-secondary">
+                      <div className="h-2 w-full rounded-full bg-secondary mb-1">
                         <div
                           className="h-2 rounded-full transition-all"
                           style={{
@@ -270,11 +241,87 @@ export function AdminReportsView() {
                           }}
                         />
                       </div>
-                    </TableCell>
-                  </TableRow>
+                      <p className="text-xs text-muted-foreground">
+                        {member.completedCount}/{member.assignedCount} việc hoàn thành
+                      </p>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+              {/* Desktop: Table layout */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Thành viên</TableHead>
+                      <TableHead className="text-right">Việc được gán</TableHead>
+                      <TableHead className="text-right">Hoàn thành</TableHead>
+                      <TableHead className="text-right">Tỷ lệ</TableHead>
+                      <TableHead className="w-[120px]">Tiến độ</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {memberPerformance.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                              style={{ backgroundColor: member.color }}
+                            >
+                              {member.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-medium text-sm truncate">
+                                {member.name}
+                              </span>
+                              <span className="text-xs text-muted-foreground truncate">
+                                {member.role === 'admin'
+                                  ? 'Quản trị viên'
+                                  : member.role === 'manager'
+                                    ? 'Quản lý'
+                                    : 'Thành viên'}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {member.assignedCount}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {member.completedCount}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge
+                            variant={
+                              member.completionRate >= 70
+                                ? 'default'
+                                : member.completionRate >= 40
+                                  ? 'secondary'
+                                  : 'destructive'
+                            }
+                            className="text-xs"
+                          >
+                            {member.completionRate}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="h-2 w-full rounded-full bg-secondary">
+                            <div
+                              className="h-2 rounded-full transition-all"
+                              style={{
+                                width: `${member.completionRate}%`,
+                                backgroundColor: member.color,
+                              }}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

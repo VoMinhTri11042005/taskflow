@@ -2,6 +2,7 @@
 
 import { useAppStore } from '@/stores/app-store';
 import type { MemberViewType } from '@/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   CheckSquare,
   FolderKanban,
@@ -13,6 +14,7 @@ import {
   ChevronRight,
   ClipboardList,
   LogOut,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +45,14 @@ export function MemberSidebar() {
     unreadCount,
   } = useAppStore();
 
+  const isMobile = useIsMobile();
+  const showFull = isMobile || sidebarOpen;
+
   const activeTasks = tasks.filter((t) => t.status !== 'done' && t.assigneeId === user?.teamMemberId).length;
+
+  function closeMobileMenu() {
+    window.dispatchEvent(new CustomEvent('close-mobile-menu'));
+  }
 
   async function handleLogout() {
     try {
@@ -57,19 +66,28 @@ export function MemberSidebar() {
   return (
     <aside
       className={cn(
-        'flex flex-col border-r bg-card transition-all duration-300 ease-in-out h-full',
-        sidebarOpen ? 'w-64' : 'w-16'
+        'flex flex-col border-r bg-card transition-all duration-300 ease-in-out h-full relative',
+        showFull ? 'w-64' : 'w-16'
       )}
     >
       {/* Header with user info */}
       <div className="flex items-center gap-3 p-4 min-h-[65px]">
+        {/* Close button on mobile */}
+        {isMobile && (
+          <button
+            onClick={closeMobileMenu}
+            className="absolute top-3 right-3 h-8 w-8 flex items-center justify-center rounded-md hover:bg-accent z-10"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-primary-foreground text-sm font-bold"
           style={{ backgroundColor: user?.color || '#6b7280' }}
         >
           {user?.name?.charAt(0).toUpperCase() || '?'}
         </div>
-        {sidebarOpen && (
+        {showFull && (
           <div className="flex flex-col overflow-hidden">
             <h2 className="text-sm font-bold truncate">{user?.name || 'Thành viên'}</h2>
             <Badge variant="secondary" className="text-[10px] h-4 w-fit px-1.5 mt-0.5">
@@ -92,6 +110,7 @@ export function MemberSidebar() {
               onClick={() => {
                 setCurrentView(item.id);
                 if (item.id === 'my-tasks') setSelectedProjectId(null);
+                closeMobileMenu();
               }}
               className={cn(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground',
@@ -99,18 +118,18 @@ export function MemberSidebar() {
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground'
               )}
-              title={!sidebarOpen ? item.label : undefined}
+              title={!showFull ? item.label : undefined}
             >
               <Icon className="h-5 w-5 shrink-0" />
-              {sidebarOpen && (
+              {showFull && (
                 <span className="flex-1 text-left">{item.label}</span>
               )}
-              {sidebarOpen && item.showBadge && unreadCount > 0 && (
+              {showFull && item.showBadge && unreadCount > 0 && (
                 <Badge className="h-5 min-w-[20px] px-1.5 text-[10px]">
                   {unreadCount}
                 </Badge>
               )}
-              {!sidebarOpen && item.showBadge && unreadCount > 0 && (
+              {!showFull && item.showBadge && unreadCount > 0 && (
                 <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
               )}
             </button>
@@ -121,7 +140,7 @@ export function MemberSidebar() {
       <Separator />
 
       {/* Projects quick filter */}
-      {sidebarOpen && (
+      {showFull && (
         <div className="p-3">
           <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             Dự án nhanh
@@ -174,22 +193,24 @@ export function MemberSidebar() {
           onClick={handleLogout}
           className={cn(
             'w-full justify-center text-muted-foreground hover:text-destructive',
-            !sidebarOpen && 'p-0 h-8 w-8 mx-auto'
+            isMobile ? 'justify-start gap-2 px-3' : (!showFull && 'p-0 h-8 w-8 mx-auto')
           )}
-          title={!sidebarOpen ? 'Đăng xuất' : undefined}
+          title={!showFull ? 'Đăng xuất' : undefined}
         >
           <LogOut className="h-4 w-4" />
-          {sidebarOpen && <span className="ml-2">Đăng xuất</span>}
+          {showFull && <span className="ml-2">Đăng xuất</span>}
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleSidebar}
-          className="w-full justify-center"
-        >
-          {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </Button>
-        {sidebarOpen && (
+        {!isMobile && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleSidebar}
+            className="w-full justify-center"
+          >
+            {showFull ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
+        )}
+        {showFull && (
           <p className="text-xs text-center text-muted-foreground">
             {activeTasks} việc cần làm
           </p>

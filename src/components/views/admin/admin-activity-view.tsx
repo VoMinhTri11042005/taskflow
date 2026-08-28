@@ -128,7 +128,7 @@ export function AdminActivityView() {
           <p className="text-muted-foreground">Nhật ký hoạt động của nhóm</p>
         </div>
         <Select value={filterUserId} onValueChange={setFilterUserId}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-full sm:w-[200px]">
             <SelectValue placeholder="Lọc theo thành viên" />
           </SelectTrigger>
           <SelectContent>
@@ -187,7 +187,7 @@ export function AdminActivityView() {
               </div>
 
               {/* Timeline items */}
-              <div className="relative ml-5 border-l-2 border-border pl-6 space-y-4">
+              <div className="relative sm:ml-5 sm:border-l-2 sm:border-border sm:pl-6 space-y-4">
                 {group.logs.map((log, idx) => {
                   const config = actionConfig[log.action] || actionConfig.page_view;
                   const Icon = config.icon;
@@ -200,7 +200,7 @@ export function AdminActivityView() {
                       {/* Timeline dot */}
                       <div
                         className={cn(
-                          'absolute -left-[31px] flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-background',
+                          'hidden sm:flex absolute -left-[31px] flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-background',
                         )}
                       >
                         <Icon className="h-3 w-3 text-muted-foreground" />

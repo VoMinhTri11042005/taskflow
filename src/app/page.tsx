@@ -56,6 +56,15 @@ export default function HomePage() {
     if (isMobile) { setSidebarOpen(false); } else { setSidebarOpen(true); }
   }, [isMobile, setSidebarOpen]);
 
+  /* Close mobile menu when view changes via custom event */
+  useEffect(() => {
+    function handleCloseMobile() {
+      setMobileMenuOpen(false);
+    }
+    window.addEventListener('close-mobile-menu', handleCloseMobile);
+    return () => window.removeEventListener('close-mobile-menu', handleCloseMobile);
+  }, [setMobileMenuOpen]);
+
   /* Set correct initial view based on role */
   useEffect(() => {
     if (!user) return;
@@ -173,8 +182,8 @@ export default function HomePage() {
       <div className="flex flex-1 overflow-hidden">
         {isMobile && mobileMenuOpen && (
           <>
-            <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
-            <div className="fixed inset-y-0 left-0 z-50">
+            <div className="fixed inset-0 z-40 bg-black/50 animate-in fade-in duration-200" onClick={() => setMobileMenuOpen(false)} />
+            <div className="fixed inset-y-0 left-0 z-50 animate-in slide-in-from-left duration-200">
               <Sidebar />
             </div>
           </>

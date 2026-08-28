@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { Task, TeamMember, Project } from '@/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -82,6 +83,8 @@ const linkTypeConfig: Record<string, { label: string; icon: React.ElementType; c
 };
 
 export function BoardView() {
+  const isMobile = useIsMobile();
+  const [mobileTab, setMobileTab] = useState<Task['status']>('todo');
   const {
     tasks, setTasks,
     projects, setProjects,
@@ -284,16 +287,49 @@ export function BoardView() {
         </Button>
       </div>
 
-      {/* Kanban Board */}
+      {/* Mobile tab navigation */}
+      {isMobile && (
+        <div className="flex gap-1 overflow-x-auto pb-2 shrink-0 -mx-1 px-1">
+          {columns.map((col) => {
+            const count = filteredTasks.filter((t) => t.status === col.id).length;
+            return (
+              <button
+                key={col.id}
+                onClick={() => setMobileTab(col.id)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors shrink-0',
+                  mobileTab === col.id
+                    ? cn(col.bgColor, col.color, 'shadow-sm')
+                    : 'text-muted-foreground hover:bg-muted'
+                )}
+              >
+                {col.label}
+                <span className={cn(
+                  'h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center text-[10px] font-bold',
+                  mobileTab === col.id ? 'bg-white/80' : 'bg-muted'
+                )}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Kanban Board - Desktop: all columns, Mobile: single column */}
       <div className="flex-1 overflow-x-auto">
-        <div className="flex gap-4 h-full min-w-max pb-4">
-          {columns.map((column) => {
+        <div className={cn(
+          'flex gap-4 h-full pb-4',
+          !isMobile && 'min-w-max'
+        )}>
+          {(isMobile ? columns.filter(c => c.id === mobileTab) : columns).map((column) => {
             const columnTasks = filteredTasks.filter((t) => t.status === column.id);
             return (
               <div
                 key={column.id}
                 className={cn(
-                  'flex-shrink-0 w-80 flex flex-col rounded-xl p-3',
+                  'flex-shrink-0 flex flex-col rounded-xl p-3',
+                  isMobile ? 'w-full flex-1' : 'w-80',
                   column.bgColor
                 )}
               >
@@ -429,7 +465,7 @@ export function BoardView() {
                 rows={3}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Trạng thái</Label>
                 <Select value={formStatus} onValueChange={(v) => setFormStatus(v as Task['status'])}>
@@ -454,7 +490,7 @@ export function BoardView() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Dự án</Label>
                 <Select value={formProjectId} onValueChange={setFormProjectId}>
@@ -501,7 +537,7 @@ export function BoardView() {
 
       {/* Task Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto sm:max-h-[85vh]">
           {detailTask && (
             <>
               <DialogHeader>
@@ -580,7 +616,7 @@ export function BoardView() {
                 )}
 
                 {/* Project & Assignee */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Dự án</Label>
                     {detailTask.project && (
@@ -652,7 +688,7 @@ export function BoardView() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 shrink-0 opacity-0 group-hover/link:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                              className="h-7 w-7 shrink-0 opacity-100 md:opacity-0 md:group-hover/link:opacity-100 transition-opacity text-destructive hover:text-destructive"
                               onClick={() => handleDeleteLink(link.id)}
                             >
                               <X className="h-3 w-3" />
