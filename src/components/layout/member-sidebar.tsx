@@ -15,6 +15,7 @@ import {
   ClipboardList,
   LogOut,
   X,
+  Timer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,7 @@ import { cn } from '@/lib/utils';
 
 const navItems: { id: MemberViewType; label: string; icon: React.ElementType; showBadge?: boolean }[] = [
   { id: 'my-tasks', label: 'Công việc của tôi', icon: CheckSquare },
+  { id: 'time-tracking', label: 'Chấm công', icon: Timer },
   { id: 'projects', label: 'Dự án', icon: FolderKanban },
   { id: 'polls', label: 'Bình chọn', icon: BarChart3 },
   { id: 'team', label: 'Nhóm', icon: Users },

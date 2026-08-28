@@ -59,3 +59,40 @@ Stage Summary:
 - All lint checks pass
 - Verified on iPhone 14 viewport via Agent Browser (both Admin and Member interfaces)
 - Desktop layout unchanged and fully functional
+
+---
+Task ID: 3
+Agent: main
+Task: Quản lý thời gian làm việc của thành viên + hiển thị giờ làm việc giảm dần trên admin dashboard
+
+Work Log:
+- Added TimeLog model to Prisma schema (checkIn, checkOut, note, userId relation)
+- Updated types/index.ts: added TimeLog, MemberWorkHours interfaces, updated MemberViewType to include 'time-tracking'
+- Updated prisma/seed.ts: added sample time log data for 3 members (Lan: 4h today + 7.5h yesterday, Minh: 2.5h ongoing + 6h yesterday, Hoa: 3h today + 5h yesterday)
+- Created /api/time-logs route with:
+  - GET with ?mode=admin-summary: returns all members' working hours (today/week/total) sorted by todayMinutes desc
+  - GET with ?userId=xxx: returns individual member's time logs
+  - POST with action=check-in: creates new time log entry
+  - POST with action=check-out: closes open time log entry, returns duration
+- Created member time tracking view (time-tracking-view.tsx):
+  - Check-in/Check-out button with green/red color coding
+  - Live timer with pulse animation while working
+  - Note input field for each session
+  - Stats cards: Hôm nay, Tuần này, Tổng cộng, Số phiên
+  - History list with date grouping, check-in/out times, duration, and notes
+- Updated member sidebar: added 'Chấm công' nav item with Timer icon
+- Updated admin dashboard (dashboard-view.tsx):
+  - Added 'Thời gian làm việc của thành viên' section
+  - Table with columns: #, Thành viên, Hôm nay (with bar chart), Tuần này, Trạng thái, Tổng
+  - Gold/Silver/Bronze rank badges for top 3
+  - 'Đang làm việc' badge with pulse animation for active workers
+  - Responsive: hides week/total columns on smaller screens
+  - Sorted from highest to lowest working hours (as requested)
+- Fixed page.tsx: added 'time-tracking' to memberViews array (was missing, causing view to reset)
+
+Stage Summary:
+- Member 'Chấm công' page: full check-in/check-out with live timer, stats, and history
+- Admin dashboard: ranked working hours table sorted from highest to lowest
+- Seed data provides realistic time log entries for immediate verification
+- All lint checks pass
+- Verified via Agent Browser: admin shows 3 members ranked by hours (Lan 4h > Hoa 3h > Minh 46min), member Chấm công view shows check-in button and history

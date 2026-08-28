@@ -83,6 +83,30 @@ export interface ActivityLog {
   user?: { id: string; name: string; color: string } | null;
 }
 
+export interface TimeLog {
+  id: string;
+  checkIn: string;
+  checkOut?: string | null;
+  note?: string | null;
+  createdAt: string;
+  userId: string;
+  user?: { id: string; name: string; color: string; email: string } | null;
+}
+
+export interface MemberWorkHours {
+  userId: string;
+  userName: string;
+  userColor: string;
+  userEmail: string;
+  todayMinutes: number;
+  weekMinutes: number;
+  totalMinutes: number;
+  todaySessions: number;
+  weekSessions: number;
+  isCurrentlyWorking: boolean;
+  checkInTime?: string | null;
+}
+
 export interface Poll {
   id: string;
   title: string;
@@ -111,5 +135,5 @@ export interface PollVote {
 }
 
 export type AdminViewType = 'dashboard' | 'projects' | 'board' | 'members' | 'polls' | 'activity' | 'reports' | 'settings';
-export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'polls' | 'notifications' | 'profile';
+export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'polls' | 'notifications' | 'profile' | 'time-tracking';
 export type ViewType = AdminViewType | MemberViewType;

@@ -7,6 +7,7 @@ async function main() {
   await prisma.pollVote.deleteMany();
   await prisma.pollOption.deleteMany();
   await prisma.poll.deleteMany();
+  await prisma.timeLog.deleteMany();
   await prisma.activityLog.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.taskLink.deleteMany();
@@ -79,6 +80,41 @@ async function main() {
       { action: 'login', userId: memberUser1.id, createdAt: new Date(now.getTime() - 1800000) },
       { action: 'login', userId: memberUser2.id, createdAt: new Date(now.getTime() - 900000) },
       { action: 'login', userId: memberUser3.id, createdAt: new Date(now.getTime() - 600000) },
+    ],
+  });
+
+  // Time logs - realistic sample data
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const today8am = new Date(todayStart.getTime() + 8 * 3600000);
+  const today12pm = new Date(todayStart.getTime() + 12 * 3600000);
+  const today1pm = new Date(todayStart.getTime() + 13 * 3600000);
+
+  // Lan: 4 hours today (8am-12pm), plus yesterday 7.5h
+  const yesterday = new Date(todayStart.getTime() - 86400000);
+  await prisma.timeLog.createMany({
+    data: [
+      { checkIn: today8am, checkOut: today12pm, note: 'Làm việc dự án Website', userId: memberUser1.id },
+      { checkIn: new Date(yesterday.getTime() + 8 * 3600000), checkOut: new Date(yesterday.getTime() + 12 * 3600000), note: 'Sáng: Design UI', userId: memberUser1.id },
+      { checkIn: new Date(yesterday.getTime() + 13 * 3600000), checkOut: new Date(yesterday.getTime() + 16.5 * 3600000), note: 'Chiều: Review code', userId: memberUser1.id },
+    ],
+  });
+
+  // Minh: 2.5 hours today (8am-10:30am, still ongoing), plus yesterday 6h
+  await prisma.timeLog.createMany({
+    data: [
+      { checkIn: today8am, note: 'Phát triển API backend', userId: memberUser2.id },
+      { checkIn: new Date(yesterday.getTime() + 8.5 * 3600000), checkOut: new Date(yesterday.getTime() + 12 * 3600000), note: 'Sáng: API development', userId: memberUser2.id },
+      { checkIn: new Date(yesterday.getTime() + 13 * 3600000), checkOut: new Date(yesterday.getTime() + 15.5 * 3600000), note: 'Chiều: Testing', userId: memberUser2.id },
+    ],
+  });
+
+  // Hoa: 3 hours today (9am-12pm), plus yesterday 5h
+  await prisma.timeLog.createMany({
+    data: [
+      { checkIn: new Date(todayStart.getTime() + 9 * 3600000), checkOut: today12pm, note: 'Content marketing', userId: memberUser3.id },
+      { checkIn: new Date(yesterday.getTime() + 9 * 3600000), checkOut: new Date(yesterday.getTime() + 12 * 3600000), note: 'Sáng: Content plan', userId: memberUser3.id },
+      { checkIn: new Date(yesterday.getTime() + 13 * 3600000), checkOut: new Date(yesterday.getTime() + 15 * 3600000), note: 'Chiều: Banner design', userId: memberUser3.id },
     ],
   });
 

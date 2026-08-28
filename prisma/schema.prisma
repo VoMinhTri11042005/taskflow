@@ -23,6 +23,7 @@ model User {
   activityLogs  ActivityLog[]
   pollsCreated  Poll[]
   votes         PollVote[]
+  timeLogs      TimeLog[]
 
   @@map("users")
 }
@@ -154,4 +155,17 @@ model PollVote {
 
   @@unique([userId, pollId])
   @@map("poll_votes")
+}
+
+model TimeLog {
+  id        String    @id @default(cuid())
+  checkIn   DateTime  @map("check_in")
+  checkOut  DateTime? @map("check_out")
+  note      String?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("time_logs")
 }

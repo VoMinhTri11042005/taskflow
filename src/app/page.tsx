@@ -19,6 +19,7 @@ import { MemberTeamView } from '@/components/views/member/member-team-view';
 import { MemberPollsView } from '@/components/views/member/member-polls-view';
 import { NotificationsView } from '@/components/views/member/notifications-view';
 import { ProfileView } from '@/components/views/member/profile-view';
+import { TimeTrackingView } from '@/components/views/member/time-tracking-view';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
@@ -37,7 +38,7 @@ export default function HomePage() {
   const isAdmin = user?.role === 'admin';
 
   const adminViews = ['dashboard', 'board', 'projects', 'members', 'polls', 'activity', 'reports', 'settings'] as const;
-  const memberViews = ['my-tasks', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
+  const memberViews = ['my-tasks', 'time-tracking', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
 
   /* Check session on mount */
   useEffect(() => {
@@ -153,6 +154,7 @@ export default function HomePage() {
     } else {
       switch (currentView) {
         case 'my-tasks': return <MyTasksView />;
+        case 'time-tracking': return <TimeTrackingView />;
         case 'projects': return <MemberProjectsView />;
         case 'team': return <MemberTeamView />;
         case 'polls': return <MemberPollsView />;

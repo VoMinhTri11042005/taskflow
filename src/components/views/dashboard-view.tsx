@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
-import type { DashboardStats } from '@/types';
+import type { DashboardStats, MemberWorkHours } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -16,6 +16,8 @@ import {
   KanbanSquare,
   FolderKanban,
   Users,
+  Timer,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -34,8 +36,17 @@ const priorityConfig: Record<string, { label: string; variant: 'default' | 'seco
   urgent: { label: 'Khẩn cấp', variant: 'destructive' },
 };
 
+function formatMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  if (h === 0) return `${m} phút`;
+  return `${h} giờ ${m} phút`;
+}
+
 export function DashboardView() {
   const { stats, setStats, setCurrentView, members } = useAppStore();
+  const [workHours, setWorkHours] = useState<MemberWorkHours[]>([]);
+  const [loadingWorkHours, setLoadingWorkHours] = useState(true);
 
   useEffect(() => {
     async function fetchStats() {
@@ -49,6 +60,23 @@ export function DashboardView() {
     }
     fetchStats();
   }, [setStats]);
+
+  useEffect(() => {
+    async function fetchWorkHours() {
+      try {
+        const res = await fetch('/api/time-logs?mode=admin-summary');
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setWorkHours(data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch work hours', e);
+      } finally {
+        setLoadingWorkHours(false);
+      }
+    }
+    fetchWorkHours();
+  }, []);
 
   if (!stats) {
     return (
@@ -267,6 +295,132 @@ export function DashboardView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Working hours ranking - sorted from highest to lowest */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Timer className="h-4 w-4 text-primary" />
+            Thời gian làm việc của thành viên
+            <Badge variant="secondary" className="ml-auto text-xs font-normal">Sắp xếp theo giờ giảm dần</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingWorkHours ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-pulse text-muted-foreground">Đang tải...</div>
+            </div>
+          ) : workHours.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              Chưa có dữ liệu chấm công
+            </p>
+          ) : (
+            <div className="space-y-0">
+              {/* Table header */}
+              <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b">
+                <div className="col-span-1">#</div>
+                <div className="col-span-4 sm:col-span-3">Thành viên</div>
+                <div className="col-span-3 sm:col-span-2 text-right">Hôm nay</div>
+                <div className="col-span-2 text-right hidden sm:block">Tuần này</div>
+                <div className="col-span-4 sm:col-span-2 text-right">Trạng thái</div>
+                <div className="col-span-2 text-right hidden lg:block">Tổng</div>
+              </div>
+
+              {/* Member rows - already sorted by todayMinutes desc from API */}
+              {workHours.map((m, index) => {
+                const maxTodayMinutes = workHours[0]?.todayMinutes || 1;
+                const barWidth = Math.max(4, (m.todayMinutes / maxTodayMinutes) * 100);
+                const isTop = index === 0 && m.todayMinutes > 0;
+
+                return (
+                  <div
+                    key={m.userId}
+                    className={cn(
+                      'grid grid-cols-12 gap-2 px-3 py-3 items-center border-b last:border-0 transition-colors hover:bg-muted/50',
+                      isTop && 'bg-amber-50/50'
+                    )}
+                  >
+                    {/* Rank */}
+                    <div className="col-span-1">
+                      <span className={cn(
+                        'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold',
+                        index === 0 && m.todayMinutes > 0 ? 'bg-amber-400 text-white' :
+                        index === 1 && m.todayMinutes > 0 ? 'bg-slate-300 text-white' :
+                        index === 2 && m.todayMinutes > 0 ? 'bg-amber-700 text-white' :
+                        'bg-muted text-muted-foreground'
+                      )}>
+                        {index + 1}
+                      </span>
+                    </div>
+
+                    {/* Member info */}
+                    <div className="col-span-4 sm:col-span-3 flex items-center gap-2 min-w-0">
+                      <div
+                        className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                        style={{ backgroundColor: m.userColor }}
+                      >
+                        {m.userName.split(' ').map(n => n.charAt(0).toUpperCase()).slice(-2).join('')}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{m.userName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate sm:hidden">{formatMinutes(m.weekMinutes)}</p>
+                      </div>
+                    </div>
+
+                    {/* Today's hours with progress bar */}
+                    <div className="col-span-3 sm:col-span-2">
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={cn(
+                          'text-sm font-bold',
+                          isTop ? 'text-amber-700' : 'text-foreground'
+                        )}>
+                          {formatMinutes(m.todayMinutes)}
+                        </span>
+                        <div className="w-full h-1.5 rounded-full bg-secondary">
+                          <div
+                            className={cn(
+                              'h-1.5 rounded-full transition-all',
+                              isTop ? 'bg-amber-500' : 'bg-primary'
+                            )}
+                            style={{ width: `${barWidth}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Week hours (desktop) */}
+                    <div className="col-span-2 text-right hidden sm:block">
+                      <span className="text-sm text-muted-foreground">{formatMinutes(m.weekMinutes)}</span>
+                    </div>
+
+                    {/* Status */}
+                    <div className="col-span-4 sm:col-span-2 flex justify-end">
+                      {m.isCurrentlyWorking ? (
+                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-xs gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Đang làm việc
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          Nghỉ
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Total (desktop) */}
+                    <div className="col-span-2 text-right hidden lg:block">
+                      <span className="text-sm text-muted-foreground flex items-center justify-end gap-1">
+                        <TrendingUp className="h-3 w-3" />
+                        {formatMinutes(m.totalMinutes)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Quick actions */}
       <Card>
