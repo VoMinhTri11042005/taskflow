@@ -31,6 +31,7 @@ async function main() {
   const p1 = await prisma.project.create({ data: { name: 'Redesign Website', description: 'Thiết kế lại giao diện website công ty', color: '#10b981', status: 'active' } });
   const p2 = await prisma.project.create({ data: { name: 'App Mobile', description: 'Phát triển ứng dụng di động', color: '#f59e0b', status: 'active' } });
   const p3 = await prisma.project.create({ data: { name: 'Marketing Q4', description: 'Chiến dịch marketing quý 4', color: '#ec4899', status: 'active' } });
+  const p4 = await prisma.project.create({ data: { name: 'Báo cáo cuối kỳ Q4/2024', description: 'Tổng hợp báo cáo tài chính, nhân sự, và hiệu suất kinh doanh quý 4. Admin phụ trách tổng hợp, Lan viết báo cáo, Minh xử lý dữ liệu, Hoa làm slide thuyết trình.', color: '#0ea5e9', status: 'active' } });
 
   const taskData = [
     { title: 'Thiết kế mockup trang chủ', description: 'Tạo wireframe và mockup cho trang chủ mới', status: 'done', priority: 'high', projectId: p1.id, assigneeId: m1.id, dueDate: new Date(now.getTime() - 3*86400000) },
@@ -43,6 +44,12 @@ async function main() {
     { title: 'Thiết kế banner QC', description: 'Banner quảng cáo cho chiến dịch', status: 'in_progress', priority: 'medium', projectId: p3.id, assigneeId: m3.id, dueDate: new Date(now.getTime() + 4*86400000) },
     { title: 'Phân tích đối thủ', description: 'Nghiên cứu chiến lược đối thủ', status: 'review', priority: 'low', projectId: p3.id, assigneeId: m2.id, dueDate: new Date(now.getTime() + 6*86400000) },
     { title: 'Cấu hình CI/CD', description: 'Pipeline tự động hóa deployment', status: 'todo', priority: 'urgent', projectId: p1.id, assigneeId: m2.id, dueDate: new Date(now.getTime() + 1*86400000) },
+    // === Báo cáo cuối kỳ Q4 ===
+    { title: 'Thu thập dữ liệu doanh thu Q4', description: 'Tổng hợp số liệu bán hàng, chi phí, lợi nhuận từ các phòng ban. Xuất dữ liệu thô vào Google Sheet để phân tích.', status: 'done', priority: 'urgent', projectId: p4.id, assigneeId: m2.id, dueDate: new Date(now.getTime() - 2*86400000) },
+    { title: 'Phân tích dữ liệu & vẽ biểu đồ', description: 'Dùng dữ liệu từ Sheet để tạo biểu đồ xu hướng doanh thu, so sánh Q3 vs Q4, phân tích KPI từng phòng ban.', status: 'in_progress', priority: 'high', projectId: p4.id, assigneeId: m2.id, dueDate: new Date(now.getTime() + 2*86400000) },
+    { title: 'Viết báo cáo tổng hợp', description: 'Soạn thảo nội dung báo cáo tổng hợp quý 4: tóm tắt kết quả kinh doanh, phân tích SWOT, đề xuất chiến lược Q1/2025.', status: 'in_progress', priority: 'high', projectId: p4.id, assigneeId: m1.id, dueDate: new Date(now.getTime() + 3*86400000) },
+    { title: 'Tạo slide thuyết trình', description: 'Thiết kế slide trình bày báo cáo cho cuộc họp board. Bao gồm: overview, số liệu chính, biểu đồ, kế hoạch tiếp theo.', status: 'todo', priority: 'high', projectId: p4.id, assigneeId: m3.id, dueDate: new Date(now.getTime() + 5*86400000) },
+    { title: 'Tổng hợp & review cuối cùng', description: 'Admin kiểm tra toàn bộ báo cáo, slide, số liệu. Đảm bảo tính nhất quán trước khi nộp.', status: 'todo', priority: 'urgent', projectId: p4.id, assigneeId: null, dueDate: new Date(now.getTime() + 7*86400000) },
   ];
 
   const tasks = [];
@@ -50,12 +57,25 @@ async function main() {
 
   await prisma.taskLink.createMany({
     data: [
-      { title: 'Spec Trang chủ', url: 'https://docs.google.com/document/d/example1', type: 'google_doc', taskId: tasks[0].id },
-      { title: 'Bảng tiến độ UI', url: 'https://docs.google.com/spreadsheets/d/example2', type: 'google_sheet', taskId: tasks[4].id },
-      { title: 'API Documentation', url: 'https://docs.google.com/document/d/example3', type: 'google_doc', taskId: tasks[3].id },
-      { title: 'Content Calendar', url: 'https://docs.google.com/spreadsheets/d/example4', type: 'google_sheet', taskId: tasks[6].id },
-      { title: 'Test Plan', url: 'https://docs.google.com/document/d/example5', type: 'google_doc', taskId: tasks[5].id },
-      { title: 'Presentation Q4', url: 'https://docs.google.com/presentation/d/example6', type: 'google_slide', taskId: tasks[8].id },
+      // === Redesign Website ===
+      { title: 'Spec Trang chủ', url: 'https://docs.google.com/document/d/abc_spec_home', type: 'google_doc', taskId: tasks[0].id },
+      // === App Mobile ===
+      { title: 'Bảng tiến độ UI', url: 'https://docs.google.com/spreadsheets/d/def_ui_progress', type: 'google_sheet', taskId: tasks[4].id },
+      { title: 'API Documentation', url: 'https://docs.google.com/document/d/ghi_api_docs', type: 'google_doc', taskId: tasks[3].id },
+      // === Marketing Q4 ===
+      { title: 'Content Calendar', url: 'https://docs.google.com/spreadsheets/d/jkl_content_cal', type: 'google_sheet', taskId: tasks[6].id },
+      { title: 'Presentation Q4', url: 'https://docs.google.com/presentation/d/mno_q4_pres', type: 'google_slide', taskId: tasks[8].id },
+      // === Báo cáo cuối kỳ Q4 ===
+      { title: 'Dữ liệu thô doanh thu', url: 'https://docs.google.com/spreadsheets/d/pqr_revenue_raw', type: 'google_sheet', taskId: tasks[10].id },
+      { title: 'Template báo cáo Q3', url: 'https://docs.google.com/document/d/stu_report_q3_template', type: 'google_doc', taskId: tasks[10].id },
+      { title: 'Bảng phân tích KPI', url: 'https://docs.google.com/spreadsheets/d/vwx_kpi_analysis', type: 'google_sheet', taskId: tasks[11].id },
+      { title: 'Biểu đồ xu hướng', url: 'https://docs.google.com/spreadsheets/d/yza_trend_charts', type: 'google_sheet', taskId: tasks[11].id },
+      { title: 'Bản nháp báo cáo Q4', url: 'https://docs.google.com/document/d/bcd_q4_report_draft', type: 'google_doc', taskId: tasks[12].id },
+      { title: 'Bảng số liệu tổng hợp', url: 'https://docs.google.com/spreadsheets/d/efg_summary_data', type: 'google_sheet', taskId: tasks[12].id },
+      { title: 'Slide Báo cáo Q4', url: 'https://docs.google.com/presentation/d/hij_q4_slides', type: 'google_slide', taskId: tasks[13].id },
+      { title: 'Template slide công ty', url: 'https://docs.google.com/presentation/d/klm_corp_template', type: 'google_slide', taskId: tasks[13].id },
+      { title: 'Checklist review báo cáo', url: 'https://docs.google.com/document/d/nop_review_checklist', type: 'google_doc', taskId: tasks[14].id },
+      { title: 'Form phản hồi', url: 'https://docs.google.com/forms/d/qrs_feedback_form', type: 'google_form', taskId: tasks[14].id },
     ],
   });
 
@@ -68,6 +88,10 @@ async function main() {
       { title: 'Cần xem xét', message: '"Phát triển component Header" đang chờ review', type: 'info', userId: adminUser.id },
       { title: 'Công việc quá hạn!', message: '"Viết test case" đã quá hạn ngày hôm qua. Hãy hoàn thành sớm!', type: 'overdue', userId: memberUser3.id },
       { title: 'Chào mừng', message: 'Chào mừng bạn đến với TaskFlow!', type: 'info', userId: memberUser1.id, read: true },
+      { title: 'Báo cáo Q4', message: 'Bạn được giao việc: Phân tích dữ liệu & vẽ biểu đồ cho báo cáo Q4', type: 'task_assigned', userId: memberUser2.id },
+      { title: 'Báo cáo Q4', message: 'Bạn được giao việc: Viết báo cáo tổng hợp Q4/2024', type: 'task_assigned', userId: memberUser1.id },
+      { title: 'Báo cáo Q4', message: 'Bạn được giao việc: Tạo slide thuyết trình báo cáo Q4', type: 'task_assigned', userId: memberUser3.id },
+      { title: 'Hoàn thành', message: 'Phạm Đức Minh đã hoàn thành "Thu thập dữ liệu doanh thu Q4"', type: 'task_completed', userId: adminUser.id },
     ],
   });
 

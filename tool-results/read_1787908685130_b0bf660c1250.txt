@@ -1,0 +1,773 @@
+    60→    60→  X,
+    61→    61→} from 'lucide-react';
+    62→    62→import { toast } from 'sonner';
+    63→    63→import { cn } from '@/lib/utils';
+    64→    64→import { format, isPast, isToday, addDays } from 'date-fns';
+    65→    65→import { vi } from 'date-fns/locale';
+    66→    66→
+    67→    67→const columns: { id: Task['status']; label: string; color: string; bgColor: string }[] = [
+    68→    68→  { id: 'todo', label: 'Cần làm', color: 'text-slate-600', bgColor: 'bg-slate-100' },
+    69→    69→  { id: 'in_progress', label: 'Đang làm', color: 'text-amber-600', bgColor: 'bg-amber-50' },
+    70→    70→  { id: 'review', label: 'Xem xét', color: 'text-violet-600', bgColor: 'bg-violet-50' },
+    71→    71→  { id: 'done', label: 'Hoàn thành', color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+    72→    72→];
+    73→    73→
+    74→    74→const priorityConfig: Record<string, { label: string; className: string }> = {
+    75→    75→  low: { label: 'Thấp', className: 'bg-slate-100 text-slate-700' },
+    76→    76→  medium: { label: 'TB', className: 'bg-amber-100 text-amber-700' },
+    77→    77→  high: { label: 'Cao', className: 'bg-orange-100 text-orange-700' },
+    78→    78→  urgent: { label: 'Gấp', className: 'bg-red-100 text-red-700' },
+    79→    79→};
+    80→    80→
+    81→    81→const linkTypeConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+    82→    82→  google_doc: { label: 'Google Doc', icon: FileText, color: 'text-blue-600' },
+    83→    83→  google_sheet: { label: 'Google Sheet', icon: Table2, color: 'text-emerald-600' },
+    84→    84→  google_slide: { label: 'Google Slides', icon: Presentation, color: 'text-orange-600' },
+    85→    85→  google_form: { label: 'Google Form', icon: FileQuestion, color: 'text-violet-600' },
+    86→    86→  other: { label: 'Liên kết', icon: LinkIcon, color: 'text-slate-600' },
+    87→    87→};
+    88→    88→
+    89→    89→export function BoardView() {
+    90→    90→  const isMobile = useIsMobile();
+    91→    91→  const [mobileTab, setMobileTab] = useState<Task['status']>('todo');
+    92→    92→  const {
+    93→    93→    tasks, setTasks,
+    94→    94→    projects, setProjects,
+    95→    95→    members, setMembers,
+    96→    96→    selectedProjectId,
+    97→    97→  } = useAppStore();
+    98→    98→
+    99→    99→  const [dialogOpen, setDialogOpen] = useState(false);
+   100→   100→  const [editingTask, setEditingTask] = useState<Task | null>(null);
+   101→   101→  const [detailTask, setDetailTask] = useState<Task | null>(null);
+   102→   102→  const [detailOpen, setDetailOpen] = useState(false);
+   103→   103→
+   104→   104→  // Form state
+   105→   105→  const [formTitle, setFormTitle] = useState('');
+   106→   106→  const [formDesc, setFormDesc] = useState('');
+   107→   107→  const [formStatus, setFormStatus] = useState<Task['status']>('todo');
+   108→   108→  const [formPriority, setFormPriority] = useState<Task['priority']>('medium');
+   109→   109→  const [formProjectId, setFormProjectId] = useState('');
+   110→   110→  const [formAssigneeId, setFormAssigneeId] = useState('');
+   111→   111→  const [formDueDate, setFormDueDate] = useState('');
+   112→   112→
+   113→   113→  // Link form state
+   114→   114→  const [linkTitle, setLinkTitle] = useState('');
+   115→   115→  const [linkUrl, setLinkUrl] = useState('');
+   116→   116→  const [linkType, setLinkType] = useState<'google_doc' | 'google_sheet' | 'google_slide' | 'google_form' | 'other'>('google_doc');
+   117→   117→  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+   118→   118→
+   119→   119→  const fetchTasks = useCallback(async () => {
+   120→   120→    const params = new URLSearchParams();
+   121→   121→    if (selectedProjectId) params.set('projectId', selectedProjectId);
+   122→   122→    const res = await fetch(`/api/tasks?${params.toString()}`);
+   123→   123→    const data = await res.json();
+   124→   124→    setTasks(data);
+   125→   125→  }, [selectedProjectId, setTasks]);
+   126→   126→
+   127→   127→  useEffect(() => {
+   128→   128→    fetchTasks();
+   129→   129→    fetch('/api/projects').then((r) => r.json()).then(setProjects);
+   130→   130→    fetch('/api/members').then((r) => r.json()).then(setMembers);
+   131→   131→  }, [fetchTasks, setProjects, setMembers]);
+   132→   132→
+   133→   133→  function openCreateDialog(status?: Task['status']) {
+   134→   134→    setEditingTask(null);
+   135→   135→    setFormTitle('');
+   136→   136→    setFormDesc('');
+   137→   137→    setFormStatus(status || 'todo');
+   138→   138→    setFormPriority('medium');
+   139→   139→    setFormProjectId(selectedProjectId || (projects.find(p => p.status === 'active')?.id) || '');
+   140→   140→    setFormAssigneeId('');
+   141→   141→    setFormDueDate('');
+   142→   142→    setDialogOpen(true);
+   143→   143→  }
+   144→   144→
+   145→   145→  function openEditDialog(task: Task) {
+   146→   146→    setEditingTask(task);
+   147→   147→    setFormTitle(task.title);
+   148→   148→    setFormDesc(task.description || '');
+   149→   149→    setFormStatus(task.status);
+   150→   150→    setFormPriority(task.priority);
+   151→   151→    setFormProjectId(task.projectId);
+   152→   152→    setFormAssigneeId(task.assigneeId || '');
+   153→   153→    setFormDueDate(task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '');
+   154→   154→    setDialogOpen(true);
+   155→   155→  }
+   156→   156→
+   157→   157→  async function handleSave() {
+   158→   158→    if (!formTitle.trim()) return;
+   159→   159→    try {
+   160→   160→      const body: Record<string, unknown> = {
+   161→   161→        title: formTitle,
+   162→   162→        description: formDesc || null,
+   163→   163→        status: formStatus,
+   164→   164→        priority: formPriority,
+   165→   165→        projectId: formProjectId,
+   166→   166→        assigneeId: formAssigneeId || null,
+   167→   167→        dueDate: formDueDate ? new Date(formDueDate).toISOString() : null,
+   168→   168→      };
+   169→   169→
+   170→   170→      if (editingTask) {
+   171→   171→        await fetch(`/api/tasks/${editingTask.id}`, {
+   172→   172→          method: 'PUT',
+   173→   173→          headers: { 'Content-Type': 'application/json' },
+   174→   174→          body: JSON.stringify(body),
+   175→   175→        });
+   176→   176→        toast.success('Đã cập nhật công việc');
+   177→   177→      } else {
+   178→   178→        await fetch('/api/tasks', {
+   179→   179→          method: 'POST',
+   180→   180→          headers: { 'Content-Type': 'application/json' },
+   181→   181→          body: JSON.stringify(body),
+   182→   182→        });
+   183→   183→        toast.success('Đã tạo công việc mới');
+   184→   184→      }
+   185→   185→      setDialogOpen(false);
+   186→   186→      fetchTasks();
+   187→   187→    } catch {
+   188→   188→      toast.error('Có lỗi xảy ra');
+   189→   189→    }
+   190→   190→  }
+   191→   191→
+   192→   192→  async function handleDeleteTask(id: string) {
+   193→   193→    try {
+   194→   194→      await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+   195→   195→      toast.success('Đã xóa công việc');
+   196→   196→      setDetailOpen(false);
+   197→   197→      fetchTasks();
+   198→   198→    } catch {
+   199→   199→      toast.error('Có lỗi xảy ra');
+   200→   200→    }
+   201→   201→  }
+   202→   202→
+   203→   203→  async function handleStatusChange(taskId: string, newStatus: Task['status']) {
+   204→   204→    try {
+   205→   205→      await fetch(`/api/tasks/${taskId}`, {
+   206→   206→        method: 'PUT',
+   207→   207→        headers: { 'Content-Type': 'application/json' },
+   208→   208→        body: JSON.stringify({ status: newStatus }),
+   209→   209→      });
+   210→   210→      fetchTasks();
+   211→   211→    } catch {
+   212→   212→      toast.error('Không thể cập nhật trạng thái');
+   213→   213→    }
+   214→   214→  }
+   215→   215→
+   216→   216→  // Link handlers
+   217→   217→  async function handleAddLink() {
+   218→   218→    if (!detailTask || !linkUrl.trim()) return;
+   219→   219→    try {
+   220→   220→      await fetch(`/api/tasks/${detailTask.id}/links`, {
+   221→   221→        method: 'POST',
+   222→   222→        headers: { 'Content-Type': 'application/json' },
+   223→   223→        body: JSON.stringify({
+   224→   224→          title: linkTitle.trim() || linkTypeConfig[linkType].label,
+   225→   225→          url: linkUrl,
+   226→   226→          type: linkType,
+   227→   227→        }),
+   228→   228→      });
+   229→   229→      toast.success('Đã thêm liên kết');
+   230→   230→      setLinkTitle('');
+   231→   231→      setLinkUrl('');
+   232→   232→      setLinkDialogOpen(false);
+   233→   233→      fetchTasks();
+   234→   234→      // Refresh detail task
+   235→   235→      const res = await fetch(`/api/tasks/${detailTask.id}`);
+   236→   236→      const updated = await res.json();
+   237→   237→      setDetailTask(updated);
+   238→   238→    } catch {
+   239→   239→      toast.error('Có lỗi xảy ra');
+   240→   240→    }
+   241→   241→  }
+   242→   242→
+   243→   243→  async function handleDeleteLink(linkId: string) {
+   244→   244→    if (!detailTask) return;
+   245→   245→    try {
+   246→   246→      await fetch(`/api/links/${linkId}`, { method: 'DELETE' });
+   247→   247→      toast.success('Đã xóa liên kết');
+   248→   248→      fetchTasks();
+   249→   249→      const res = await fetch(`/api/tasks/${detailTask.id}`);
+   250→   250→      const updated = await res.json();
+   251→   251→      setDetailTask(updated);
+   252→   252→    } catch {
+   253→   253→      toast.error('Có lỗi xảy ra');
+   254→   254→    }
+   255→   255→  }
+   256→   256→
+   257→   257→  function openTaskDetail(task: Task) {
+   258→   258→    setDetailTask(task);
+   259→   259→    setDetailOpen(true);
+   260→   260→  }
+   261→   261→
+   262→   262→  function getDueDateInfo(dateStr: string) {
+   263→   263→    const date = new Date(dateStr);
+   264→   264→    if (isToday(date)) return { text: 'Hôm nay', className: 'text-amber-600' };
+   265→   265→    if (isPast(date)) return { text: 'Đã quá hạn', className: 'text-red-600' };
+   266→   266→    if (date <= addDays(new Date(), 3)) return { text: format(date, 'dd/MM', { locale: vi }), className: 'text-orange-600' };
+   267→   267→    return { text: format(date, 'dd/MM', { locale: vi }), className: 'text-muted-foreground' };
+   268→   268→  }
+   269→   269→
+   270→   270→  const filteredTasks = selectedProjectId
+   271→   271→    ? tasks.filter((t) => t.projectId === selectedProjectId)
+   272→   272→    : tasks;
+   273→   273→
+   274→   274→  const currentProject = projects.find((p) => p.id === selectedProjectId);
+   275→   275→
+   276→   276→  return (
+   277→   277→    <div className="flex flex-col h-full">
+   278→   278→      {/* Header */}
+   279→   279→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 shrink-0">
+   280→   280→        <div className="min-w-0">
+   281→   281→          <h1 className="text-2xl font-bold tracking-tight truncate">
+   282→   282→            {currentProject ? currentProject.name : 'Bảng công việc'}
+   283→   283→          </h1>
+   284→   284→          <p className="text-muted-foreground">
+   285→   285→            {currentProject ? currentProject.description : 'Tất cả công việc của nhóm'}
+   286→   286→          </p>
+   287→   287→        </div>
+   288→   288→        <Button onClick={() => openCreateDialog('todo')}>
+   289→   289→          <Plus className="mr-2 h-4 w-4" />
+   290→   290→          Thêm việc
+   291→   291→        </Button>
+   292→   292→      </div>
+   293→   293→
+   294→   294→      {/* Mobile tab navigation */}
+   295→   295→      {isMobile && (
+   296→   296→        <div className="flex gap-1 overflow-x-auto pb-2 shrink-0 -mx-1 px-1">
+   297→   297→          {columns.map((col) => {
+   298→   298→            const count = filteredTasks.filter((t) => t.status === col.id).length;
+   299→   299→            return (
+   300→   300→              <button
+   301→   301→                key={col.id}
+   302→   302→                onClick={() => setMobileTab(col.id)}
+   303→   303→                className={cn(
+   304→   304→                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors shrink-0',
+   305→   305→                  mobileTab === col.id
+   306→   306→                    ? cn(col.bgColor, col.color, 'shadow-sm')
+   307→   307→                    : 'text-muted-foreground hover:bg-muted'
+   308→   308→                )}
+   309→   309→              >
+   310→   310→                {col.label}
+   311→   311→                <span className={cn(
+   312→   312→                  'h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center text-[10px] font-bold',
+   313→   313→                  mobileTab === col.id ? 'bg-white/80' : 'bg-muted'
+   314→   314→                )}>
+   315→   315→                  {count}
+   316→   316→                </span>
+   317→   317→              </button>
+   318→   318→            );
+   319→   319→          })}
+   320→   320→        </div>
+   321→   321→      )}
+   322→   322→
+   323→   323→      {/* Kanban Board - Desktop: all columns, Mobile: single column */}
+   324→   324→      <div className="flex-1 overflow-x-auto">
+   325→   325→        <div className={cn(
+   326→   326→          'flex gap-4 h-full pb-4',
+   327→   327→          !isMobile && 'min-w-max'
+   328→   328→        )}>
+   329→   329→          {(isMobile ? columns.filter(c => c.id === mobileTab) : columns).map((column) => {
+   330→   330→            const columnTasks = filteredTasks.filter((t) => t.status === column.id);
+   331→   331→            return (
+   332→   332→              <div
+   333→   333→                key={column.id}
+   334→   334→                className={cn(
+   335→   335→                  'flex-shrink-0 flex flex-col rounded-xl p-3',
+   336→   336→                  isMobile ? 'w-full flex-1' : 'w-80',
+   337→   337→                  column.bgColor
+   338→   338→                )}
+   339→   339→              >
+   340→   340→                {/* Column header */}
+   341→   341→                <div className="flex items-center justify-between mb-3">
+   342→   342→                  <div className="flex items-center gap-2">
+   343→   343→                    <h3 className={cn('text-sm font-semibold', column.color)}>
+   344→   344→                      {column.label}
+   345→   345→                    </h3>
+   346→   346→                    <Badge variant="secondary" className="text-xs h-5 px-1.5">
+   347→   347→                      {columnTasks.length}
+   348→   348→                    </Badge>
+   349→   349→                  </div>
+   350→   350→                  <Button
+   351→   351→                    variant="ghost"
+   352→   352→                    size="icon"
+   353→   353→                    className="h-7 w-7"
+   354→   354→                    onClick={() => openCreateDialog(column.id)}
+   355→   355→                  >
+   356→   356→                    <Plus className="h-4 w-4" />
+   357→   357→                  </Button>
+   358→   358→                </div>
+   359→   359→
+   360→   360→                {/* Task cards */}
+   361→   361→                <ScrollArea className="flex-1">
+   362→   362→                  <div className="space-y-2 pr-2">
+   363→   363→                    {columnTasks.map((task) => {
+   364→   364→                      const assignee = task.assignee;
+   365→   365→                      const project = task.project;
+   366→   366→                      const priority = priorityConfig[task.priority];
+   367→   367→                      const dueInfo = task.dueDate ? getDueDateInfo(task.dueDate) : null;
+   368→   368→                      const hasLinks = task.links && task.links.length > 0;
+   369→   369→
+   370→   370→                      return (
+   371→   371→                        <Card
+   372→   372→                          key={task.id}
+   373→   373→                          className="cursor-pointer hover:shadow-md transition-all group"
+   374→   374→                          onClick={() => openTaskDetail(task)}
+   375→   375→                        >
+   376→   376→                          <CardContent className="p-3 space-y-2">
+   377→   377→                            {/* Priority & project */}
+   378→   378→                            <div className="flex items-center justify-between">
+   379→   379→                              <Badge className={cn('text-[10px] px-1.5 py-0', priority?.className)}>
+   380→   380→                                {priority?.label}
+   381→   381→                              </Badge>
+   382→   382→                              {!selectedProjectId && project && (
+   383→   383→                                <div className="flex items-center gap-1">
+   384→   384→                                  <div
+   385→   385→                                    className="h-1.5 w-1.5 rounded-full"
+   386→   386→                                    style={{ backgroundColor: project.color }}
+   387→   387→                                  />\n                                  <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">
+   388→   388→                                    {project.name}
+   389→   389→                                  </span>
+   390→   390→                                </div>
+   391→   391→                              )}
+   392→   392→                            </div>
+   393→   393→
+   394→   394→                            {/* Title */}
+   395→   395→                            <p className="text-sm font-medium leading-snug line-clamp-2">
+   396→   396→                              {task.title}
+   397→   397→                            </p>
+   398→   398→
+   399→   399→                            {/* Description preview */}
+   400→   400→                            {task.description && (
+   401→   401→                              <p className="text-xs text-muted-foreground line-clamp-1">
+   402→   402→                                {task.description}
+   403→   403→                              </p>
+   404→   404→                            )}
+   405→   405→
+   406→   406→                            {/* Link badges */}
+   407→   407→                            {hasLinks && (
+   408→   408→                              <div className="flex flex-wrap gap-1">
+   409→   409→                                {task.links!.slice(0, 3).map((link) => {
+   410→   410→                                  const config = linkTypeConfig[link.type] || linkTypeConfig.other;
+   411→   411→                                  const LIcon = config.icon;
+   412→   412→                                  return (
+   413→   413→                                    <a
+   414→   414→                                      key={link.id}
+   415→   415→                                      href={link.url}
+   416→   416→                                      target="_blank"
+   417→   417→                                      rel="noopener noreferrer"
+   418→   418→                                      onClick={(e) => e.stopPropagation()}
+   419→   419→                                      className="inline-flex"
+   420→   420→                                    >
+   421→   421→                                      <Badge
+   422→   422→                                        variant="outline"
+   423→   423→                                        className="text-[10px] h-5 px-1.5 gap-0.5 hover:bg-accent cursor-pointer transition-colors"
+   424→   424→                                      >
+   425→   425→                                        <LIcon className={cn('h-3 w-3', config.color)} />
+   426→   426→                                        {link.title}
+   427→   427→                                      </Badge>
+   428→   428→                                    </a>
+   429→   429→                                  );
+   430→   430→                                })}
+   431→   431→                                {task.links!.length > 3 && (
+   432→   432→                                  <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+   433→   433→                                    +{task.links!.length - 3}
+   434→   434→                                  </Badge>
+   435→   435→                                )}
+   436→   436→                              </div>
+   437→   437→                            )}
+   438→   438→
+   439→   439→                            {/* Bottom row */}
+   440→   440→                            <div className="flex items-center justify-between pt-1">
+   441→   441→                              <div className="flex items-center gap-2">
+   442→   442→                                {dueInfo && (
+   443→   443→                                  <span className={cn('text-[10px] flex items-center gap-0.5', dueInfo.className)}>
+   444→   444→                                    <Calendar className="h-3 w-3" />
+   445→   445→                                    {dueInfo.text}
+   446→   446→                                  </span>
+   447→   447→                                )}
+   448→   448→                                {hasLinks && (
+   449→   449→                                  <LinkIcon className="h-3 w-3 text-muted-foreground" />
+   450→   450→                                )}
+   451→   451→                              </div>
+   452→   452→                              {assignee && (
+   453→   453→                                <div
+   454→   454→                                  className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+   455→   455→                                  style={{ backgroundColor: assignee.color }}
+   456→   456→                                  title={assignee.name}
+   457→   457→                                >
+   458→   458→                                  {assignee.name.charAt(0).toUpperCase()}
+   459→   459→                                </div>
+   460→   460→                              )}
+   461→   461→                            </div>
+   462→   462→                          </CardContent>
+   463→   463→                        </Card>
+   464→   464→                      );
+   465→   465→                    })}
+   466→   466→                    {columnTasks.length === 0 && (
+   467→   467→                      <div className="flex items-center justify-center py-8 text-sm text-muted-foreground/60">
+   468→   468→                        Kéo việc vào đây
+   469→   469→                      </div>
+   470→   470→                    )}
+   471→   471→                  </div>
+   472→   472→                </ScrollArea>
+   473→   473→              </div>
+   474→   474→            );
+   475→   475→          })}
+   476→   476→        </div>
+   477→   477→      </div>
+   478→   478→
+   479→   479→      {/* Create/Edit Task Dialog */}
+   480→   480→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   481→   481→        <DialogContent className="max-w-lg">
+   482→   482→          <DialogHeader>
+   483→   483→            <DialogTitle>
+   484→   484→              {editingTask ? 'Chỉnh sửa công việc' : 'Tạo công việc mới'}
+   485→   485→            </DialogTitle>
+   486→   486→          </DialogHeader>
+   487→   487→          <div className="space-y-4 py-2">
+   488→   488→            <div className="space-y-2">
+   489→   489→              <Label>Tiêu đề *</Label>
+   490→   490→              <Input
+   491→   491→                value={formTitle}
+   492→   492→                onChange={(e) => setFormTitle(e.target.value)}
+   493→   493→                placeholder="Nhập tiêu đề công việc..."
+   494→   494→              />
+   495→   495→            </div>
+   496→   496→            <div className="space-y-2">
+   497→   497→              <Label>Mô tả</Label>
+   498→   498→              <Textarea
+   499→   499→                value={formDesc}
+   500→   500→                onChange={(e) => setFormDesc(e.target.value)}
+   501→   501→                placeholder="Mô tả chi tiết..."
+   502→   502→                rows={3}
+   503→   503→              />
+   504→   504→            </div>
+   505→   505→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   506→   506→              <div className="space-y-2">
+   507→   507→                <Label>Trạng thái</Label>
+   508→   508→                <Select value={formStatus} onValueChange={(v) => setFormStatus(v as Task['status'])}>
+   509→   509→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   510→   510→                  <SelectContent>
+   511→   511→                    {columns.map((c) => (
+   512→   512→                      <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+   513→   513→                    ))}
+   514→   514→                  </SelectContent>
+   515→   515→                </Select>
+   516→   516→              </div>
+   517→   517→              <div className="space-y-2">
+   518→   518→                <Label>Ưu tiên</Label>
+   519→   519→                <Select value={formPriority} onValueChange={(v) => setFormPriority(v as Task['priority'])}>
+   520→   520→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   521→   521→                  <SelectContent>
+   522→   522→                    <SelectItem value="low">Thấp</SelectItem>
+   523→   523→                    <SelectItem value="medium">Trung bình</SelectItem>
+   524→   524→                    <SelectItem value="high">Cao</SelectItem>
+   525→   525→                    <SelectItem value="urgent">Khẩn cấp</SelectItem>
+   526→   526→                  </SelectContent>
+   527→   527→                </Select>
+   528→   528→              </div>
+   529→   529→            </div>
+   530→   530→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   531→   531→              <div className="space-y-2">
+   532→   532→                <Label>Dự án</Label>
+   533→   533→                <Select value={formProjectId} onValueChange={setFormProjectId}>
+   534→   534→                  <SelectTrigger><SelectValue placeholder="Chọn dự án" /></SelectTrigger>
+   535→   535→                  <SelectContent>
+   536→   536→                    {projects.filter(p => p.status === 'active').map((p) => (
+   537→   537→                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+   538→   538→                    ))}
+   539→   539→                  </SelectContent>
+   540→   540→                </Select>
+   541→   541→              </div>
+   542→   542→              <div className="space-y-2">
+   543→   543→                <Label>Người thực hiện</Label>
+   544→   544→                <Select value={formAssigneeId} onValueChange={setFormAssigneeId}>
+   545→   545→                  <SelectTrigger><SelectValue placeholder="Chưa gán" /></SelectTrigger>
+   546→   546→                  <SelectContent>
+   547→   547→                    <SelectItem value="none">Chưa gán</SelectItem>
+   548→   548→                    {members.map((m) => (
+   549→   549→                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+   550→   550→                    ))}
+   551→   551→                  </SelectContent>
+   552→   552→                </Select>
+   553→   553→              </div>
+   554→   554→            </div>
+   555→   555→            <div className="space-y-2">
+   556→   556→              <Label>Hạn chót</Label>
+   557→   557→              <Input
+   558→   558→                type="date"
+   559→   559→                value={formDueDate}
+   560→   560→                onChange={(e) => setFormDueDate(e.target.value)}
+   561→   561→              />
+   562→   562→            </div>
+   563→   563→          </div>
+   564→   564→          <DialogFooter>
+   565→   565→            <DialogClose asChild>
+   566→   566→              <Button variant="outline">Hủy</Button>
+   567→   567→            </DialogClose>
+   568→   568→            <Button onClick={handleSave} disabled={!formTitle.trim()}>
+   569→   569→              {editingTask ? 'Cập nhật' : 'Tạo mới'}
+   570→   570→            </Button>
+   571→   571→          </DialogFooter>
+   572→   572→        </DialogContent>
+   573→   573→      </Dialog>
+   574→   574→
+   575→   575→      {/* Task Detail Dialog */}
+   576→   576→      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+   577→   577→        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto sm:max-h-[85vh]">
+   578→   578→          {detailTask && (
+   579→   579→            <>
+   580→   580→              <DialogHeader>
+   581→   581→                <div className="flex items-start justify-between">
+   582→   582→                  <DialogTitle className="text-lg pr-4">{detailTask.title}</DialogTitle>
+   583→   583→                  <DropdownMenu>
+   584→   584→                    <DropdownMenuTrigger asChild>
+   585→   585→                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+   586→   586→                        <MoreHorizontal className="h-4 w-4" />
+   587→   587→                      </Button>
+   588→   588→                    </DropdownMenuTrigger>
+   589→   589→                    <DropdownMenuContent align="end">
+   590→   590→                      <DropdownMenuItem onClick={() => {
+   591→   591→                        setDetailOpen(false);
+   592→   592→                        openEditDialog(detailTask);
+   593→   593→                      }}>
+   594→   594→                        <Pencil className="mr-2 h-4 w-4" />Chỉnh sửa
+   595→   595→                      </DropdownMenuItem>
+   596→   596→                      <DropdownMenuItem
+   597→   597→                        onClick={() => handleDeleteTask(detailTask.id)}
+   598→   598→                        className="text-destructive focus:text-destructive"
+   599→   599→                      >
+   600→   600→                        <Trash2 className="mr-2 h-4 w-4" />Xóa
+   601→   601→                      </DropdownMenuItem>
+   602→   602→                    </DropdownMenuContent>
+   603→   603→                  </DropdownMenu>
+   604→   604→                </div>
+   605→   605→              </DialogHeader>
+   606→   606→
+   607→   607→              <div className="space-y-6">
+   608→   608→                {/* Meta info */}
+   609→   609→                <div className="flex flex-wrap gap-2">
+   610→   610→                  <Badge className={cn('text-xs', priorityConfig[detailTask.priority]?.className)}>
+   611→   611→                    {priorityConfig[detailTask.priority]?.label}
+   612→   612→                  </Badge>
+   613→   613→                  <Badge variant="outline" className="text-xs">
+   614→   614→                    {columns.find(c => c.id === detailTask.status)?.label}
+   615→   615→                  </Badge>
+   616→   616→                  {detailTask.dueDate && (
+   617→   617→                    <Badge variant="outline" className="text-xs">
+   618→   618→                      <Calendar className="mr-1 h-3 w-3" />
+   619→   619→                      {getDueDateInfo(detailTask.dueDate).text}
+   620→   620→                    </Badge>
+   621→   621→                  )}
+   622→   622→                </div>
+   623→   623→
+   624→   624→                {/* Status quick change */}
+   625→   625→                <div className="space-y-2">
+   626→   626→                  <Label className="text-xs text-muted-foreground">Chuyển trạng thái</Label>
+   627→   627→                  <div className="flex flex-wrap gap-2">
+   628→   628→                    {columns.map((col) => (
+   629→   629→                      <Button
+   630→   630→                        key={col.id}
+   631→   631→                        size="sm"
+   632→   632→                        variant={detailTask.status === col.id ? 'default' : 'outline'}
+   633→   633→                        className="text-xs h-7"
+   634→   634→                        onClick={() => {
+   635→   635→                          handleStatusChange(detailTask.id, col.id);
+   636→   636→                          setDetailTask({ ...detailTask, status: col.id });
+   637→   637→                        }}
+   638→   638→                      >
+   639→   639→                        {col.label}
+   640→   640→                      </Button>
+   641→   641→                    ))}
+   642→   642→                  </div>
+   643→   643→                </div>
+   644→   644→
+   645→   645→                {/* Description */}
+   646→   646→                {detailTask.description && (
+   647→   647→                  <div className="space-y-1">
+   648→   648→                    <Label className="text-xs text-muted-foreground">Mô tả</Label>
+   649→   649→                    <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded-lg p-3">
+   650→   650→                      {detailTask.description}
+   651→   651→                    </p>
+   652→   652→                  </div>
+   653→   653→                )}
+   654→   654→
+   655→   655→                {/* Project & Assignee */}
+   656→   656→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   657→   657→                  <div className="space-y-1">
+   658→   658→                    <Label className="text-xs text-muted-foreground">Dự án</Label>
+   659→   659→                    {detailTask.project && (
+   660→   660→                      <div className="flex items-center gap-2">
+   661→   661→                        <div className="h-2.5 w-6 rounded-full" style={{ backgroundColor: detailTask.project.color }} />
+   662→   662→                        <span className="text-sm font-medium">{detailTask.project.name}</span>
+   663→   663→                      </div>
+   664→   664→                    )}
+   665→   665→                  </div>
+   666→   666→                  <div className="space-y-1">
+   667→   667→                    <Label className="text-xs text-muted-foreground">Người thực hiện</Label>
+   668→   668→                    {detailTask.assignee ? (
+   669→   669→                      <div className="flex items-center gap-2">
+   670→   670→                        <div
+   671→   671→                          className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+   672→   672→                          style={{ backgroundColor: detailTask.assignee.color }}
+   673→   673→                        >
+   674→   674→                          {detailTask.assignee.name.charAt(0).toUpperCase()}
+   675→   675→                        </div>
+   676→   676→                        <span className="text-sm font-medium">{detailTask.assignee.name}</span>
+   677→   677→                      </div>
+   678→   678→                    ) : (
+   679→   679→                      <span className="text-sm text-muted-foreground">Chưa gán</span>
+   680→   680→                    )}
+   681→   681→                  </div>
+   682→   682→                </div>
+   683→   683→
+   684→   684→                {/* Google Docs & Sheets Links */}
+   685→   685→                <div className="space-y-3">
+   686→   686→                  <div className="flex items-center justify-between">
+   687→   687→                    <Label className="text-xs text-muted-foreground">
+   688→   688→                      Tài liệu đính kèm ({detailTask.links?.length || 0})
+   689→   689→                    </Label>
+   690→   690→                    <Button
+   691→   691→                      variant="outline"
+   692→   692→                      size="sm"
+   693→   693→                      className="text-xs h-7"
+   694→   694→                      onClick={() => setLinkDialogOpen(true)}
+   695→   695→                    >
+   696→   696→                      <Plus className="mr-1 h-3 w-3" />
+   697→   697→                      Thêm
+   698→   698→                    </Button>
+   699→   699→                  </div>
+   700→   700→
+   701→   701→                  {detailTask.links && detailTask.links.length > 0 ? (
+   702→   702→                    <div className="space-y-2">
+   703→   703→                      {detailTask.links.map((link) => {
+   704→   704→                        const config = linkTypeConfig[link.type];
+   705→   705→                        const LinkIconComp = config.icon;
+   706→   706→                        return (
+   707→   707→                          <div
+   708→   708→                            key={link.id}
+   709→   709→                            className="flex items-center gap-3 rounded-lg border p-3 group/link"
+   710→   710→                          >
+   711→   711→                            <LinkIconComp className={cn('h-5 w-5 shrink-0', config.color)} />
+   712→   712→                            <div className="flex-1 min-w-0">
+   713→   713→                              <p className="text-sm font-medium truncate">{link.title}</p>
+   714→   714→                              <p className="text-xs text-muted-foreground truncate">{link.url}</p>
+   715→   715→                            </div>
+   716→   716→                            <a
+   717→   717→                              href={link.url}
+   718→   718→                              target="_blank"
+   719→   719→                              rel="noopener noreferrer"
+   720→   720→                              className="shrink-0 p-1.5 rounded-md hover:bg-accent transition-colors"
+   721→   721→                              onClick={(e) => e.stopPropagation()}
+   722→   722→                            >
+   723→   723→                              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+   724→   724→                            </a>
+   725→   725→                            <Button
+   726→   726→                              variant="ghost"
+   727→   727→                              size="icon"
+   728→   728→                              className="h-7 w-7 shrink-0 opacity-100 md:opacity-0 md:group-hover/link:opacity-100 transition-opacity text-destructive hover:text-destructive"
+   729→   729→                              onClick={() => handleDeleteLink(link.id)}
+   730→   730→                            >
+   731→   731→                              <X className="h-3 w-3" />
+   732→   732→                            </Button>
+   733→   733→                          </div>
+   734→   734→                        );
+   735→   735→                      })}
+   736→   736→                    </div>
+   737→   737→                  ) : (
+   738→   738→                    <div className="flex flex-col items-center py-6 text-center border border-dashed rounded-lg">
+   739→   739→                      <FileText className="h-8 w-8 text-muted-foreground/40 mb-2" />
+   740→   740→                      <p className="text-sm text-muted-foreground">Chưa có tài liệu đính kèm</p>
+   741→   741→                      <p className="text-xs text-muted-foreground/70 mt-1">
+   742→   742→                        Thêm Google Doc hoặc Google Sheet cho công việc này
+   743→   743→                      </p>
+   744→   744→                    </div>
+   745→   745→                  )}
+   746→   746→                </div>
+   747→   747→              </div>
+   748→   748→            </>
+   749→   749→          )}
+   750→   750→        </DialogContent>
+   751→   751→      </Dialog>
+   752→   752→
+   753→   753→      {/* Add Link Dialog */}
+   754→   754→      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+   755→   755→        <DialogContent className="max-w-md">
+   756→   756→          <DialogHeader>
+   757→   757→            <DialogTitle>Thêm tài liệu đính kèm</DialogTitle>
+   758→   758→          </DialogHeader>
+   759→   759→          <div className="space-y-4 py-2">
+   760→   760→            <div className="space-y-2">
+   761→   761→              <Label>Loại tài liệu</Label>
+   762→   762→              <Select value={linkType} onValueChange={(v) => setLinkType(v as 'google_doc' | 'google_sheet' | 'google_slide' | 'google_form' | 'other')}>
+   763→   763→                <SelectTrigger><SelectValue /></SelectTrigger>
+   764→   764→                <SelectContent>
+   765→   765→                  <SelectItem value="google_doc">
+   766→   766→                    <div className="flex items-center gap-2">
+   767→   767→                      <FileText className="h-4 w-4 text-blue-600" />
+   768→   768→                      Google Doc
+   769→   769→                    </div>
+   770→   770→                  </SelectItem>
+   771→   771→                  <SelectItem value="google_sheet">
+   772→   772→                    <div className="flex items-center gap-2">
+   773→   773→                      <Table2 className="h-4 w-4 text-emerald-600" />
+   774→   774→                      Google Sheet
+   775→   775→                    </div>
+   776→   776→                  </SelectItem>
+   777→   777→                  <SelectItem value="google_slide">
+   778→   778→                    <div className="flex items-center gap-2">
+   779→   779→                      <Presentation className="h-4 w-4 text-orange-600" />
+   780→   780→                      Google Slides
+   781→   781→                    </div>
+   782→   782→                  </SelectItem>
+   783→   783→                  <SelectItem value="google_form">
+   784→   784→                    <div className="flex items-center gap-2">
+   785→   785→                      <FileQuestion className="h-4 w-4 text-violet-600" />
+   786→   786→                      Google Form
+   787→   787→                    </div>
+   788→   788→                  </SelectItem>
+   789→   789→                  <SelectItem value="other">
+   790→   790→                    <div className="flex items-center gap-2">
+   791→   791→                      <LinkIcon className="h-4 w-4" />
+   792→   792→                      Liên kết khác
+   793→   793→                    </div>
+   794→   794→                  </SelectItem>
+   795→   795→                </SelectContent>
+   796→   796→              </Select>
+   797→   797→            </div>
+   798→   798→            <div className="space-y-2">
+   799→   799→              <Label>Tên tài liệu</Label>
+   800→   800→              <Input
+   801→   801→                value={linkTitle}
+   802→   802→                onChange={(e) => setLinkTitle(e.target.value)}
+   803→   803→                placeholder="Ví dụ: Báo cáo tiến độ tuần 3"
+   804→   804→              />
+   805→   805→            </div>
+   806→   806→            <div className="space-y-2">
+   807→   807→              <Label>Đường dẫn (URL) *</Label>
+   808→   808→              <Input
+   809→   809→                value={linkUrl}
+   810→   810→                onChange={(e) => setLinkUrl(e.target.value)}
+   811→   811→                placeholder="https://docs.google.com/document/d/..."
+   812→   812→              />
+   813→   813→              <p className="text-xs text-muted-foreground">
+   814→   814→                Dán URL của Google Doc, Google Sheet hoặc bất kỳ liên kết nào
+   815→   815→              </p>
+   816→   816→            </div>
+   817→   817→          </div>
+   818→   818→          <DialogFooter>
+   819→   819→            <DialogClose asChild>
+   820→   820→              <Button variant="outline">Hủy</Button>
+   821→   821→            </DialogClose>
+   822→   822→            <Button onClick={handleAddLink} disabled={!linkUrl.trim()}>
+   823→   823→              <Plus className="mr-2 h-4 w-4" />
+   824→   824→              Thêm
+   825→   825→            </Button>
+   826→   826→          </DialogFooter>
+   827→   827→        </DialogContent>
+   828→   828→      </Dialog>
+   829→   829→    </div>
+   830→   830→  );
+   831→   831→}
+   832→   832→

@@ -116,3 +116,22 @@ Stage Summary:
 - 6 seed links (including 1 Google Slide) all visible and verified via Agent Browser
 - Links open in new tab, don't interfere with card click/drag events
 - All lint checks pass
+---
+Task ID: 5
+Agent: main
+Task: Tao kich ban phan chia cong viec bao cao voi Google Docs/Sheets/Slides integration
+
+Work Log:
+- Added new project 'Bao cao cuoi ky Q4/2024' to seed data with description explaining the workflow
+- Created 5 realistic report tasks with Google links assigned to different team members
+- Added 15 total Google links across all tasks: 4 Docs, 5 Sheets, 2 Slides, 1 Form, 3 other
+- Enhanced member my-tasks-view.tsx: added task detail dialog with prominent Google links section
+- Each link type has distinct color-coded card with icon
+- Added prisma.seed config to package.json
+
+Stage Summary:
+- Realistic report workflow scenario with 5 subtasks
+- Admin board: task cards show link badges, detail dialog shows full link management
+- Member view: task cards show link badges, detail dialog shows colored link cards
+- Verified via Agent Browser for both Admin and Member views
+- All lint checks pass

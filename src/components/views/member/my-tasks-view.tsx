@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
-import type { Task } from '@/types';
+import type { Task, TaskLink } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -16,6 +17,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -23,6 +30,7 @@ import {
   Presentation,
   FileQuestion,
   Link as LinkIcon,
+  ExternalLink,
   Calendar,
   Send,
 } from 'lucide-react';
@@ -43,12 +51,12 @@ const priorityConfig: Record<string, { label: string; className: string }> = {
   urgent: { label: 'Gấp', className: 'bg-red-100 text-red-700' },
 };
 
-const linkTypeConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-  google_doc: { icon: FileText, color: 'text-blue-600', label: 'Doc' },
-  google_sheet: { icon: Table2, color: 'text-emerald-600', label: 'Sheet' },
-  google_slide: { icon: Presentation, color: 'text-orange-600', label: 'Slide' },
-  google_form: { icon: FileQuestion, color: 'text-violet-600', label: 'Form' },
-  other: { icon: LinkIcon, color: 'text-slate-600', label: 'Link' },
+const linkTypeConfig: Record<string, { icon: React.ElementType; color: string; label: string; bg: string }> = {
+  google_doc: { icon: FileText, color: 'text-blue-600', label: 'Google Doc', bg: 'bg-blue-50 border-blue-200' },
+  google_sheet: { icon: Table2, color: 'text-emerald-600', label: 'Google Sheet', bg: 'bg-emerald-50 border-emerald-200' },
+  google_slide: { icon: Presentation, color: 'text-orange-600', label: 'Google Slides', bg: 'bg-orange-50 border-orange-200' },
+  google_form: { icon: FileQuestion, color: 'text-violet-600', label: 'Google Form', bg: 'bg-violet-50 border-violet-200' },
+  other: { icon: LinkIcon, color: 'text-slate-600', label: 'Liên kết', bg: 'bg-slate-50 border-slate-200' },
 };
 
 export function MyTasksView() {
@@ -57,6 +65,10 @@ export function MyTasksView() {
   const { tasks, setTasks, projects, setProjects, selectedProjectId, setSelectedProjectId, user } = useAppStore();
   const [movingId, setMovingId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+
+  // Task detail dialog
+  const [detailTask, setDetailTask] = useState<Task | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     const params = new URLSearchParams();
@@ -143,14 +155,12 @@ export function MyTasksView() {
   async function handleRequestReview(task: Task) {
     setReviewingId(task.id);
     try {
-      /* Change task status to review */
       await fetch(`/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'review' }),
       });
 
-      /* Find admin user to send notification */
       try {
         const membersRes = await fetch('/api/members');
         const members = await membersRes.json();
@@ -178,6 +188,11 @@ export function MyTasksView() {
     } finally {
       setReviewingId(null);
     }
+  }
+
+  function openTaskDetail(task: Task) {
+    setDetailTask(task);
+    setDetailOpen(true);
   }
 
   return (
@@ -283,9 +298,10 @@ export function MyTasksView() {
                         <Card
                           key={task.id}
                           className={cn(
-                            'hover:shadow-md transition-all',
+                            'cursor-pointer hover:shadow-md transition-all',
                             deadlineInfo?.overdue && 'border-l-4 border-l-red-500'
                           )}
+                          onClick={() => openTaskDetail(task)}
                         >
                           <CardContent className="p-3 space-y-2">
                             {/* Priority & project */}
@@ -431,6 +447,103 @@ export function MyTasksView() {
           })}
         </div>
       </div>
+
+      {/* Task Detail Dialog (Member view - read only links) */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto sm:max-h-[85vh]">
+          {detailTask && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-lg pr-4">{detailTask.title}</DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                {/* Meta info */}
+                <div className="flex flex-wrap gap-2">
+                  <Badge className={cn('text-xs', priorityConfig[detailTask.priority]?.className)}>
+                    {priorityConfig[detailTask.priority]?.label}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    {columns.find(c => c.id === detailTask.status)?.label}
+                  </Badge>
+                  {detailTask.dueDate && (
+                    <Badge variant="outline" className={cn('text-xs', detailTask.dueDate && new Date(detailTask.dueDate) < new Date() ? 'text-red-600 border-red-300' : '')}>
+                      <Calendar className="mr-1 h-3 w-3" />
+                      {detailTask.dueDate && getDeadlineInfo(detailTask.dueDate).text}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Description */}
+                {detailTask.description && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Mô tả</Label>
+                    <p className="text-sm whitespace-pre-wrap bg-muted/50 rounded-lg p-3">
+                      {detailTask.description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Project */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Dự án</Label>
+                  {detailTask.project && (
+                    <div className="flex items-center gap-2">
+                      <div className="h-2.5 w-6 rounded-full" style={{ backgroundColor: detailTask.project.color }} />
+                      <span className="text-sm font-medium">{detailTask.project.name}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Google Docs/Sheets/Slides Links - Prominent section */}
+                <div className="space-y-3">
+                  <Label className="text-xs text-muted-foreground">
+                    📎 Tài liệu đính kèm ({detailTask.links?.length || 0})
+                  </Label>
+
+                  {detailTask.links && detailTask.links.length > 0 ? (
+                    <div className="space-y-2">
+                      {detailTask.links.map((link) => {
+                        const config = linkTypeConfig[link.type] || linkTypeConfig.other;
+                        const LinkIconComp = config.icon;
+                        return (
+                          <a
+                            key={link.id}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              'flex items-center gap-3 rounded-lg border p-3 group/link hover:shadow-sm transition-all',
+                              config.bg
+                            )}
+                          >
+                            <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center bg-white shadow-sm', config.color)}>
+                              <LinkIconComp className="h-5 w-5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{link.title}</p>
+                              <p className="text-xs text-muted-foreground truncate">{config.label}</p>
+                            </div>
+                            <ExternalLink className="h-4 w-4 text-muted-foreground group-hover/link:opacity-100 opacity-50 transition-opacity" />
+                          </a>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center py-6 text-center border border-dashed rounded-lg">
+                      <FileText className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                      <p className="text-sm text-muted-foreground">Chưa có tài liệu đính kèm</p>
+                      <p className="text-xs text-muted-foreground/70 mt-1">
+                        Admin sẽ thêm Google Doc, Sheet hoặc Slide khi cần
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
