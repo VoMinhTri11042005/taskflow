@@ -41,7 +41,7 @@ export interface TaskLink {
   id: string;
   title: string;
   url: string;
-  type: 'google_doc' | 'google_sheet' | 'other';
+  type: 'google_doc' | 'google_sheet' | 'google_slide' | 'google_form' | 'other';
   taskId: string;
   createdAt: string;
 }
@@ -68,12 +68,48 @@ export interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'info' | 'warning' | 'success' | 'task_assigned' | 'deadline';
+  type: 'info' | 'warning' | 'success' | 'task_assigned' | 'deadline' | 'overdue' | 'task_completed';
   read: boolean;
   createdAt: string;
   userId: string;
 }
 
-export type AdminViewType = 'dashboard' | 'projects' | 'board' | 'members' | 'reports' | 'settings';
-export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'notifications' | 'profile';
+export interface ActivityLog {
+  id: string;
+  action: string;
+  details?: string | null;
+  createdAt: string;
+  userId: string;
+  user?: { id: string; name: string; color: string } | null;
+}
+
+export interface Poll {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: 'active' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+  createdByUserId: string;
+  options?: PollOption[];
+  _count?: { votes: number };
+}
+
+export interface PollOption {
+  id: string;
+  label: string;
+  pollId: string;
+  votes?: PollVote[];
+}
+
+export interface PollVote {
+  id: string;
+  createdAt: string;
+  userId: string;
+  optionId: string;
+  pollId: string;
+}
+
+export type AdminViewType = 'dashboard' | 'projects' | 'board' | 'members' | 'polls' | 'activity' | 'reports' | 'settings';
+export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'polls' | 'notifications' | 'profile';
 export type ViewType = AdminViewType | MemberViewType;

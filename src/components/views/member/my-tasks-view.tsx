@@ -19,13 +19,14 @@ import {
   ChevronRight,
   FileText,
   Table2,
+  Presentation,
+  FileQuestion,
   Link as LinkIcon,
   Calendar,
+  Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { format, isPast, isToday, addDays } from 'date-fns';
-import { vi } from 'date-fns/locale';
 
 const columns: { id: Task['status']; label: string; color: string; bgColor: string }[] = [
   { id: 'todo', label: 'Cần làm', color: 'text-slate-600', bgColor: 'bg-slate-100' },
@@ -41,15 +42,18 @@ const priorityConfig: Record<string, { label: string; className: string }> = {
   urgent: { label: 'Gấp', className: 'bg-red-100 text-red-700' },
 };
 
-const linkTypeConfig: Record<string, { icon: React.ElementType; color: string }> = {
-  google_doc: { icon: FileText, color: 'text-blue-600' },
-  google_sheet: { icon: Table2, color: 'text-emerald-600' },
-  other: { icon: LinkIcon, color: 'text-slate-600' },
+const linkTypeConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
+  google_doc: { icon: FileText, color: 'text-blue-600', label: 'Doc' },
+  google_sheet: { icon: Table2, color: 'text-emerald-600', label: 'Sheet' },
+  google_slide: { icon: Presentation, color: 'text-orange-600', label: 'Slide' },
+  google_form: { icon: FileQuestion, color: 'text-violet-600', label: 'Form' },
+  other: { icon: LinkIcon, color: 'text-slate-600', label: 'Link' },
 };
 
 export function MyTasksView() {
   const { tasks, setTasks, projects, setProjects, selectedProjectId, setSelectedProjectId, user } = useAppStore();
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const fetchTasks = useCallback(async () => {
     const params = new URLSearchParams();
@@ -98,12 +102,79 @@ export function MyTasksView() {
     }
   }
 
-  function getDueDateInfo(dateStr: string) {
-    const date = new Date(dateStr);
-    if (isToday(date)) return { text: 'Hôm nay', className: 'text-amber-600' };
-    if (isPast(date)) return { text: 'Đã quá hạn', className: 'text-red-600' };
-    if (date <= addDays(new Date(), 3)) return { text: format(date, 'dd/MM', { locale: vi }), className: 'text-orange-600' };
-    return { text: format(date, 'dd/MM', { locale: vi }), className: 'text-muted-foreground' };
+  /* Deadline countdown calculation */
+  function getDeadlineInfo(dateStr: string) {
+    const dueDate = new Date(dateStr);
+    const now = new Date();
+    const daysRemaining = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
+
+    if (daysRemaining < 0) {
+      return {
+        text: `Quá hạn ${Math.abs(daysRemaining)} ngày!`,
+        className: 'text-red-600 font-bold',
+        overdue: true,
+      };
+    }
+    if (daysRemaining === 0) {
+      return {
+        text: 'Hạn hôm nay!',
+        className: 'text-orange-600 font-semibold',
+        overdue: false,
+      };
+    }
+    if (daysRemaining <= 3) {
+      return {
+        text: `Còn ${daysRemaining} ngày`,
+        className: 'text-amber-600',
+        overdue: false,
+      };
+    }
+    return {
+      text: `Còn ${daysRemaining} ngày`,
+      className: 'text-muted-foreground',
+      overdue: false,
+    };
+  }
+
+  /* Request review: change task status to 'review' and notify admin */
+  async function handleRequestReview(task: Task) {
+    setReviewingId(task.id);
+    try {
+      /* Change task status to review */
+      await fetch(`/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'review' }),
+      });
+
+      /* Find admin user to send notification */
+      try {
+        const membersRes = await fetch('/api/members');
+        const members = await membersRes.json();
+        const adminMember = members.find((m: { role: string }) => m.role === 'admin');
+        if (adminMember) {
+          await fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: 'Yêu cầu review',
+              message: `${user?.name || 'Thành viên'} đã hoàn thành và yêu cầu review công việc "${task.title}"`,
+              type: 'task_completed',
+              userId: adminMember.id,
+            }),
+          });
+        }
+      } catch {
+        /* Notification fail is non-critical */
+      }
+
+      toast.success('Đã gửi yêu cầu review cho Admin');
+      fetchTasks();
+    } catch {
+      toast.error('Không thể gửi yêu cầu review');
+    } finally {
+      setReviewingId(null);
+    }
   }
 
   return (
@@ -163,17 +234,22 @@ export function MyTasksView() {
                     {columnTasks.map((task) => {
                       const project = task.project;
                       const priority = priorityConfig[task.priority];
-                      const dueInfo = task.dueDate ? getDueDateInfo(task.dueDate) : null;
+                      const deadlineInfo = task.dueDate ? getDeadlineInfo(task.dueDate) : null;
                       const hasLinks = task.links && task.links.length > 0;
                       const colIdx = getColumnIndex(task.status);
                       const canMoveLeft = colIdx > 0;
                       const canMoveRight = colIdx < columns.length - 1;
                       const isMoving = movingId === task.id;
+                      const isReviewing = reviewingId === task.id;
+                      const isInProgress = task.status === 'in_progress';
 
                       return (
                         <Card
                           key={task.id}
-                          className="hover:shadow-md transition-all"
+                          className={cn(
+                            'hover:shadow-md transition-all',
+                            deadlineInfo?.overdue && 'border-l-4 border-l-red-500'
+                          )}
                         >
                           <CardContent className="p-3 space-y-2">
                             {/* Priority & project */}
@@ -203,7 +279,7 @@ export function MyTasksView() {
                             {hasLinks && (
                               <div className="flex flex-wrap gap-1">
                                 {task.links!.map((link) => {
-                                  const config = linkTypeConfig[link.type];
+                                  const config = linkTypeConfig[link.type] || linkTypeConfig.other;
                                   const LIcon = config.icon;
                                   return (
                                     <Badge
@@ -219,28 +295,29 @@ export function MyTasksView() {
                               </div>
                             )}
 
-                            {/* Bottom row with due date */}
-                            <div className="flex items-center justify-between pt-1">
-                              <div className="flex items-center gap-2">
-                                {dueInfo && (
-                                  <span className={cn('text-[10px] flex items-center gap-0.5', dueInfo.className)}>
-                                    <Calendar className="h-3 w-3" />
-                                    {dueInfo.text}
+                            {/* Deadline countdown */}
+                            {deadlineInfo && (
+                              <div className="flex items-center gap-1.5">
+                                {deadlineInfo.overdue && (
+                                  <span className="relative flex h-2.5 w-2.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
                                   </span>
                                 )}
-                                {!hasLinks && (
-                                  <span className="text-[10px] text-muted-foreground" />
-                                )}
+                                <Calendar className={cn('h-3.5 w-3.5 shrink-0', deadlineInfo.className)} />
+                                <span className={cn('text-xs', deadlineInfo.className)}>
+                                  {deadlineInfo.text}
+                                </span>
                               </div>
-                            </div>
+                            )}
 
-                            {/* Move arrows */}
+                            {/* Move arrows / Review button */}
                             <div className="flex items-center justify-between pt-1 border-t">
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7"
-                                disabled={!canMoveLeft || isMoving}
+                                disabled={!canMoveLeft || isMoving || isReviewing}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleMoveStatus(task, 'left');
@@ -249,22 +326,45 @@ export function MyTasksView() {
                               >
                                 <ChevronLeft className="h-4 w-4" />
                               </Button>
-                              <span className="text-[10px] text-muted-foreground">
-                                {isMoving ? 'Đang chuyển...' : 'Di chuyển'}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                disabled={!canMoveRight || isMoving}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMoveStatus(task, 'right');
-                                }}
-                                title={canMoveRight ? `Chuyển sang "${columns[colIdx + 1].label}"` : ''}
-                              >
-                                <ChevronRight className="h-4 w-4" />
-                              </Button>
+
+                              {isInProgress ? (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-7 px-2.5 text-xs gap-1.5"
+                                  disabled={isReviewing}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRequestReview(task);
+                                  }}
+                                >
+                                  <Send className="h-3.5 w-3.5" />
+                                  {isReviewing ? 'Đang gửi...' : 'Yêu cầu review'}
+                                </Button>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {isMoving ? 'Đang chuyển...' : 'Di chuyển'}
+                                </span>
+                              )}
+
+                              {!isInProgress && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  disabled={!canMoveRight || isMoving || isReviewing}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveStatus(task, 'right');
+                                  }}
+                                  title={canMoveRight ? `Chuyển sang "${columns[colIdx + 1].label}"` : ''}
+                                >
+                                  <ChevronRight className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {isInProgress && (
+                                <div className="w-7" />
+                              )}
                             </div>
                           </CardContent>
                         </Card>

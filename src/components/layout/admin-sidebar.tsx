@@ -8,24 +8,39 @@ import {
   KanbanSquare,
   Users,
   BarChart3,
+  Activity,
+  TrendingUp,
   Settings,
   ChevronLeft,
   ChevronRight,
   LogOut,
   ClipboardList,
+  Bell,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { formatDistanceToNow } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
 const navItems: { id: AdminViewType; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
-  { id: 'projects', label: 'Dự án', icon: FolderKanban },
   { id: 'board', label: 'Bảng công việc', icon: KanbanSquare },
+  { id: 'projects', label: 'Dự án', icon: FolderKanban },
   { id: 'members', label: 'Thành viên', icon: Users },
-  { id: 'reports', label: 'Báo cáo', icon: BarChart3 },
+  { id: 'polls', label: 'Bình chọn', icon: BarChart3 },
+  { id: 'activity', label: 'Hoạt động', icon: Activity },
+  { id: 'reports', label: 'Báo cáo', icon: TrendingUp },
   { id: 'settings', label: 'Cài đặt', icon: Settings },
 ];
 
@@ -41,6 +56,8 @@ export function AdminSidebar() {
     tasks,
     user,
     setUser,
+    notifications,
+    unreadCount,
   } = useAppStore();
 
   const activeTasks = tasks.filter((t) => t.status !== 'done').length;
@@ -52,6 +69,8 @@ export function AdminSidebar() {
         .slice(0, 2)
         .join('')
     : '?';
+
+  const latestNotifications = notifications.slice(0, 5);
 
   async function handleLogout() {
     try {
@@ -70,15 +89,72 @@ export function AdminSidebar() {
         sidebarOpen ? 'w-64' : 'w-16'
       )}
     >
-      {/* Header with user info */}
-      <div className="flex items-center gap-3 p-4 min-h-[65px]">
+      {/* Header with logo and notification bell */}
+      <div className="flex items-center gap-2 p-4 min-h-[65px]">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <ClipboardList className="h-5 w-5" />
         </div>
         {sidebarOpen && (
-          <div className="flex flex-col overflow-hidden">
+          <div className="flex flex-col overflow-hidden flex-1">
             <h2 className="text-sm font-bold truncate">TaskFlow</h2>
             <p className="text-xs text-muted-foreground truncate">Quản trị viên</p>
+          </div>
+        )}
+        {sidebarOpen && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 relative">
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuLabel className="flex items-center justify-between">
+                <span>Thông báo</span>
+                {unreadCount > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {unreadCount} mới
+                  </Badge>
+                )}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {latestNotifications.length === 0 ? (
+                <div className="py-6 text-center">
+                  <p className="text-sm text-muted-foreground">Chưa có thông báo</p>
+                </div>
+              ) : (
+                latestNotifications.map((notif) => (
+                  <DropdownMenuItem key={notif.id} className="flex flex-col items-start gap-1 p-3 cursor-pointer">
+                    <div className="flex items-center gap-2 w-full">
+                      {!notif.read && (
+                        <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                      )}
+                      <span className="text-sm font-medium truncate flex-1">
+                        {notif.title}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 pl-4">
+                      {notif.message}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/60 pl-4">
+                      {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true, locale: vi })}
+                    </p>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {!sidebarOpen && unreadCount > 0 && (
+          <div className="relative">
+            <Bell className="h-4 w-4 text-muted-foreground" />
+            <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-destructive-foreground">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
           </div>
         )}
       </div>

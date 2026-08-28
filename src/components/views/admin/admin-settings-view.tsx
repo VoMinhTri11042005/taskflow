@@ -5,6 +5,8 @@ import { useAppStore } from '@/stores/app-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
   Info,
@@ -16,12 +18,26 @@ import {
   RefreshCcw,
   Shield,
   Mail,
+  Pencil,
+  Loader2,
+  Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AdminSettingsView() {
-  const { user, members, projects, tasks } = useAppStore();
+  const { user, setUser, members, projects, tasks } = useAppStore();
   const [seeding, setSeeding] = useState(false);
+
+  // Profile edit state
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const userInitials = user?.name
     ? user.name
@@ -40,6 +56,87 @@ export function AdminSettingsView() {
       toast.error('Có lỗi xảy ra khi nạp dữ liệu mẫu');
     } finally {
       setSeeding(false);
+    }
+  }
+
+  // Profile edit handlers
+  function startEditProfile() {
+    setEditName(user?.name || '');
+    setEditingProfile(true);
+  }
+
+  function cancelEditProfile() {
+    setEditingProfile(false);
+    setEditName('');
+  }
+
+  async function saveProfile() {
+    if (!user || !editName.trim()) {
+      toast.error('Vui lòng nhập tên');
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const res = await fetch('/api/auth/update-profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, name: editName.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error || 'Có lỗi xảy ra');
+        return;
+      }
+      const updatedUser = { ...user, name: editName.trim() };
+      setUser(updatedUser);
+      setEditingProfile(false);
+      toast.success('Đã cập nhật hồ sơ thành công');
+    } catch {
+      toast.error('Có lỗi xảy ra');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  // Password change handler
+  async function handleChangePassword() {
+    if (!user) return;
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Vui lòng điền đầy đủ thông tin');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('Mật khẩu mới phải có ít nhất 6 ký tự');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Mật khẩu xác nhận không khớp');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          currentPassword,
+          newPassword,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error || 'Có lỗi xảy ra');
+        return;
+      }
+      toast.success('Đã thay đổi mật khẩu thành công');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch {
+      toast.error('Có lỗi xảy ra');
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -122,16 +219,26 @@ export function AdminSettingsView() {
         </CardContent>
       </Card>
 
-      {/* Account card */}
+      {/* Account card with inline edit */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Tài khoản
-          </CardTitle>
-          <CardDescription>
-            Thông tin tài khoản đang đăng nhập
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-base flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Tài khoản
+              </CardTitle>
+              <CardDescription>
+                Thông tin tài khoản đang đăng nhập
+              </CardDescription>
+            </div>
+            {!editingProfile && user && (
+              <Button variant="outline" size="sm" onClick={startEditProfile}>
+                <Pencil className="mr-2 h-3.5 w-3.5" />
+                Chỉnh sửa
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {user ? (
@@ -154,7 +261,30 @@ export function AdminSettingsView() {
               <div className="flex-1 space-y-4">
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Họ và tên</p>
-                  <p className="text-sm font-medium">{user.name}</p>
+                  {editingProfile ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Họ và tên..."
+                        className="max-w-xs"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveProfile();
+                          if (e.key === 'Escape') cancelEditProfile();
+                        }}
+                        autoFocus
+                      />
+                      <Button size="sm" onClick={saveProfile} disabled={!editName.trim() || savingProfile}>
+                        {savingProfile && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                        Lưu
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={cancelEditProfile}>
+                        Hủy
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium">{user.name}</p>
+                  )}
                 </div>
                 <Separator />
                 <div>
@@ -185,6 +315,72 @@ export function AdminSettingsView() {
           )}
         </CardContent>
       </Card>
+
+      {/* Password change card */}
+      {user && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              Đổi mật khẩu
+            </CardTitle>
+            <CardDescription>
+              Thay đổi mật khẩu đăng nhập của bạn
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="max-w-md space-y-4">
+              <div className="space-y-2">
+                <Label>Mật khẩu hiện tại</Label>
+                <Input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Nhập mật khẩu hiện tại..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mật khẩu mới</Label>
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Nhập mật khẩu mới..."
+                />
+                {newPassword && newPassword.length < 6 && (
+                  <p className="text-xs text-destructive">Mật khẩu phải có ít nhất 6 ký tự</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Xác nhận mật khẩu mới</Label>
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Nhập lại mật khẩu mới..."
+                />
+                {confirmPassword && newPassword !== confirmPassword && (
+                  <p className="text-xs text-destructive">Mật khẩu xác nhận không khớp</p>
+                )}
+              </div>
+              <Button
+                onClick={handleChangePassword}
+                disabled={
+                  !currentPassword ||
+                  !newPassword ||
+                  !confirmPassword ||
+                  newPassword.length < 6 ||
+                  newPassword !== confirmPassword ||
+                  changingPassword
+                }
+              >
+                {changingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Cập nhật
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Seed data card */}
       <Card>

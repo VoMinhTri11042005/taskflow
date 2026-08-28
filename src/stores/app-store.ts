@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ViewType, TeamMember, Project, Task, DashboardStats, User, Notification } from '@/types';
+import type { ViewType, TeamMember, Project, Task, DashboardStats, User, Notification, ActivityLog, Poll } from '@/types';
 
 interface AppState {
   currentView: ViewType;
@@ -27,6 +27,14 @@ interface AppState {
   setTasks: (tasks: Task[]) => void;
   stats: DashboardStats | null;
   setStats: (stats: DashboardStats) => void;
+
+  // Polls
+  polls: Poll[];
+  setPolls: (polls: Poll[]) => void;
+
+  // Activity
+  activityLogs: ActivityLog[];
+  setActivityLogs: (logs: ActivityLog[]) => void;
 
   // Filters
   selectedProjectId: string | null;
@@ -61,6 +69,14 @@ export const useAppStore = create<AppState>((set) => ({
   setTasks: (tasks) => set({ tasks }),
   stats: null,
   setStats: (stats) => set({ stats }),
+
+  // Polls
+  polls: [],
+  setPolls: (polls) => set({ polls }),
+
+  // Activity
+  activityLogs: [],
+  setActivityLogs: (logs) => set({ activityLogs: logs }),
 
   // Filters
   selectedProjectId: null,

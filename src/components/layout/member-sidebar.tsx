@@ -5,6 +5,7 @@ import type { MemberViewType } from '@/types';
 import {
   CheckSquare,
   FolderKanban,
+  BarChart3,
   Users,
   Bell,
   UserCircle,
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils';
 const navItems: { id: MemberViewType; label: string; icon: React.ElementType; showBadge?: boolean }[] = [
   { id: 'my-tasks', label: 'Công việc của tôi', icon: CheckSquare },
   { id: 'projects', label: 'Dự án', icon: FolderKanban },
+  { id: 'polls', label: 'Bình chọn', icon: BarChart3 },
   { id: 'team', label: 'Nhóm', icon: Users },
   { id: 'notifications', label: 'Thông báo', icon: Bell, showBadge: true },
   { id: 'profile', label: 'Hồ sơ', icon: UserCircle },

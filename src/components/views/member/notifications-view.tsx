@@ -19,11 +19,13 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const typeConfig: Record<string, { icon: React.ElementType; color: string; bgColor: string }> = {
-  task_assigned: { icon: ClipboardList, color: 'text-blue-600', bgColor: 'bg-blue-50' },
-  deadline: { icon: Clock, color: 'text-orange-600', bgColor: 'bg-orange-50' },
-  success: { icon: CheckCircle2, color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
-  info: { icon: Info, color: 'text-slate-600', bgColor: 'bg-slate-50' },
-  warning: { icon: AlertTriangle, color: 'text-amber-600', bgColor: 'bg-amber-50' },
+  task_assigned: { icon: ClipboardList, color: 'text-blue-500', bgColor: 'bg-blue-50' },
+  deadline: { icon: Clock, color: 'text-amber-500', bgColor: 'bg-amber-50' },
+  overdue: { icon: AlertTriangle, color: 'text-red-500', bgColor: 'bg-red-50' },
+  task_completed: { icon: CheckCircle2, color: 'text-emerald-500', bgColor: 'bg-emerald-50' },
+  success: { icon: CheckCircle2, color: 'text-emerald-500', bgColor: 'bg-emerald-50' },
+  info: { icon: Info, color: 'text-slate-500', bgColor: 'bg-slate-50' },
+  warning: { icon: AlertTriangle, color: 'text-orange-500', bgColor: 'bg-orange-50' },
 };
 
 function formatTimeAgo(dateStr: string): string {
@@ -153,12 +155,15 @@ export function NotificationsView() {
           {notifications.map((notification) => {
             const config = typeConfig[notification.type] || typeConfig.info;
             const Icon = config.icon;
+            const isOverdue = notification.type === 'overdue';
+
             return (
               <Card
-                key={notification.id}
+               key={notification.id}
                 className={cn(
                   'transition-all cursor-pointer hover:shadow-sm',
-                  !notification.read && 'border-l-4 border-l-primary bg-primary/[0.02]'
+                  isOverdue && 'border-l-4 border-l-red-500 bg-red-50',
+                  !notification.read && !isOverdue && 'border-l-4 border-l-primary bg-primary/[0.02]'
                 )}
                 onClick={() => handleMarkRead(notification)}
               >
