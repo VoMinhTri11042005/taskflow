@@ -17,19 +17,9 @@ import {
   DialogTrigger,
   DialogFooter,
   DialogClose,
+  DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Plus, X, BarChart3, Lock, Trash2, CheckCircle2 } from 'lucide-react';
+import { Plus, X, BarChart3, Lock, Trash2, CheckCircle2, Unlock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -43,6 +33,8 @@ export function AdminPollsView() {
   const [formOptions, setFormOptions] = useState<string[]>(['', '']);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Poll | null>(null);
 
   const fetchPolls = useCallback(async () => {
     try {
@@ -104,7 +96,7 @@ export function AdminPollsView() {
         body: JSON.stringify({
           title: formTitle.trim(),
           description: formDesc.trim() || null,
-          options: validOptions.map((label) => ({ label })),
+          options: validOptions,
         }),
       });
       if (!res.ok) {
@@ -120,39 +112,50 @@ export function AdminPollsView() {
     }
   }
 
-  async function handleClose(id: string) {
+  async function handleToggleStatus(id: string, newStatus: 'active' | 'closed') {
+    const isClosing = newStatus === 'closed';
     setClosingId(id);
     try {
       const res = await fetch(`/api/polls/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'closed' }),
+        body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) {
-        toast.error('Không thể đóng bình chọn');
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || 'Có lỗi xảy ra');
         return;
       }
-      toast.success('Đã đóng bình chọn');
+      toast.success(isClosing ? 'Đã đóng bình chọn' : 'Đã mở lại bình chọn');
       fetchPolls();
     } catch {
-      toast.error('Có lỗi xảy ra');
+      toast.error('Lỗi kết nối mạng');
     } finally {
       setClosingId(null);
     }
   }
 
-  async function handleDelete(id: string) {
-    setDeletingId(id);
+  function openDeleteDialog(poll: Poll) {
+    setDeleteTarget(poll);
+    setDeleteDialogOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
     try {
-      const res = await fetch(`/api/polls/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/polls/${deleteTarget.id}`, { method: 'DELETE' });
       if (!res.ok) {
-        toast.error('Không thể xóa bình chọn');
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || 'Không thể xóa bình chọn');
         return;
       }
       toast.success('Đã xóa bình chọn');
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
       fetchPolls();
     } catch {
-      toast.error('Có lỗi xảy ra');
+      toast.error('Lỗi kết nối mạng');
     } finally {
       setDeletingId(null);
     }
@@ -161,14 +164,14 @@ export function AdminPollsView() {
   function getOptionStats(poll: Poll) {
     if (!poll.options || poll.options.length === 0) return [];
     const totalVotes = poll.options.reduce(
-      (sum, opt) => sum + (opt.votes?.length || 0),
+      (sum, opt) => sum + ((opt as any)._count?.votes || 0),
       0
     );
     return poll.options.map((opt) => ({
       id: opt.id,
       label: opt.label,
-      voteCount: opt.votes?.length || 0,
-      percentage: totalVotes > 0 ? Math.round(((opt.votes?.length || 0) / totalVotes) * 100) : 0,
+      voteCount: (opt as any)._count?.votes || 0,
+      percentage: totalVotes > 0 ? Math.round((((opt as any)._count?.votes || 0) / totalVotes) * 100) : 0,
     }));
   }
 
@@ -190,6 +193,7 @@ export function AdminPollsView() {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Tạo bình chọn mới</DialogTitle>
+              <DialogDescription>Tạo cuộc bình chọn mới cho nhóm</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-2">
@@ -266,6 +270,45 @@ export function AdminPollsView() {
         </Dialog>
       </div>
 
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setDeleteTarget(null);
+        }
+        setDeleteDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Xóa bình chọn?</DialogTitle>
+            <DialogDescription>
+              Bình chọn &quot;{deleteTarget?.title}&quot; sẽ bị xóa vĩnh viễn cùng với tất cả kết quả.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <DialogClose asChild>
+              <Button variant="outline" disabled={deletingId !== null}>Hủy</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deletingId !== null}
+            >
+              {deletingId ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang xóa...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Xóa
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Poll cards list */}
       {polls.length === 0 ? (
         <Card>
@@ -288,7 +331,7 @@ export function AdminPollsView() {
               <Card key={poll.id}>
                 <CardHeader className="pb-3">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                    <div className="space-y-1.5 min-w-0">
+                    <div className="space-y-1.5 min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <CardTitle className="text-base truncate">{poll.title}</CardTitle>
                         <Badge
@@ -305,48 +348,46 @@ export function AdminPollsView() {
                         {format(new Date(poll.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {isActive && (
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-start">
+                      {isActive ? (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleClose(poll.id)}
+                          onClick={() => handleToggleStatus(poll.id, 'closed')}
                           disabled={closingId === poll.id}
                         >
-                          <Lock className="mr-2 h-3.5 w-3.5" />
-                          Đóng bình chọn
+                          {closingId === poll.id ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Lock className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          Đóng
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleStatus(poll.id, 'active')}
+                          disabled={closingId === poll.id}
+                        >
+                          {closingId === poll.id ? (
+                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Unlock className="mr-1.5 h-3.5 w-3.5" />
+                          )}
+                          Mở lại
                         </Button>
                       )}
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                            disabled={deletingId === poll.id}
-                          >
-                            <Trash2 className="mr-2 h-3.5 w-3.5" />
-                            Xóa
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Xóa bình chọn?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Bình chọn &quot;{poll.title}&quot; sẽ bị xóa vĩnh viễn cùng với tất cả kết quả.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Hủy</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(poll.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Xóa
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => openDeleteDialog(poll)}
+                        disabled={deletingId !== null}
+                      >
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        Xóa
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>

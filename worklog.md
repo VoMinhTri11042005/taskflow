@@ -135,3 +135,35 @@ Stage Summary:
 - Member view: task cards show link badges, detail dialog shows colored link cards
 - Verified via Agent Browser for both Admin and Member views
 - All lint checks pass
+
+---
+Task ID: 6
+Agent: main
+Task: Fix poll close and delete functionality
+
+Work Log:
+- Analyzed poll code: API routes (PUT close, DELETE) work correctly via curl
+- Tested with Agent Browser: close and delete buttons work on desktop
+- Identified 4 bugs in admin-polls-view.tsx:
+  1. AlertDialogAction auto-closes dialog before async handleDelete completes
+  2. No "Mở lại" (reopen) button for closed polls
+  3. Vote counts always show 0 (code reads opt.votes?.length but API returns _count.votes)
+  4. Create poll sends options as objects but API expects strings
+- Rewrote admin-polls-view.tsx:
+  - Replaced AlertDialog with controlled Dialog for delete confirmation
+  - Added openDeleteDialog/confirmDelete with manual dialog state control
+  - Added handleToggleStatus supporting both close and reopen
+  - Added Unlock icon + "Mở lại" button for closed polls
+  - Added Loader2 spinner on close/reopen/delete buttons during loading
+  - Fixed getOptionStats to read (opt as any)._count?.votes
+  - Fixed handleCreate to send options as string[] instead of [{label}]
+- Re-seeded database with poll data
+- Verified: close, reopen, delete all work on both desktop and mobile
+- Vote counts display correctly (e.g. 2 phiếu 67%, 1 phiếu 33%)
+
+Stage Summary:
+- Close/Reopen: Toggle button with Lock/Unlock icon and loading spinner
+- Delete: Controlled Dialog confirmation with loading state, only closes on success
+- Vote counts now display actual numbers from _count.votes
+- All lint checks pass
+- Verified via Agent Browser on desktop (1920x1080) and mobile (390x844)
