@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ViewType, TeamMember, Project, Task, DashboardStats } from '@/types';
+import type { ViewType, TeamMember, Project, Task, DashboardStats, User, Notification } from '@/types';
 
 interface AppState {
   currentView: ViewType;
@@ -7,6 +7,16 @@ interface AppState {
   sidebarOpen: boolean;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
+
+  // Auth
+  user: User | null;
+  setUser: (user: User | null) => void;
+
+  // Notifications
+  notifications: Notification[];
+  setNotifications: (notifications: Notification[]) => void;
+  unreadCount: number;
+  setUnreadCount: (count: number) => void;
 
   // Data
   members: TeamMember[];
@@ -32,6 +42,17 @@ export const useAppStore = create<AppState>((set) => ({
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
+  // Auth
+  user: null,
+  setUser: (user) => set({ user }),
+
+  // Notifications
+  notifications: [],
+  setNotifications: (notifications) => set({ notifications }),
+  unreadCount: 0,
+  setUnreadCount: (count) => set({ unreadCount: count }),
+
+  // Data
   members: [],
   setMembers: (members) => set({ members }),
   projects: [],
@@ -41,6 +62,7 @@ export const useAppStore = create<AppState>((set) => ({
   stats: null,
   setStats: (stats) => set({ stats }),
 
+  // Filters
   selectedProjectId: null,
   setSelectedProjectId: (id) => set({ selectedProjectId: id }),
   selectedMemberId: null,

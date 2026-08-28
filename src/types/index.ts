@@ -54,4 +54,26 @@ export interface DashboardStats {
   memberWorkload: { memberId: string; memberName: string; memberColor: string; count: number }[];
 }
 
-export type ViewType = 'dashboard' | 'projects' | 'board' | 'members';
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'member';
+  color: string;
+  avatar?: string | null;
+  teamMemberId?: string | null;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'task_assigned' | 'deadline';
+  read: boolean;
+  createdAt: string;
+  userId: string;
+}
+
+export type AdminViewType = 'dashboard' | 'projects' | 'board' | 'members' | 'reports' | 'settings';
+export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'notifications' | 'profile';
+export type ViewType = AdminViewType | MemberViewType;

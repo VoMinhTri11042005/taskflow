@@ -7,6 +7,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("member") // admin | member
+  avatar    String?
+  color     String   @default("#6366f1")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  notifications Notification[]
+  @@map("users")
+}
+
 model TeamMember {
   id        String   @id @default(cuid())
   name      String
@@ -66,4 +81,18 @@ model TaskLink {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("task_links")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String   @default("info") // info | warning | success | task_assigned | deadline
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
 }
