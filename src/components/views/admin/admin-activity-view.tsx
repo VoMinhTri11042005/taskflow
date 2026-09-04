@@ -60,7 +60,10 @@ export function AdminActivityView() {
   }, [setActivityLogs]);
 
   useEffect(() => {
-    fetchLogs(filterUserId);
+    const run = () => {
+      void fetchLogs(filterUserId);
+    };
+    queueMicrotask(run);
   }, [fetchLogs, filterUserId]);
 
   const groupedLogs = useMemo((): GroupedLogs[] => {

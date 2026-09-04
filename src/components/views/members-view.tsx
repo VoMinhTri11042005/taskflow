@@ -122,9 +122,12 @@ export function MembersView() {
   }, []);
 
   useEffect(() => {
-    fetchMembers();
-    fetchPendingAccounts();
-  }, [setMembers]);
+    const run = () => {
+      void fetchMembers();
+      void fetchPendingAccounts();
+    };
+    queueMicrotask(run);
+  }, [fetchMembers, fetchPendingAccounts]);
 
   useEffect(() => {
     members.forEach((m) => {

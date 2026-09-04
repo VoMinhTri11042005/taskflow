@@ -78,10 +78,13 @@ export function TimeTrackingView() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
   useEffect(() => {
-    fetchLogs();
+    const run = () => {
+      void fetchLogs();
+    };
+    queueMicrotask(run);
   }, [fetchLogs]);
 
   /* Live timer for current session */
