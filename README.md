@@ -1,61 +1,61 @@
-# TaskFlow
+﻿# TaskFlow
 
-TaskFlow là ứng dụng quản lý công việc nhóm với hai giao diện chính:
+TaskFlow lÃ  á»©ng dá»¥ng quáº£n lÃ½ cÃ´ng viá»‡c nhÃ³m vá»›i hai giao diá»‡n chÃ­nh:
 - Admin: dashboard, board, projects, members, reports, settings
 - Member: my tasks, time tracking, projects, team, notifications, profile
 
-## Cấu trúc repo
+## Cáº¥u trÃºc repo
 
-- `src/` – source code ứng dụng
-  - `app/` – route, layout, page chính
-  - `components/` – UI và view components được phân theo admin/member/layout/ui
-  - `config/` – cấu hình môi trường và biến runtime
-  - `constants/` – hằng số ứng dụng
-  - `hooks/` – custom hooks
-  - `lib/` – helper, DB, auth utilities
-  - `stores/` – Zustand store
-  - `types/` – shared type definitions
-- `prisma/` – Prisma schema và seed data
-- `public/` – static assets
-- `scripts/` – scripts chạy dev / server
-- `Caddyfile` – cấu hình reverse proxy
-- `components.json` – cấu hình shadcn/ui
-- `render.yaml` – cấu hình deploy trên Render
-- `vercel.json` – cấu hình deploy trên Vercel
+- `src/` â€“ source code á»©ng dá»¥ng
+  - `app/` â€“ route, layout, page chÃ­nh
+  - `components/` â€“ UI vÃ  view components Ä‘Æ°á»£c phÃ¢n theo admin/member/layout/ui
+  - `config/` â€“ cáº¥u hÃ¬nh mÃ´i trÆ°á»ng vÃ  biáº¿n runtime
+  - `constants/` â€“ háº±ng sá»‘ á»©ng dá»¥ng
+  - `hooks/` â€“ custom hooks
+  - `lib/` â€“ helper, DB, auth utilities
+  - `stores/` â€“ Zustand store
+  - `types/` â€“ shared type definitions
+- `prisma/` â€“ Prisma schema vÃ  seed data
+- `public/` â€“ static assets
+- `scripts/` â€“ scripts cháº¡y dev / server
+- `Caddyfile` â€“ cáº¥u hÃ¬nh reverse proxy
+- `components.json` â€“ cáº¥u hÃ¬nh shadcn/ui
+- `render.yaml` â€“ cáº¥u hÃ¬nh deploy trÃªn Render
+- `vercel.json` â€“ cáº¥u hÃ¬nh deploy trÃªn Vercel
 
-## Chạy dự án
+## Cháº¡y dá»± Ã¡n
 
-1. Cài dependencies:
+1. CÃ i dependencies:
    ```bash
    npm install
    ```
-2. Tạo file `.env` dựa trên `.env.example`
+2. Táº¡o file `.env` dá»±a trÃªn `.env.example`
 3. Sinh Prisma client:
    ```bash
    npm run db:generate
    ```
-4. Đồng bộ schema với DB:
+4. Äá»“ng bá»™ schema vá»›i DB:
    ```bash
    npm run db:push
    ```
-5. Khởi chạy môi trường dev:
+5. Khá»Ÿi cháº¡y mÃ´i trÆ°á»ng dev:
    ```bash
    npm run dev
    ```
 
-## Scripts quan trọng
+## Scripts quan trá»ng
 
-- `npm run dev` – chạy ứng dụng Next.js ở môi trường phát triển
-- `npm run build` – build production
-- `npm run start` – chạy phiên bản production
-- `npm run lint` – kiểm tra lint
-- `npm run db:push` – đồng bộ schema Prisma với PostgreSQL
-- `npm run db:generate` – sinh Prisma client
-- `npm run db:seed` – chạy seed data
+- `npm run dev` â€“ cháº¡y á»©ng dá»¥ng Next.js á»Ÿ mÃ´i trÆ°á»ng phÃ¡t triá»ƒn
+- `npm run build` â€“ build production
+- `npm run start` â€“ cháº¡y phiÃªn báº£n production
+- `npm run lint` â€“ kiá»ƒm tra lint
+- `npm run db:push` â€“ Ä‘á»“ng bá»™ schema Prisma vá»›i PostgreSQL
+- `npm run db:generate` â€“ sinh Prisma client
+- `npm run db:seed` â€“ cháº¡y seed data
 
-## Môi trường
+## MÃ´i trÆ°á»ng
 
-Dùng file `.env` theo mẫu `.env.example`:
+DÃ¹ng file `.env` theo máº«u `.env.example`:
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/taskflow?schema=public"
@@ -68,14 +68,15 @@ NEXTAUTH_SECRET="replace-with-strong-random-secret"
 ## Deploy
 
 ### Render
-- Tạo Web Service trên Render
-- Dùng file [render.yaml](render.yaml) hoặc cấu hình thủ công:
+- Táº¡o Web Service trÃªn Render
+- DÃ¹ng file [render.yaml](render.yaml) hoáº·c cáº¥u hÃ¬nh thá»§ cÃ´ng:
   - Build Command: `npm install && npx prisma generate && npm run build`
   - Start Command: `npm run start`
-- Cung cấp biến môi trường: `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`
+- Cung cáº¥p biáº¿n mÃ´i trÆ°á»ng: `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`
 
 ### Vercel
-- Import repo vào Vercel
-- Thiết lập environment variables tương tự
-- Build command sẽ auto-detect Next.js
-- Có thể dùng file [vercel.json](vercel.json) để định nghĩa config deploy nếu cần
+- Import repo vÃ o Vercel
+- Thiáº¿t láº­p environment variables tÆ°Æ¡ng tá»±
+- Build command sáº½ auto-detect Next.js
+- CÃ³ thá»ƒ dÃ¹ng file [vercel.json](vercel.json) Ä‘á»ƒ Ä‘á»‹nh nghÄ©a config deploy náº¿u cáº§n
+

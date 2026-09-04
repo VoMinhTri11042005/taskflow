@@ -67,6 +67,7 @@ export function AdminSidebar() {
   const showFull = isMobile || sidebarOpen;
 
   const activeTasks = tasks.filter((t) => t.status !== 'done').length;
+  const isLeader = user?.role === 'leader';
 
   const userInitials = user?.name
     ? user.name
@@ -116,7 +117,7 @@ export function AdminSidebar() {
         {showFull && (
           <div className="flex flex-col overflow-hidden flex-1">
             <h2 className="text-sm font-bold truncate">TaskFlow</h2>
-            <p className="text-xs text-muted-foreground truncate">Quản trị viên</p>
+            <p className="text-xs text-muted-foreground truncate">{isLeader ? 'Leader' : 'Quản trị viên'}</p>
           </div>
         )}
         {showFull && (
@@ -191,7 +192,7 @@ export function AdminSidebar() {
             <div className="flex flex-col min-w-0 overflow-hidden">
               <span className="text-sm font-medium truncate">{user.name}</span>
               <Badge variant="secondary" className="text-[10px] w-fit px-1.5 py-0">
-                {user.role === 'admin' ? 'Quản trị viên' : 'Thành viên'}
+                {user.role === 'admin' ? 'Quản trị viên' : user.role === 'leader' ? 'Leader' : 'Thành viên'}
               </Badge>
             </div>
           </div>

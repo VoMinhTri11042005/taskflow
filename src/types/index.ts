@@ -58,11 +58,14 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'member';
+  role: 'admin' | 'leader' | 'member';
+  status?: 'pending' | 'approved' | 'rejected';
   color: string;
   avatar?: string | null;
   teamMemberId?: string | null;
 }
+
+export type ManagementRole = 'admin' | 'leader';
 
 export interface Notification {
   id: string;

@@ -13,6 +13,7 @@ model User {
   password    String
   name        String
   role        String   @default("member")
+  status      String   @default("approved")
   avatar      String?
   color       String   @default("#6366f1")
   resetToken  String?  @unique @map("reset_token")

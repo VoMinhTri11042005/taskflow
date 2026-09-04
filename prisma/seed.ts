@@ -19,11 +19,13 @@ async function main() {
   const now = new Date();
 
   const adminUser = await prisma.user.create({ data: { email: 'admin@taskflow.vn', password: hashSync('admin123', 10), name: 'Nguyễn Văn Admin', role: 'admin', color: '#ef4444' } });
+  const leaderUser = await prisma.user.create({ data: { email: 'leader@taskflow.vn', password: hashSync('leader123', 10), name: 'Trần Văn Leader', role: 'leader', color: '#f59e0b' } });
   const memberUser1 = await prisma.user.create({ data: { email: 'lan@taskflow.vn', password: hashSync('member123', 10), name: 'Trần Thị Lan', role: 'member', color: '#10b981' } });
   const memberUser2 = await prisma.user.create({ data: { email: 'minh@taskflow.vn', password: hashSync('member123', 10), name: 'Phạm Đức Minh', role: 'member', color: '#f59e0b' } });
   const memberUser3 = await prisma.user.create({ data: { email: 'hoa@taskflow.vn', password: hashSync('member123', 10), name: 'Lê Thị Hoa', role: 'member', color: '#8b5cf6' } });
 
   await prisma.teamMember.create({ data: { name: 'Nguyễn Văn Admin', email: 'admin@taskflow.vn', role: 'admin', color: '#ef4444' } });
+  await prisma.teamMember.create({ data: { name: 'Trần Văn Leader', email: 'leader@taskflow.vn', role: 'leader', color: '#f59e0b' } });
   const m1 = await prisma.teamMember.create({ data: { name: 'Trần Thị Lan', email: 'lan@taskflow.vn', role: 'member', color: '#10b981' } });
   const m2 = await prisma.teamMember.create({ data: { name: 'Phạm Đức Minh', email: 'minh@taskflow.vn', role: 'member', color: '#f59e0b' } });
   const m3 = await prisma.teamMember.create({ data: { name: 'Lê Thị Hoa', email: 'hoa@taskflow.vn', role: 'member', color: '#8b5cf6' } });
@@ -167,6 +169,7 @@ async function main() {
 
   console.log('Seed completed!');
   console.log('Admin: admin@taskflow.vn / admin123');
+  console.log('Leader: leader@taskflow.vn / leader123');
   console.log('Members: lan/minh/hoa@taskflow.vn / member123');
 }
 

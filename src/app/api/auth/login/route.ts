@@ -28,6 +28,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (user.status && user.status !== 'approved') {
+      return NextResponse.json(
+        { error: 'Tài khoản của bạn đang chờ quản trị viên duyệt' },
+        { status: 403 }
+      )
+    }
+
     // Kiểm tra mật khẩu
     const isPasswordValid = compareSync(password, user.password)
 
