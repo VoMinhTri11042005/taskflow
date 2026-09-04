@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { isDatabaseNotInitializedError } from '@/lib/db'
 import { compareSync } from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
@@ -81,6 +82,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    if (isDatabaseNotInitializedError(error)) {
+      return NextResponse.json(
+        {
+          error: 'Cơ sở dữ liệu chưa được khởi tạo. Vui lòng chạy Prisma schema sync trước khi đăng nhập.',
+        },
+        { status: 503 }
+      )
+    }
+
     console.error('Error logging in:', error)
     return NextResponse.json(
       { error: 'Đăng nhập thất bại' },

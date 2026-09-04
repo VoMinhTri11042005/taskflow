@@ -77,6 +77,9 @@ NEXTAUTH_SECRET="replace-with-strong-random-secret"
 ### Vercel
 - Import repo vÃ o Vercel
 - Thiáº¿t láº­p environment variables tÆ°Æ¡ng tá»±
-- Build command sáº½ auto-detect Next.js
+- Build script trong repo Ä‘Ã£ bao gá»“m `prisma db push` Ä‘á»ƒ táº¡o schema khi deploy
+- NÃªn cháº¡y má»™t láº§n ban Ä‘áº§u: `npx prisma db push` vÃ  `npx prisma db seed`
 - CÃ³ thá»ƒ dÃ¹ng file [vercel.json](vercel.json) Ä‘á»ƒ Ä‘á»‹nh nghÄ©a config deploy náº¿u cáº§n
+
+> Lỗi `The table public.users does not exist` thÆ°á»ng xuáº¥t hiá»‡n khi DB production chÆ°a Ä‘Æ°á»£c sync. CÃ n chÃ­nh `DATABASE_URL` vÃ  cháº¡y `prisma db push` trÆ°á»›c khi user login/đăng ký.
 

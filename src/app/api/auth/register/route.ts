@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { hashSync } from 'bcryptjs';
-import { db } from '@/lib/db';
+import { db, isDatabaseNotInitializedError } from '@/lib/db';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Tên phải có ít nhất 2 ký tự'),
@@ -50,6 +50,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Dữ liệu không hợp lệ', details: error.errors }, { status: 400 });
+    }
+
+    if (isDatabaseNotInitializedError(error)) {
+      return NextResponse.json({
+        error: 'Cơ sở dữ liệu chưa được khởi tạo. Vui lòng chạy Prisma schema sync trước khi đăng ký.',
+      }, { status: 503 });
     }
 
     console.error('Register error:', error);
