@@ -17,7 +17,9 @@ export const metadata: Metadata = {
   title: "TaskFlow - Quản lý công việc nhóm",
   description: "Ứng dụng quản lý phân chia công việc nhóm tích hợp Google Docs & Google Sheets",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+    apple: "/logo.svg",
   },
 };
 
