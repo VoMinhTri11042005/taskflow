@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ﻿# TaskFlow
 
 TaskFlow lÃ  á»©ng dá»¥ng quáº£n lÃ½ cÃ´ng viá»‡c nhÃ³m vá»›i hai giao diá»‡n chÃ­nh:
@@ -83,3 +84,130 @@ NEXTAUTH_SECRET="replace-with-strong-random-secret"
 
 > Lỗi `The table public.users does not exist` thÆ°á»ng xuáº¥t hiá»‡n khi DB production chÆ°a Ä‘Æ°á»£c sync. CÃ n chÃ­nh `DATABASE_URL` vÃ  cháº¡y `prisma db push` trÆ°á»›c khi user login/đăng ký.
 
+=======
+﻿# 🚀 TaskFlow - Team & Task Management Platform
+
+Ứng dụng web quản lý công việc và dự án nhóm hiện đại, hỗ trợ 2 giao diện độc lập (**Quản trị viên** & **Thành viên**), tích hợp tài liệu Google Workspace, chấm công thời gian thực và biểu quyết nội bộ.
+
+---
+
+## 🛠️ Công nghệ sử dụng (Tech Stack)
+
+- **Frontend:** [Next.js](https://nextjs.org/) (App Router, React 19, TypeScript)
+- **Styling & UI:** [Tailwind CSS v4](https://tailwindcss.com/), [Shadcn UI](https://ui.shadcn.com/) / Radix UI, Lucide Icons, Framer Motion
+- **State Management:** [Zustand](https://zustand-demo.pmnd.rs/)
+- **Database & ORM:** [PostgreSQL](https://www.postgresql.org/) với [Prisma ORM](https://www.prisma.io/)
+- **Xác thực (Auth):** Cookie-based session, bảo mật mật khẩu với cryptjs
+- **Containerization:** [Docker](https://www.docker.com/) & Docker Compose
+
+---
+
+## 📁 Cấu trúc thư mục dự án
+
+`	ext
+taskflow/
+├── prisma/
+│   ├── schema.prisma          # Định nghĩa cấu trúc Database (Users, Tasks, Projects, TimeLogs...)
+│   └── seed.ts                # Dữ liệu khởi tạo mẫu
+├── public/                    # Tài nguyên tĩnh (images, icons, fonts)
+├── src/
+│   ├── app/
+│   │   ├── api/               # Next.js API Routes (auth, tasks, projects, polls, time-logs...)
+│   │   ├── globals.css        # Cấu hình CSS toàn cục & Tailwind theme
+│   │   ├── layout.tsx         # Root layout
+│   │   └── page.tsx           # Entry page điều hướng theo Phân quyền & Views
+│   ├── components/
+│   │   ├── auth/              # Form đăng nhập (có quick-fill tài khoản demo)
+│   │   ├── layout/            # Sidebar Admin & Member (hỗ trợ mobile drawer)
+│   │   ├── ui/                # UI Components (Button, Dialog, Card, Tabs, Table...)
+│   │   └── views/             # Giao diện chức năng chính
+│   │       ├── admin/         # Giao diện Quản trị (Reports, Activity, Polls, Settings)
+│   │       ├── member/        # Giao diện Thành viên (MyTasks, TimeTracking, Polls, Profile)
+│   │       ├── board-view.tsx # Bảng Kanban
+│   │       ├── dashboard-view.tsx # Thống kê tổng quan
+│   │       ├── members-view.tsx   # Quản lý nhân sự
+│   │       └── projects-view.tsx  # Quản lý dự án
+│   ├── hooks/                 # Custom React Hooks (use-mobile, use-toast)
+│   ├── lib/                   # Database client & utilities
+│   ├── stores/                # Zustand global state management
+│   └── types/                 # TypeScript interfaces & types
+├── .dockerignore              # Danh sách loại trừ khi build Docker
+├── .env.example               # Mẫu biến môi trường
+├── docker-compose.yml         # Cấu hình Docker Compose (App + PostgreSQL)
+├── Dockerfile                 # Multi-stage Docker build cho Next.js Standalone
+├── package.json               # Danh sách thư viện và scripts
+└── README.md                  # Tài liệu dự án
+`
+
+---
+
+## ⚡ Hướng dẫn cài đặt & Chạy ứng dụng
+
+### 1. Chạy với Docker (Khuyên dùng - Nhanh nhất)
+
+Chỉ cần 1 lệnh duy nhất để khởi động cả Ứng dụng lẫn Database PostgreSQL:
+
+`ash
+# Khởi chạy container
+docker compose up -d --build
+
+# Khởi tạo Database schema và nạp dữ liệu mẫu
+="postgresql://taskflow_user:taskflow_password_secret@localhost:5432/taskflow_db?schema=public"
+npx prisma db push
+npm run seed  # hoặc npx tsx prisma/seed.ts
+`
+
+Truy cập ứng dụng tại: http://localhost:3002 (hoặc cổng cấu hình trong docker-compose.yml).
+
+---
+
+### 2. Chạy môi trường Local Development
+
+1. **Cài đặt thư viện phụ thuộc:**
+   `ash
+   bun install
+   # hoặc
+   npm install
+   `
+
+2. **Cấu hình biến môi trường:**
+   Tạo file .env từ .env.example:
+   `env
+   DATABASE_URL="postgresql://user:password@localhost:5432/taskflow_db?schema=public"
+   PORT=3000
+   `
+
+3. **Khởi tạo Database:**
+   `ash
+   bunx prisma db push
+   bun run prisma/seed.ts
+   `
+
+4. **Khởi động Dev Server:**
+   `ash
+   bun run dev
+   # hoặc
+   npm run dev
+   `
+   Mở trình duyệt tại: http://localhost:3000.
+
+---
+
+## 👥 Tài khoản Demo
+
+Sau khi chạy seed, hệ thống có sẵn các tài khoản để thử nghiệm:
+
+| Vai trò | Email | Mật khẩu | Mô tả |
+| :--- | :--- | :--- | :--- |
+| **Admin** | dmin@taskflow.vn | dmin123 | Toàn quyền quản trị: Dashboard, Kanban, Thành viên, Báo cáo, Khảo sát, Cài đặt |
+| **Member** | lan@taskflow.vn | member123 | Thành viên: Công việc cá nhân, Chấm công, Dự án, Biểu quyết, Hồ sơ |
+| **Member** | minh@taskflow.vn | member123 | Thành viên nhóm |
+| **Member** | hoa@taskflow.vn | member123 | Thành viên nhóm |
+
+---
+
+## 🚀 Hướng dẫn Triển khai (Deploy)
+
+- **Vercel (Serverless):** Kết nối repository với Vercel, cấu hình biến DATABASE_URL từ Neon.tech / Supabase.
+- **VPS / Docker (Self-hosted):** Sử dụng docker-compose.yml có sẵn để chạy production container.
+>>>>>>> 335a714 (refactor: standardize project structure, add docker & ci workflows, optimize for Vercel and Neon)

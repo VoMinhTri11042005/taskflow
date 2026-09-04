@@ -1,55 +1,53 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+﻿# Dependencies
 node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+.pnp
+.pnp.js
+.yarn
 
-# testing
-/coverage
+# Next.js & Build Output
+.next
+out
+build
+dist
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
+# Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
+dev.log
+server.log
 
+<<<<<<< HEAD
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+=======
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+>>>>>>> 335a714 (refactor: standardize project structure, add docker & ci workflows, optimize for Vercel and Neon)
 
-# vercel
-.vercel
+# Operating System Files
+.DS_Store
+Thumbs.db
 
+# IDE & Editor
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# typescript
+# TypeScript cache
 *.tsbuildinfo
 next-env.d.ts
-local-*
-.claude
-.z-ai-config
-*.log
-dev.log
-dev.out.log
-test
-prompt
 
-server.log
-# Skills directory
-/skills/
+# Vercel
+.vercel

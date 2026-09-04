@@ -1,0 +1,30 @@
+﻿services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: taskflow_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: taskflow_user
+      POSTGRES_PASSWORD: taskflow_password_secret
+      POSTGRES_DB: taskflow_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    image: task-app
+    container_name: taskflow_app
+    restart: always
+    ports:
+      - "3002:3000"
+    environment:
+      - DATABASE_URL=postgresql://taskflow_user:taskflow_password_secret@postgres:5432/taskflow_db?schema=public
+      - NODE_ENV=production
+      - PORT=3000
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+    driver: local
