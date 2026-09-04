@@ -40,8 +40,9 @@ import { toast } from 'sonner';
 
 const roleLabels: Record<string, string> = {
   admin: 'Quản trị viên',
-  manager: 'Quản lý',
-  member: 'Thành viên',
+leader: 'Leader',
+manager: 'Quản lý',
+member: 'Thành viên',
 };
 
 const memberColors = [
@@ -52,6 +53,7 @@ const memberColors = [
 
 export function MembersView() {
   const { members, setMembers } = useAppStore();
+  const [pendingAccounts, setPendingAccounts] = useState<Array<{ id: string; name: string; email: string; role: string; status: string }>>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [formName, setFormName] = useState('');
@@ -79,6 +81,17 @@ export function MembersView() {
     const res = await fetch('/api/members');
     const data = await res.json();
     setMembers(data);
+  }
+
+  async function fetchPendingAccounts() {
+    try {
+      const res = await fetch('/api/admin/users?status=pending');
+      if (!res.ok) return;
+      const data = await res.json();
+      setPendingAccounts(Array.isArray(data) ? data : []);
+    } catch {
+      setPendingAccounts([]);
+    }
   }
 
   const checkOnlineStatus = useCallback(async (memberId: string) => {
@@ -110,6 +123,7 @@ export function MembersView() {
 
   useEffect(() => {
     fetchMembers();
+    fetchPendingAccounts();
   }, [setMembers]);
 
   useEffect(() => {
@@ -147,17 +161,22 @@ export function MembersView() {
         });
         toast.success('Đã cập nhật thành viên');
       } else {
-        await fetch('/api/members', {
+        const response = await fetch('/api/members', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: formName, email: formEmail, role: formRole, color: formColor }),
+          body: JSON.stringify({ name: formName, email: formEmail, role: formRole, color: formColor, password: 'member123' }),
         });
-        toast.success('Đã thêm thành viên mới');
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed');
+        }
+        toast.success(`Đã thêm thành viên mới${data.defaultPassword ? ` - mật khẩu mặc định: ${data.defaultPassword}` : ''}`);
       }
       setDialogOpen(false);
       fetchMembers();
-    } catch {
-      toast.error('Có lỗi xảy ra');
+      fetchPendingAccounts();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     }
   }
 

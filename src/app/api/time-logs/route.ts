@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
     const dateFrom = searchParams.get('from')
     const dateTo = searchParams.get('to')
 
-    /* Admin summary: all members' working hours sorted desc */
-    if (mode === 'admin-summary' && session.role === 'admin') {
+    /* Admin/Leader summary: all members' working hours sorted desc */
+    if (mode === 'admin-summary' && (session.role === 'admin' || session.role === 'leader')) {
       const users = await db.user.findMany({
         where: { role: 'member' },
         select: { id: true, name: true, color: true, email: true },
@@ -82,9 +82,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(summary)
     }
 
-    /* Member's own logs */
+    /* Member's own logs or leader/admin viewing team logs */
     const userId = searchParams.get('userId') || session.id
-    if (session.role !== 'admin' && userId !== session.id) {
+    const isManager = session.role === 'admin' || session.role === 'leader'
+    if (!isManager && userId !== session.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

@@ -35,7 +35,7 @@ export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = user?.role === 'admin';
+  const isManagementRole = user?.role === 'admin' || user?.role === 'leader';
 
   const adminViews = ['dashboard', 'board', 'projects', 'members', 'polls', 'activity', 'reports', 'settings'] as const;
   const memberViews = ['my-tasks', 'time-tracking', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
@@ -72,10 +72,10 @@ export default function HomePage() {
     if (user.role === 'member' && !(memberViews as readonly string[]).includes(currentView)) {
       setCurrentView('my-tasks');
     }
-    if (user.role === 'admin' && !(adminViews as readonly string[]).includes(currentView)) {
+    if (isManagementRole && !(adminViews as readonly string[]).includes(currentView)) {
       setCurrentView('dashboard');
     }
-  }, [user, currentView, setCurrentView]);
+  }, [user, currentView, setCurrentView, isManagementRole]);
 
   /* Track login activity */
   const trackActivity = useCallback((action: string) => {
@@ -136,10 +136,10 @@ export default function HomePage() {
     return <LoginForm />;
   }
 
-  const Sidebar = isAdmin ? AdminSidebar : MemberSidebar;
+  const Sidebar = isManagementRole ? AdminSidebar : MemberSidebar;
 
   function renderView() {
-    if (isAdmin) {
+    if (isManagementRole) {
       switch (currentView) {
         case 'dashboard': return <DashboardView />;
         case 'projects': return <ProjectsView />;
@@ -176,7 +176,7 @@ export default function HomePage() {
             <span className="font-bold">TaskFlow</span>
           </div>
           <span className="text-xs text-muted-foreground">
-            {isAdmin ? 'Quản trị viên' : 'Thành viên'}
+            {user?.role === 'admin' ? 'Quản trị viên' : user?.role === 'leader' ? 'Leader' : 'Thành viên'}
           </span>
         </header>
       )}
@@ -200,7 +200,7 @@ export default function HomePage() {
 
           <footer className="border-t mt-auto">
             <div className="px-4 md:px-6 py-3 flex items-center justify-between text-xs text-muted-foreground">
-              <span>TaskFlow v2.0 - {isAdmin ? 'Giao diện Quản trị' : 'Giao diện Thành viên'}</span>
+              <span>TaskFlow v2.0 - {user?.role === 'admin' ? 'Giao diện Quản trị' : user?.role === 'leader' ? 'Giao diện Leader' : 'Giao diện Thành viên'}</span>
               <span>Tích hợp Google Docs, Sheets, Slides</span>
             </div>
           </footer>

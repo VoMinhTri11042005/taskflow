@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { hashSync } from 'bcryptjs'
 import { cookies } from 'next/headers'
 
-async function getAdminRole(): Promise<string | null> {
+async function getManagerRole(): Promise<string | null> {
   const cookieStore = await cookies()
   const sessionCookie = cookieStore.get('session')
   if (!sessionCookie?.value) return null
@@ -17,8 +17,9 @@ async function getAdminRole(): Promise<string | null> {
 
 export async function POST(request: NextRequest) {
   try {
-    const role = await getAdminRole()
-    if (role !== 'admin') {
+    const role = await getManagerRole()
+    const isManager = role === 'admin' || role === 'leader'
+    if (!isManager) {
       return NextResponse.json(
         { error: 'Bạn không có quyền thực hiện thao tác này' },
         { status: 403 }
