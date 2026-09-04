@@ -15,10 +15,11 @@ export async function POST(request: NextRequest) {
     const validated = loginSchema.parse(body)
 
     const { email, password } = validated
+    const normalizedEmail = email.trim().toLowerCase()
 
     // Tìm user theo email
     const user = await db.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     })
 
     if (!user) {
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Tìm teamMember liên kết qua email
     const teamMember = await db.teamMember.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       select: { id: true },
     })
 
