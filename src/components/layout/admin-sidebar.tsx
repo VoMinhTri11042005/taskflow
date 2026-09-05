@@ -226,7 +226,7 @@ export function AdminSidebar() {
           size="sm"
           onClick={handleLogout}
           className={cn(
-            'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground',
+            'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-white',
             showFull ? 'justify-start gap-2 px-3' : 'justify-center px-0'
           )}
           title="Đăng xuất"

@@ -194,7 +194,7 @@ export function MemberSidebar() {
           size="sm"
           onClick={handleLogout}
           className={cn(
-            'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground',
+            'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-white',
             isMobile || showFull ? 'justify-start gap-2 px-3' : 'mx-auto h-8 w-8 p-0'
           )}
           title={!showFull ? 'Đăng xuất' : undefined}
