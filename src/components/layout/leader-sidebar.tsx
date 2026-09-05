@@ -63,7 +63,7 @@ export function LeaderSidebar() {
     <aside
       className={cn(
         'sticky top-0 flex h-dvh shrink-0 flex-col border-r border-amber-200/70 bg-gradient-to-b from-amber-50/80 via-background to-background transition-all duration-300',
-        showFull ? 'w-72' : 'w-16'
+        isMobile ? 'w-[min(20rem,calc(100vw-1rem))]' : showFull ? 'w-72' : 'w-16'
       )}
     >
       <div className="flex min-h-[72px] items-center gap-3 px-4">
@@ -122,7 +122,7 @@ export function LeaderSidebar() {
       </nav>
 
       <Separator />
-      <div className="space-y-2 p-3">
+      <div className="space-y-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Button
           variant="ghost"
           size="sm"

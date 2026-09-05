@@ -80,7 +80,7 @@ export function AdminSidebar() {
     <aside
       className={cn(
         'sticky top-0 flex h-dvh shrink-0 flex-col border-r bg-card transition-all duration-300 ease-in-out',
-        showFull ? 'w-64' : 'w-16'
+        isMobile ? 'w-[min(20rem,calc(100vw-1rem))]' : showFull ? 'w-64' : 'w-16'
       )}
     >
       {/* Header with logo and notification bell */}
@@ -224,7 +224,7 @@ export function AdminSidebar() {
       <Separator />
 
       {/* Footer with toggle and logout */}
-      <div className="p-3 space-y-2">
+      <div className="space-y-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Button
           variant="ghost"
           size="sm"

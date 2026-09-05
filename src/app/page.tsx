@@ -22,7 +22,7 @@ import { TimeTrackingView } from '@/components/views/member/time-tracking-view';
 import { AdminOverviewView } from '@/components/views/admin/admin-overview-view';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
-import { Menu } from 'lucide-react';
+import { Bell, FolderKanban, KanbanSquare, LayoutDashboard, ListTodo, Menu, UserRound, Users } from 'lucide-react';
 import { useState } from 'react';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { readApiJson } from '@/lib/client-api';
@@ -32,7 +32,7 @@ export default function HomePage() {
   const {
     currentView, sidebarOpen, setSidebarOpen, setCurrentView,
     setTasks, setProjects, setMembers, setUser,
-    user, setNotifications, setUnreadCount, setPolls
+    user, setNotifications, unreadCount, setUnreadCount, setPolls
   } = useAppStore();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -40,6 +40,24 @@ export default function HomePage() {
 
   const isAdmin = user?.role === 'admin';
   const isLeader = user?.role === 'leader';
+
+  const mobileNavItems = isAdmin
+    ? [
+        { view: 'admin-overview' as const, label: 'Tổng quan', icon: LayoutDashboard },
+        { view: 'leaders' as const, label: 'Leader', icon: UserRound },
+        { view: 'members' as const, label: 'Thành viên', icon: Users },
+      ]
+    : isLeader
+      ? [
+          { view: 'leader-dashboard' as const, label: 'Tổng quan', icon: LayoutDashboard },
+          { view: 'projects' as const, label: 'Dự án', icon: FolderKanban },
+          { view: 'board' as const, label: 'Công việc', icon: KanbanSquare },
+        ]
+      : [
+          { view: 'my-tasks' as const, label: 'Việc của tôi', icon: ListTodo },
+          { view: 'projects' as const, label: 'Dự án', icon: FolderKanban },
+          { view: 'notifications' as const, label: 'Thông báo', icon: Bell },
+        ];
 
   const adminViews = ['admin-overview', 'leaders', 'members'] as const;
   const leaderViews = ['leader-dashboard', 'projects', 'board', 'members', 'polls', 'leader-time'] as const;
@@ -225,19 +243,59 @@ export default function HomePage() {
 
         {!isMobile && <Sidebar />}
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className={currentView === 'board' || currentView === 'my-tasks' ? 'p-4 md:p-6 h-full' : 'p-4 md:p-6'}>
             {renderView()}
           </div>
 
-          <footer className="border-t mt-auto">
-            <div className="px-4 md:px-6 py-3 flex items-center justify-between text-xs text-muted-foreground">
+          <footer className="mt-auto border-t pb-16 md:pb-0">
+            <div className="flex flex-col gap-1 px-4 py-3 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6">
               <span>TaskFlow v2.0 - {user?.role === 'admin' ? 'Giao diện Quản trị' : user?.role === 'leader' ? 'Giao diện Leader' : 'Giao diện Thành viên'}</span>
               <span>Tích hợp Google Docs, Sheets, Slides</span>
             </div>
           </footer>
         </main>
       </div>
+
+      {isMobile && (
+        <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="mx-auto flex max-w-md items-stretch justify-around">
+            {mobileNavItems.map(({ view, label, icon: Icon }) => {
+              const isActive = currentView === view;
+              const hasUnread = view === 'notifications' && unreadCount > 0;
+              return (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => {
+                    setCurrentView(view);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] font-medium transition-colors ${
+                    isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground active:bg-muted'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="max-w-full truncate">{label}</span>
+                  {hasUnread && (
+                    <span className="absolute top-1 right-1/2 ml-3 h-2 w-2 rounded-full bg-destructive" />
+                  )}
+                </button>
+              );
+            })}
+            {!isAdmin && (
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className="flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] font-medium text-muted-foreground transition-colors active:bg-muted"
+              >
+                <Menu className="h-4 w-4" />
+                <span>Thêm</span>
+              </button>
+            )}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }
