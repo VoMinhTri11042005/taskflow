@@ -5,6 +5,7 @@ import type { LeaderViewType } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   BarChart3,
+  Bell,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -22,13 +23,14 @@ import { cn } from '@/lib/utils';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { toast } from 'sonner';
 
-const navItems: { id: LeaderViewType; label: string; icon: React.ElementType }[] = [
+const navItems: { id: LeaderViewType; label: string; icon: React.ElementType; showBadge?: boolean }[] = [
   { id: 'leader-dashboard', label: 'Không gian nhóm', icon: LayoutDashboard },
   { id: 'projects', label: 'Dự án của tôi', icon: FolderKanban },
   { id: 'board', label: 'Công việc', icon: KanbanSquare },
   { id: 'members', label: 'Thành viên & duyệt', icon: UsersRound },
   { id: 'polls', label: 'Bình chọn', icon: BarChart3 },
   { id: 'leader-time', label: 'Theo dõi thời gian', icon: Clock3 },
+  { id: 'notifications', label: 'Thông báo', icon: Bell, showBadge: true },
 ];
 
 export function LeaderSidebar() {
@@ -40,6 +42,7 @@ export function LeaderSidebar() {
     tasks,
     user,
     setUser,
+    unreadCount,
   } = useAppStore();
   const isMobile = useIsMobile();
   const showFull = isMobile || sidebarOpen;
@@ -100,7 +103,7 @@ export function LeaderSidebar() {
 
       <Separator />
       <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-3">
-        {navItems.map(({ id, label, icon: Icon }) => (
+        {navItems.map(({ id, label, icon: Icon, showBadge }) => (
           <button
             key={id}
             onClick={() => {
@@ -116,7 +119,12 @@ export function LeaderSidebar() {
             title={!showFull ? label : undefined}
           >
             <Icon className="h-5 w-5 shrink-0" />
-            {showFull && <span className="truncate">{label}</span>}
+            {showFull && <span className="flex-1 truncate text-left">{label}</span>}
+            {showBadge && unreadCount > 0 && (
+              <Badge className="h-5 min-w-5 bg-amber-600 px-1.5 text-[10px] text-white hover:bg-amber-600">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Badge>
+            )}
           </button>
         ))}
       </nav>

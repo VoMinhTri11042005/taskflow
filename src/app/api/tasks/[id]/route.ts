@@ -58,7 +58,7 @@ export async function PUT(
     const validated = updateTaskSchema.parse(body)
 
     const canManage = await canManageTask(session, id)
-    const currentTask = await db.task.findUnique({ where: { id }, select: { projectId: true, status: true } })
+    const currentTask = await db.task.findUnique({ where: { id }, select: { projectId: true, status: true, assigneeId: true } })
     if (!currentTask) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     if (!canManage) {
       if (!(await canAccessTask(session, id))) return NextResponse.json({ error: 'Bạn không có quyền cập nhật công việc này' }, { status: 403 })
@@ -91,6 +91,28 @@ export async function PUT(
         links: true,
       },
     })
+
+    if (
+      canManage &&
+      validated.assigneeId &&
+      validated.assigneeId !== currentTask.assigneeId &&
+      task.assignee?.email
+    ) {
+      const assigneeUser = await db.user.findUnique({
+        where: { email: task.assignee.email },
+        select: { id: true, status: true },
+      })
+      if (assigneeUser?.status === 'approved') {
+        await db.notification.create({
+          data: {
+            userId: assigneeUser.id,
+            title: 'Bạn được giao công việc',
+            message: `${session.name} đã giao cho bạn công việc “${task.title}” trong dự án “${task.project.name}”.`,
+            type: 'task_assigned',
+          },
+        })
+      }
+    }
 
     // A member's review request is a server-side event, not a best-effort
     // browser request. This keeps the Leader notification durable even if the

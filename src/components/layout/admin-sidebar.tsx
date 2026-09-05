@@ -46,6 +46,8 @@ export function AdminSidebar() {
     setUser,
     notifications,
     unreadCount,
+    setNotifications,
+    setUnreadCount,
   } = useAppStore();
 
   const isMobile = useIsMobile();
@@ -73,6 +75,24 @@ export function AdminSidebar() {
       toast.success('Đã đăng xuất thành công');
     } catch {
       toast.error('Có lỗi xảy ra khi đăng xuất');
+    }
+  }
+
+  async function markNotificationAsRead(notification: (typeof notifications)[number]) {
+    if (notification.read) return;
+    try {
+      const response = await fetch(`/api/notifications/${notification.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ read: true }),
+      });
+      if (!response.ok) return;
+      setNotifications(
+        notifications.map((item) => (item.id === notification.id ? { ...item, read: true } : item))
+      );
+      setUnreadCount(Math.max(0, unreadCount - 1));
+    } catch {
+      // Leave the notification unread when the request cannot be completed.
     }
   }
 
@@ -120,7 +140,11 @@ export function AdminSidebar() {
                 </div>
               ) : (
                 latestNotifications.map((notif) => (
-                  <DropdownMenuItem key={notif.id} className="flex flex-col items-start gap-1 p-3 cursor-pointer">
+                  <DropdownMenuItem
+                    key={notif.id}
+                    className="flex cursor-pointer flex-col items-start gap-1 p-3"
+                    onSelect={() => void markNotificationAsRead(notif)}
+                  >
                     <div className="flex items-center gap-2 w-full">
                       {!notif.read && (
                         <span className="h-2 w-2 rounded-full bg-primary shrink-0" />

@@ -60,7 +60,7 @@ export default function HomePage() {
         ];
 
   const adminViews = ['admin-overview', 'leaders', 'members'] as const;
-  const leaderViews = ['leader-dashboard', 'projects', 'board', 'members', 'polls', 'leader-time'] as const;
+  const leaderViews = ['leader-dashboard', 'projects', 'board', 'members', 'polls', 'leader-time', 'notifications'] as const;
   const memberViews = ['my-tasks', 'time-tracking', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
 
   /* Check session on mount */
@@ -141,19 +141,43 @@ export default function HomePage() {
     trackActivity('login');
   }, [setTasks, setProjects, setMembers, setPolls, user, trackActivity]);
 
-  /* Fetch notifications for all users */
+  /* Keep the inbox current while the user is signed in. Server-side events
+     (for example a new registration in another browser) cannot update this
+     tab directly, so refresh on focus and at a modest interval. */
   useEffect(() => {
-    if (!user) return;
-    fetch(`/api/notifications?userId=${user.id}`)
-      .then((response) => readApiJson<Notification[]>(response, 'Không thể tải thông báo'))
-      .then((data) => {
-        if (Array.isArray(data)) {
+    const userId = user?.id;
+    if (!userId) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+
+    let active = true;
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`, {
+          cache: 'no-store',
+        });
+        const data = await readApiJson<Notification[]>(response, 'Không thể tải thông báo');
+        if (active && Array.isArray(data)) {
           setNotifications(data);
-          setUnreadCount(data.filter((n: { read: boolean }) => !n.read).length);
+          setUnreadCount(data.filter((notification) => !notification.read).length);
         }
-      })
-      .catch(() => {});
-  }, [user, setNotifications, setUnreadCount]);
+      } catch {
+        // A temporary request failure must not clear the notifications already shown.
+      }
+    };
+
+    void loadNotifications();
+    const intervalId = window.setInterval(() => void loadNotifications(), 15_000);
+    window.addEventListener('focus', loadNotifications);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', loadNotifications);
+    };
+  }, [user?.id, setNotifications, setUnreadCount]);
 
   /* Track logout on unmount */
   useEffect(() => {
@@ -199,6 +223,7 @@ export default function HomePage() {
         case 'members': return <MembersView />;
         case 'polls': return <AdminPollsView />;
         case 'leader-time': return <LeaderTimeView />;
+        case 'notifications': return <NotificationsView />;
         default: return <LeaderDashboardView />;
       }
     }

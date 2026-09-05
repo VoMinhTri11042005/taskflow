@@ -86,6 +86,23 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    if (task.assignee?.email) {
+      const assigneeUser = await db.user.findUnique({
+        where: { email: task.assignee.email },
+        select: { id: true, status: true },
+      })
+      if (assigneeUser?.status === 'approved') {
+        await db.notification.create({
+          data: {
+            userId: assigneeUser.id,
+            title: 'Bạn có công việc mới',
+            message: `${session.name} đã giao cho bạn công việc “${task.title}” trong dự án “${task.project.name}”.`,
+            type: 'task_assigned',
+          },
+        })
+      }
+    }
+
     return NextResponse.json(task, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {

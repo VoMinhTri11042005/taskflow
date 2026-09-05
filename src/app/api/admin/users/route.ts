@@ -101,6 +101,16 @@ export async function POST(request: NextRequest) {
         create: { name: created.name, email: created.email, role: created.role, color: created.color },
         update: { name: created.name, role: created.role, color: created.color },
       });
+      await tx.notification.create({
+        data: {
+          userId: created.id,
+          title: created.status === 'approved' ? 'Tài khoản đã được tạo' : 'Tài khoản đang chờ duyệt',
+          message: created.status === 'approved'
+            ? `${session.name} đã tạo tài khoản ${created.role === 'leader' ? 'Leader' : 'Thành viên'} cho bạn. Bạn có thể đăng nhập để bắt đầu sử dụng TaskFlow.`
+            : `${session.name} đã tạo tài khoản cho bạn. Tài khoản sẽ dùng được sau khi được duyệt.`,
+          type: created.status === 'approved' ? 'account_approved' : 'account_pending',
+        },
+      });
       return created;
     });
 
@@ -176,6 +186,9 @@ export async function PATCH(request: NextRequest) {
     if (email) updateData.email = email.toLowerCase();
     if (password) updateData.password = hashSync(password, 10);
 
+    const hasApprovalDecision =
+      (status === 'approved' || status === 'rejected') && status !== targetUser.status;
+
     const user = await db.user.update({
       where: { id },
       data: updateData,
@@ -194,6 +207,20 @@ export async function PATCH(request: NextRequest) {
         where: { email: user.email },
         create: { name: user.name, email: user.email, role: user.role, color: user.color },
         update: { name: user.name, role: user.role, color: user.color },
+      });
+    }
+
+    if (hasApprovalDecision) {
+      const approved = user.status === 'approved';
+      await db.notification.create({
+        data: {
+          userId: user.id,
+          title: approved ? 'Tài khoản đã được duyệt' : 'Yêu cầu đăng ký chưa được duyệt',
+          message: approved
+            ? `${session.name} đã duyệt tài khoản của bạn. Bạn có thể đăng nhập và sử dụng TaskFlow.`
+            : `${session.name} đã từ chối yêu cầu đăng ký của bạn. Vui lòng liên hệ quản trị viên nếu cần hỗ trợ.`,
+          type: approved ? 'account_approved' : 'account_rejected',
+        },
       });
     }
 

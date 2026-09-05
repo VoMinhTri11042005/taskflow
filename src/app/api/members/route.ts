@@ -86,6 +86,14 @@ export async function POST(request: NextRequest) {
           color: validated.color || '#6366f1',
         },
       })
+      await tx.notification.create({
+        data: {
+          userId: user.id,
+          title: 'Tài khoản đã được tạo',
+          message: `${session.name} đã tạo tài khoản ${role === 'leader' ? 'Leader' : 'Thành viên'} cho bạn. Bạn có thể đăng nhập để bắt đầu sử dụng TaskFlow.`,
+          type: 'account_approved',
+        },
+      })
       return tx.teamMember.create({
         data: {
           name: normalizedName, email, role,

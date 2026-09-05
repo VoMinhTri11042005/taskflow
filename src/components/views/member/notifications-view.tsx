@@ -14,6 +14,9 @@ import {
   AlertTriangle,
   Bell,
   BellOff,
+  UserCheck,
+  UserPlus,
+  UserX,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -27,6 +30,9 @@ const typeConfig: Record<string, { icon: React.ElementType; color: string; bgCol
   success: { icon: CheckCircle2, color: 'text-emerald-500', bgColor: 'bg-emerald-50' },
   info: { icon: Info, color: 'text-slate-500', bgColor: 'bg-slate-50' },
   warning: { icon: AlertTriangle, color: 'text-orange-500', bgColor: 'bg-orange-50' },
+  account_pending: { icon: UserPlus, color: 'text-violet-600', bgColor: 'bg-violet-50' },
+  account_approved: { icon: UserCheck, color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+  account_rejected: { icon: UserX, color: 'text-red-600', bgColor: 'bg-red-50' },
 };
 
 function formatTimeAgo(dateStr: string): string {

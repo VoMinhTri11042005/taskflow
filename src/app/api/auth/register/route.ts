@@ -30,23 +30,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 });
     }
 
-    const user = await db.user.create({
-      data: {
-        name: normalizedName,
-        email: normalizedEmail,
-        password: hashSync(parsed.password, 10),
-        role: parsed.role,
-        status: 'pending',
-        color: parsed.role === 'leader' ? '#f59e0b' : '#10b981',
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        color: true,
-      },
+    const user = await db.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          name: normalizedName,
+          email: normalizedEmail,
+          password: hashSync(parsed.password, 10),
+          role: parsed.role,
+          status: 'pending',
+          color: parsed.role === 'leader' ? '#f59e0b' : '#10b981',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          color: true,
+        },
+      });
+
+      // The administrator needs a durable request notification, even when they
+      // are already signed in on another device or refresh the browser later.
+      const administrators = await tx.user.findMany({
+        where: { role: 'admin', status: 'approved' },
+        select: { id: true },
+      });
+      if (administrators.length > 0) {
+        await tx.notification.createMany({
+          data: administrators.map((administrator) => ({
+            userId: administrator.id,
+            title: 'Yêu cầu đăng ký mới',
+            message: `${created.name} đã đăng ký tài khoản ${parsed.role === 'leader' ? 'Leader' : 'Thành viên'} và đang chờ duyệt.`,
+            type: 'account_pending',
+          })),
+        });
+      }
+
+      return created;
     });
 
     return NextResponse.json({

@@ -75,7 +75,17 @@ export interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'info' | 'warning' | 'success' | 'task_assigned' | 'deadline' | 'overdue' | 'task_completed';
+  type:
+    | 'info'
+    | 'warning'
+    | 'success'
+    | 'task_assigned'
+    | 'deadline'
+    | 'overdue'
+    | 'task_completed'
+    | 'account_pending'
+    | 'account_approved'
+    | 'account_rejected';
   read: boolean;
   createdAt: string;
   userId: string;
@@ -142,6 +152,6 @@ export interface PollVote {
 }
 
 export type AdminViewType = 'admin-overview' | 'leaders' | 'members';
-export type LeaderViewType = 'leader-dashboard' | 'projects' | 'board' | 'members' | 'polls' | 'leader-time';
+export type LeaderViewType = 'leader-dashboard' | 'projects' | 'board' | 'members' | 'polls' | 'leader-time' | 'notifications';
 export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'polls' | 'notifications' | 'profile' | 'time-tracking';
 export type ViewType = AdminViewType | LeaderViewType | MemberViewType;
