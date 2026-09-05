@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Dữ liệu không hợp lệ', details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: 'Dữ liệu không hợp lệ', details: error.issues }, { status: 400 });
     }
 
     if (isDatabaseNotInitializedError(error)) {

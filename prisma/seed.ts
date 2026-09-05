@@ -54,7 +54,7 @@ async function main() {
     { title: 'Tổng hợp & review cuối cùng', description: 'Admin kiểm tra toàn bộ báo cáo, slide, số liệu. Đảm bảo tính nhất quán trước khi nộp.', status: 'todo', priority: 'urgent', projectId: p4.id, assigneeId: null, dueDate: new Date(now.getTime() + 7*86400000) },
   ];
 
-  const tasks = [];
+  const tasks: Array<{ id: string }> = [];
   for (const t of taskData) tasks.push(await prisma.task.create({ data: t }));
 
   await prisma.taskLink.createMany({

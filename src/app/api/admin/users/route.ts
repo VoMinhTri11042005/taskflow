@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ user, defaultPassword: password }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Dữ liệu không hợp lệ', details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: 'Dữ liệu không hợp lệ', details: error.issues }, { status: 400 });
     }
     console.error('Error creating user account:', error);
     return NextResponse.json({ error: 'Không thể tạo tài khoản' }, { status: 500 });

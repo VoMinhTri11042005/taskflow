@@ -47,7 +47,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Dữ liệu không hợp lệ', details: error.errors },
+        { error: 'Dữ liệu không hợp lệ', details: error.issues },
         { status: 400 }
       )
     }

@@ -96,10 +96,11 @@ export function ProfileView() {
 
   /* Fetch activity logs */
   useEffect(() => {
-    if (!user?.id) return;
+    const userId = user?.id;
+    if (!userId) return;
     async function fetchActivity() {
       try {
-        const res = await fetch(`/api/activity-logs?userId=${user.id}`);
+        const res = await fetch(`/api/activity-logs?userId=${userId}`);
         const data = await res.json();
         setActivityLogs(data);
       } catch {

@@ -32,7 +32,7 @@ export async function POST(
     // Check if user already voted on this poll
     const existingVote = await db.pollVote.findUnique({
       where: {
-        userId_pollId,
+        userId_pollId: { userId, pollId },
       },
     })
 

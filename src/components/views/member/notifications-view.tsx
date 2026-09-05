@@ -51,10 +51,11 @@ export function NotificationsView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    const userId = user?.id;
+    if (!userId) return;
     async function fetchNotifications() {
       try {
-        const res = await fetch(`/api/notifications?userId=${user.id}`);
+        const res = await fetch(`/api/notifications?userId=${userId}`);
         const data = await res.json();
         setNotifications(data);
         const unread = data.filter((n: Notification) => !n.read).length;
@@ -66,7 +67,7 @@ export function NotificationsView() {
       }
     }
     fetchNotifications();
-  }, [user, setNotifications, setUnreadCount]);
+  }, [user?.id, setNotifications, setUnreadCount]);
 
   async function handleMarkRead(notification: Notification) {
     if (notification.read) return;
