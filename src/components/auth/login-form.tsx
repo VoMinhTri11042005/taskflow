@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound, BriefcaseBusiness } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound, BriefcaseBusiness, Clock3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BrandMark } from '@/components/layout/brand-mark';
 
@@ -23,6 +23,7 @@ export function LoginForm() {
   const [registerFieldsActive, setRegisterFieldsActive] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [registrationNotice, setRegistrationNotice] = useState<string | null>(null);
 
   function changeMode(nextMode: 'login' | 'register') {
     // Login and registration must never share credentials. Besides clearing the
@@ -37,6 +38,7 @@ export function LoginForm() {
     setShowPassword(false);
     setLoginFieldsActive(false);
     setRegisterFieldsActive(false);
+    setRegistrationNotice(null);
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -110,8 +112,15 @@ export function LoginForm() {
         toast.error(data.error || 'Đăng ký thất bại');
         return;
       }
-      toast.success(data.message || 'Đăng ký thành công');
-      changeMode('login');
+      setRegistrationNotice(
+        data.message || 'Đăng ký thành công. Tài khoản của bạn đang chờ được phê duyệt.'
+      );
+      setName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setRegisterFieldsActive(false);
+      toast.success('Đăng ký thành công. Vui lòng chờ duyệt tài khoản.');
     } catch {
       toast.error('Lỗi kết nối server');
     } finally {
@@ -149,16 +158,32 @@ export function LoginForm() {
      </Button>
    </div>
    <CardTitle className="text-xl">
-     {mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+     {mode === 'login' ? 'Đăng nhập' : registrationNotice ? 'Đăng ký thành công' : 'Tạo tài khoản'}
    </CardTitle>
    <CardDescription>
      {mode === 'login'
        ? 'Nhập thông tin tài khoản để tiếp tục'
-       : 'Đăng ký để gửi yêu cầu duyệt tài khoản mới'}
+       : registrationNotice ? 'Tài khoản chỉ có thể đăng nhập sau khi được duyệt.' : 'Đăng ký để gửi yêu cầu duyệt tài khoản mới'}
    </CardDescription>
  </CardHeader>
  <CardContent>
-   {mode === 'login' ? (
+   {registrationNotice ? (
+     <div className="space-y-5 py-4 text-center">
+       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+         <Clock3 className="h-7 w-7" />
+       </div>
+       <div className="space-y-2">
+         <h3 className="text-lg font-semibold">Yêu cầu đang chờ duyệt</h3>
+         <p className="text-sm leading-6 text-muted-foreground">{registrationNotice}</p>
+       </div>
+       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-900">
+         Bạn sẽ đăng nhập được ngay sau khi tài khoản được Leader hoặc Quản trị viên phê duyệt.
+       </div>
+       <Button type="button" className="w-full" onClick={() => changeMode('login')}>
+         Về trang đăng nhập
+       </Button>
+     </div>
+   ) : mode === 'login' ? (
      <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
        <div className="space-y-2">
          <Label>Đăng nhập với vai trò</Label>
