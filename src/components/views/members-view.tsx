@@ -290,11 +290,17 @@ export function MembersView() {
               </div>
               <div className="space-y-2">
                 <Label>Vai trò</Label>
-                <Select value={formRole} onValueChange={setFormRole}>
+                <Select
+                  value={formRole}
+                  onValueChange={setFormRole}
+                  disabled={editingMember?.role === 'admin'}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Quản trị viên</SelectItem>
-                    <SelectItem value="manager">Quản lý</SelectItem>
+                    {editingMember?.role === 'admin' && (
+                      <SelectItem value="admin">Quản trị viên duy nhất</SelectItem>
+                    )}
+                    <SelectItem value="leader">Leader</SelectItem>
                     <SelectItem value="member">Thành viên</SelectItem>
                   </SelectContent>
                 </Select>

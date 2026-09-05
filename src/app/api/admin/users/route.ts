@@ -7,7 +7,7 @@ import { z } from 'zod';
 const accountSchema = z.object({
   name: z.string().min(1, 'Tên bắt buộc'),
   email: z.string().email('Email không hợp lệ'),
-  role: z.enum(['admin', 'leader', 'member']).default('member'),
+  role: z.enum(['leader', 'member']).default('member'),
   password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự').optional(),
   status: z.enum(['pending', 'approved', 'rejected']).default('approved'),
   color: z.string().optional(),
@@ -57,9 +57,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const parsed = accountSchema.parse(body);
-    if (session.role === 'leader' && parsed.role === 'admin') {
-      return NextResponse.json({ error: 'Leader không được tạo tài khoản admin' }, { status: 403 });
-    }
     const password = parsed.password || 'member123';
 
     const existing = await db.user.findUnique({ where: { email: parsed.email.toLowerCase() } });
@@ -123,6 +120,22 @@ export async function PATCH(request: NextRequest) {
     }
     if (session.role === 'leader' && targetUser.role === 'admin') {
       return NextResponse.json({ error: 'Leader không được quản lý tài khoản admin' }, { status: 403 });
+    }
+
+    if (role && !['admin', 'leader', 'member'].includes(role)) {
+      return NextResponse.json({ error: 'Vai trò không hợp lệ' }, { status: 400 });
+    }
+
+    if (targetUser.role === 'admin' && role && role !== 'admin') {
+      return NextResponse.json({ error: 'Không thể hạ quyền tài khoản admin duy nhất' }, { status: 409 });
+    }
+
+    if (targetUser.role !== 'admin' && role === 'admin') {
+      return NextResponse.json({ error: 'Hệ thống chỉ cho phép một tài khoản admin' }, { status: 409 });
+    }
+
+    if (targetUser.role === 'admin' && status && status !== 'approved') {
+      return NextResponse.json({ error: 'Tài khoản admin phải luôn được duyệt' }, { status: 409 });
     }
 
     const updateData: Record<string, unknown> = {};

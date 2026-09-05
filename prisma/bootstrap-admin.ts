@@ -21,6 +21,19 @@ if (password.length < 8) {
 const db = new PrismaClient();
 
 async function main() {
+  const administrators = await db.user.findMany({
+    where: { role: "admin" },
+    select: { email: true },
+  });
+
+  if (administrators.length > 1) {
+    throw new Error("Database đang có nhiều admin. Hãy xử lý thủ công trước khi chạy lại.");
+  }
+
+  if (administrators[0] && administrators[0].email !== email) {
+    throw new Error(`Admin hiện tại là ${administrators[0].email}. Không tạo thêm admin thứ hai.`);
+  }
+
   const admin = await db.user.upsert({
     where: { email },
     create: {
