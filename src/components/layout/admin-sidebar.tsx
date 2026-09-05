@@ -84,16 +84,7 @@ export function AdminSidebar() {
       )}
     >
       {/* Header with logo and notification bell */}
-      <div className="flex items-center gap-2 p-4 min-h-[65px]">
-        {/* Close button on mobile */}
-        {isMobile && (
-          <button
-            onClick={closeMobileMenu}
-            className="absolute top-3 right-3 h-8 w-8 flex items-center justify-center rounded-md hover:bg-accent z-10"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        )}
+      <div className="flex min-h-[65px] items-center gap-2 p-4">
         <BrandMark />
         {showFull && (
           <div className="flex flex-col overflow-hidden flex-1">
@@ -149,6 +140,17 @@ export function AdminSidebar() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+        )}
+        {isMobile && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={closeMobileMenu}
+            className="h-9 w-9 shrink-0"
+            aria-label="Đóng menu"
+          >
+            <X className="h-5 w-5" />
+          </Button>
         )}
         {!showFull && unreadCount > 0 && (
           <div className="relative">
