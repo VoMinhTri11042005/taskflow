@@ -9,6 +9,9 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummydb?schema=public"
+      NEXT_TELEMETRY_DISABLED: 1
 
     steps:
       - name: Checkout repository
@@ -31,6 +34,3 @@ jobs:
 
       - name: Build Next.js Application
         run: npm run build
-        env:
-          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummydb"
-          NEXT_TELEMETRY_DISABLED: 1
