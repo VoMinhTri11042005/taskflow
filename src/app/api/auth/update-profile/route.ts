@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getSession } from '@/lib/auth'
+import { createSessionValue, getSession } from '@/lib/auth'
+
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+  maxAge: 60 * 60 * 24 * 7,
+}
 
 export async function PUT(request: NextRequest) {
   try {
@@ -49,7 +57,23 @@ export async function PUT(request: NextRequest) {
       data: { name: name.trim() },
     })
 
-    return NextResponse.json(updatedUser)
+    // Never return password hashes. When users change their own profile, refresh
+    // the signed session at the same time so every following API request uses
+    // the new identity details without waiting for a reload.
+    const safeUser = {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      role: updatedUser.role,
+      color: updatedUser.color,
+      avatar: updatedUser.avatar,
+      teamMemberId: session.teamMemberId ?? null,
+    }
+    const response = NextResponse.json({ user: safeUser })
+    if (updatedUser.id === session.id) {
+      response.cookies.set('session', createSessionValue(safeUser), sessionCookieOptions)
+    }
+    return response
   } catch (error) {
     console.error('Error updating profile:', error)
     return NextResponse.json(

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
-import type { Task, TaskLink } from '@/types';
+import type { Project, Task, TaskLink } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 
 const columns: { id: Task['status']; label: string; color: string; bgColor: string }[] = [
   { id: 'todo', label: 'Cần làm', color: 'text-slate-600', bgColor: 'bg-slate-100' },
@@ -74,13 +75,19 @@ export function MyTasksView() {
     const params = new URLSearchParams();
     if (selectedProjectId) params.set('projectId', selectedProjectId);
     const res = await fetch(`/api/tasks?${params.toString()}`);
-    const data = await res.json();
+    const data = await readApiJson<Task[]>(res, 'Không thể tải danh sách công việc');
     setTasks(data);
   }, [selectedProjectId, setTasks]);
 
   useEffect(() => {
-    fetchTasks();
-    fetch('/api/projects').then((r) => r.json()).then(setProjects);
+    void Promise.all([
+      fetchTasks(),
+      fetch('/api/projects')
+        .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
+        .then(setProjects),
+    ]).catch((error) => {
+      toast.error(error instanceof Error ? error.message : 'Không thể tải dữ liệu công việc');
+    });
   }, [fetchTasks, setProjects]);
 
   /* Filter tasks assigned to current member */
@@ -103,15 +110,16 @@ export function MyTasksView() {
     const newStatus = columns[newIdx].id;
     setMovingId(task.id);
     try {
-      await fetch(`/api/tasks/${task.id}`, {
+      const response = await fetch(`/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
+      await ensureApiSuccess(response, 'Không thể cập nhật trạng thái');
       toast.success(`Đã chuyển sang "${columns[newIdx].label}"`);
-      fetchTasks();
-    } catch {
-      toast.error('Không thể cập nhật trạng thái');
+      await fetchTasks();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái');
     } finally {
       setMovingId(null);
     }
@@ -151,40 +159,21 @@ export function MyTasksView() {
     };
   }
 
-  /* Request review: change task status to 'review' and notify admin */
+  /* Request review: the API also creates a durable notification for the task's Leader. */
   async function handleRequestReview(task: Task) {
     setReviewingId(task.id);
     try {
-      await fetch(`/api/tasks/${task.id}`, {
+      const updateResponse = await fetch(`/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'review' }),
       });
+      await ensureApiSuccess(updateResponse, 'Không thể gửi yêu cầu xem xét');
 
-      try {
-        const membersRes = await fetch('/api/members');
-        const members = await membersRes.json();
-        const adminMember = members.find((m: { role: string }) => m.role === 'admin');
-        if (adminMember) {
-          await fetch('/api/notifications', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              title: 'Yêu cầu review',
-              message: `${user?.name || 'Thành viên'} đã hoàn thành và yêu cầu review công việc "${task.title}"`,
-              type: 'task_completed',
-              userId: adminMember.id,
-            }),
-          });
-        }
-      } catch {
-        /* Notification fail is non-critical */
-      }
-
-      toast.success('Đã gửi yêu cầu review cho Admin');
-      fetchTasks();
-    } catch {
-      toast.error('Không thể gửi yêu cầu review');
+      toast.success('Đã gửi yêu cầu review cho Leader');
+      await fetchTasks();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể gửi yêu cầu review');
     } finally {
       setReviewingId(null);
     }

@@ -5,6 +5,8 @@ import { useAppStore } from '@/stores/app-store';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Users, Mail, Shield } from 'lucide-react';
+import { readApiJson } from '@/lib/client-api';
+import type { Task, TeamMember } from '@/types';
 
 const roleLabels: Record<string, string> = {
   admin: 'Quản trị viên',
@@ -16,8 +18,14 @@ export function MemberTeamView() {
   const { members, setMembers, tasks, setTasks } = useAppStore();
 
   useEffect(() => {
-    fetch('/api/members').then((r) => r.json()).then(setMembers).catch(() => {});
-    fetch('/api/tasks').then((r) => r.json()).then(setTasks).catch(() => {});
+    fetch('/api/members')
+      .then((response) => readApiJson<TeamMember[]>(response, 'Không thể tải danh sách thành viên'))
+      .then(setMembers)
+      .catch(() => {});
+    fetch('/api/tasks')
+      .then((response) => readApiJson<Task[]>(response, 'Không thể tải danh sách công việc'))
+      .then(setTasks)
+      .catch(() => {});
   }, [setMembers, setTasks]);
 
   /* Calculate task count per member and sort descending */

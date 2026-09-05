@@ -61,6 +61,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 import { format, isPast, isToday, addDays } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
@@ -120,14 +121,22 @@ export function BoardView() {
     const params = new URLSearchParams();
     if (selectedProjectId) params.set('projectId', selectedProjectId);
     const res = await fetch(`/api/tasks?${params.toString()}`);
-    const data = await res.json();
+    const data = await readApiJson<Task[]>(res, 'Không thể tải danh sách công việc');
     setTasks(data);
   }, [selectedProjectId, setTasks]);
 
   useEffect(() => {
-    fetchTasks();
-    fetch('/api/projects').then((r) => r.json()).then(setProjects);
-    fetch('/api/members').then((r) => r.json()).then(setMembers);
+    void Promise.all([
+      fetchTasks(),
+      fetch('/api/projects')
+        .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
+        .then(setProjects),
+      fetch('/api/members')
+        .then((response) => readApiJson<TeamMember[]>(response, 'Không thể tải danh sách thành viên'))
+        .then(setMembers),
+    ]).catch((error) => {
+      toast.error(error instanceof Error ? error.message : 'Không thể tải dữ liệu công việc');
+    });
   }, [fetchTasks, setProjects, setMembers]);
 
   function openCreateDialog(status?: Task['status']) {
@@ -168,48 +177,52 @@ export function BoardView() {
       };
 
       if (editingTask) {
-        await fetch(`/api/tasks/${editingTask.id}`, {
+        const response = await fetch(`/api/tasks/${editingTask.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
+        await ensureApiSuccess(response, 'Không thể cập nhật công việc');
         toast.success('Đã cập nhật công việc');
       } else {
-        await fetch('/api/tasks', {
+        const response = await fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
+        await ensureApiSuccess(response, 'Không thể tạo công việc');
         toast.success('Đã tạo công việc mới');
       }
       setDialogOpen(false);
-      fetchTasks();
-    } catch {
-      toast.error('Có lỗi xảy ra');
+      await fetchTasks();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     }
   }
 
   async function handleDeleteTask(id: string) {
     try {
-      await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+      await ensureApiSuccess(response, 'Không thể xóa công việc');
       toast.success('Đã xóa công việc');
       setDetailOpen(false);
-      fetchTasks();
-    } catch {
-      toast.error('Có lỗi xảy ra');
+      await fetchTasks();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     }
   }
 
   async function handleStatusChange(taskId: string, newStatus: Task['status']) {
     try {
-      await fetch(`/api/tasks/${taskId}`, {
+      const response = await fetch(`/api/tasks/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      fetchTasks();
-    } catch {
-      toast.error('Không thể cập nhật trạng thái');
+      await ensureApiSuccess(response, 'Không thể cập nhật trạng thái');
+      await fetchTasks();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái');
     }
   }
 
@@ -217,7 +230,7 @@ export function BoardView() {
   async function handleAddLink() {
     if (!detailTask || !linkUrl.trim()) return;
     try {
-      await fetch(`/api/tasks/${detailTask.id}/links`, {
+      const response = await fetch(`/api/tasks/${detailTask.id}/links`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -226,14 +239,15 @@ export function BoardView() {
           type: linkType,
         }),
       });
+      await ensureApiSuccess(response, 'Không thể thêm liên kết');
       toast.success('Đã thêm liên kết');
       setLinkTitle('');
       setLinkUrl('');
       setLinkDialogOpen(false);
-      fetchTasks();
+      await fetchTasks();
       // Refresh detail task
       const res = await fetch(`/api/tasks/${detailTask.id}`);
-      const updated = await res.json();
+      const updated = await readApiJson<Task>(res, 'Không thể tải chi tiết công việc');
       setDetailTask(updated);
     } catch {
       toast.error('Có lỗi xảy ra');
@@ -243,11 +257,12 @@ export function BoardView() {
   async function handleDeleteLink(linkId: string) {
     if (!detailTask) return;
     try {
-      await fetch(`/api/links/${linkId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/links/${linkId}`, { method: 'DELETE' });
+      await ensureApiSuccess(response, 'Không thể xóa liên kết');
       toast.success('Đã xóa liên kết');
-      fetchTasks();
+      await fetchTasks();
       const res = await fetch(`/api/tasks/${detailTask.id}`);
-      const updated = await res.json();
+      const updated = await readApiJson<Task>(res, 'Không thể tải chi tiết công việc');
       setDetailTask(updated);
     } catch {
       toast.error('Có lỗi xảy ra');

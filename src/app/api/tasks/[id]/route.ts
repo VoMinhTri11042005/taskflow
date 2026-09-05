@@ -58,7 +58,7 @@ export async function PUT(
     const validated = updateTaskSchema.parse(body)
 
     const canManage = await canManageTask(session, id)
-    const currentTask = await db.task.findUnique({ where: { id }, select: { projectId: true } })
+    const currentTask = await db.task.findUnique({ where: { id }, select: { projectId: true, status: true } })
     if (!currentTask) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     if (!canManage) {
       if (!(await canAccessTask(session, id))) return NextResponse.json({ error: 'Bạn không có quyền cập nhật công việc này' }, { status: 403 })
@@ -91,6 +91,20 @@ export async function PUT(
         links: true,
       },
     })
+
+    // A member's review request is a server-side event, not a best-effort
+    // browser request. This keeps the Leader notification durable even if the
+    // member refreshes or closes the page immediately after changing status.
+    if (!canManage && validated.status === 'review' && currentTask.status !== 'review' && task.project.leaderId) {
+      await db.notification.create({
+        data: {
+          title: 'Yêu cầu xem xét công việc',
+          message: `${session.name} đã chuyển công việc "${task.title}" sang chờ xem xét.`,
+          type: 'task_completed',
+          userId: task.project.leaderId,
+        },
+      })
+    }
 
     return NextResponse.json(task)
   } catch (error) {

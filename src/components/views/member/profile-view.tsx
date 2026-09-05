@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { readApiJson } from '@/lib/client-api';
 
 export function ProfileView() {
   const { user, tasks, setUser } = useAppStore();
@@ -101,7 +102,7 @@ export function ProfileView() {
     async function fetchActivity() {
       try {
         const res = await fetch(`/api/activity-logs?userId=${userId}`);
-        const data = await res.json();
+        const data = await readApiJson<ActivityLog[]>(res, 'Không thể tải lịch sử hoạt động');
         setActivityLogs(data);
       } catch {
         /* silent */
@@ -140,7 +141,8 @@ export function ProfileView() {
         toast.error(err.error || 'Không thể cập nhật tên');
         return;
       }
-      setUser({ ...user!, name: editName.trim() });
+      const data = await res.json();
+      setUser(data.user || { ...user!, name: editName.trim() });
       toast.success('Đã cập nhật tên thành công');
       setIsEditing(false);
     } catch {

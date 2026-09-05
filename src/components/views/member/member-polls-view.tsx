@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Check, BarChart3, Lock, Vote } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 
 export function MemberPollsView() {
   const { user } = useAppStore();
@@ -20,7 +21,7 @@ export function MemberPollsView() {
     async function fetchPolls() {
       try {
         const res = await fetch('/api/polls');
-        const data = await res.json();
+        const data = await readApiJson<Poll[]>(res, 'Không thể tải danh sách bình chọn');
         setPolls(data);
       } catch {
         /* silent */
@@ -70,17 +71,13 @@ export function MemberPollsView() {
         body: JSON.stringify({ userId: user.id, optionId }),
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        toast.error(err.error || 'Không thể bình chọn');
-        return;
-      }
+      await ensureApiSuccess(res, 'Không thể bình chọn');
 
       toast.success('Bình chọn thành công!');
 
       /* Refresh polls data */
       const pollsRes = await fetch('/api/polls');
-      const data = await pollsRes.json();
+      const data = await readApiJson<Poll[]>(pollsRes, 'Không thể tải kết quả bình chọn');
       setPolls(data);
     } catch {
       toast.error('Có lỗi xảy ra khi bình chọn');

@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Users, Mail, Shield, Key, KeyRound, Loader2, Check, X, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 
 const roleLabels: Record<string, string> = {
   admin: 'Quản trị viên',
@@ -191,11 +192,12 @@ export function MembersView() {
 
   async function handleDelete(id: string) {
     try {
-      await fetch(`/api/members/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/members/${id}`, { method: 'DELETE' });
+      await ensureApiSuccess(response, 'Không thể xóa thành viên');
       toast.success('Đã xóa thành viên');
-      fetchMembers();
-    } catch {
-      toast.error('Có lỗi xảy ra');
+      await fetchMembers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     }
   }
 
@@ -227,7 +229,7 @@ export function MembersView() {
     setCredOpen(true);
     try {
       const res = await fetch(`/api/members/credentials?userId=${member.userId || member.id}`);
-      const data = await res.json();
+      const data = await readApiJson<{ email?: string }>(res, 'Không thể tải thông tin đăng nhập');
       setCredEmail(data.email || member.email);
     } catch {
       setCredEmail(member.email);

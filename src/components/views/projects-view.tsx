@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { Plus, Pencil, Trash2, FolderKanban, Archive } from 'lucide-react';
 import { toast } from 'sonner';
+import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 
 const projectColors = [
   '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
@@ -54,12 +55,14 @@ export function ProjectsView() {
 
   async function fetchProjects() {
     const res = await fetch('/api/projects');
-    const data = await res.json();
+    const data = await readApiJson<Project[]>(res, 'Không thể tải danh sách dự án');
     setProjects(data);
   }
 
   useEffect(() => {
-    fetchProjects();
+    void fetchProjects().catch((error) => {
+      toast.error(error instanceof Error ? error.message : 'Không thể tải danh sách dự án');
+    });
   }, [setProjects]);
 
   function openCreateDialog() {
@@ -82,49 +85,53 @@ export function ProjectsView() {
     if (!formName.trim()) return;
     try {
       if (editingProject) {
-        await fetch(`/api/projects/${editingProject.id}`, {
+        const response = await fetch(`/api/projects/${editingProject.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: formName, description: formDesc || null, color: formColor }),
         });
+        await ensureApiSuccess(response, 'Không thể cập nhật dự án');
         toast.success('Đã cập nhật dự án');
       } else {
-        await fetch('/api/projects', {
+        const response = await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: formName, description: formDesc || null, color: formColor }),
         });
+        await ensureApiSuccess(response, 'Không thể tạo dự án');
         toast.success('Đã tạo dự án mới');
       }
       setDialogOpen(false);
-      fetchProjects();
-    } catch {
-      toast.error('Có lỗi xảy ra');
+      await fetchProjects();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     }
   }
 
   async function handleDelete(id: string) {
     try {
-      await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+      await ensureApiSuccess(response, 'Không thể xóa dự án');
       toast.success('Đã xóa dự án');
-      fetchProjects();
-    } catch {
-      toast.error('Có lỗi xảy ra');
+      await fetchProjects();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     }
   }
 
   async function handleToggleArchive(project: Project) {
     const newStatus = project.status === 'active' ? 'archived' : 'active';
     try {
-      await fetch(`/api/projects/${project.id}`, {
+      const response = await fetch(`/api/projects/${project.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
+      await ensureApiSuccess(response, 'Không thể cập nhật trạng thái dự án');
       toast.success(newStatus === 'archived' ? 'Đã lưu trữ dự án' : 'Đã kích hoạt dự án');
-      fetchProjects();
-    } catch {
-      toast.error('Có lỗi xảy ra');
+      await fetchProjects();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     }
   }
 

@@ -24,6 +24,8 @@ import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
 import { BrandMark } from '@/components/layout/brand-mark';
+import { readApiJson } from '@/lib/client-api';
+import type { Notification, Poll, Project, Task, TeamMember, User } from '@/types';
 
 export default function HomePage() {
   const {
@@ -45,7 +47,7 @@ export default function HomePage() {
   /* Check session on mount */
   useEffect(() => {
     fetch('/api/auth/session')
-      .then((r) => r.json())
+      .then((response) => readApiJson<{ user: User | null }>(response, 'Không thể xác thực phiên đăng nhập'))
       .then((data) => {
         if (data.user) {
           setUser(data.user);
@@ -95,11 +97,23 @@ export default function HomePage() {
   /* Fetch data when user is logged in */
   useEffect(() => {
     if (!user) return;
-    fetch('/api/members').then((r) => r.json()).then(setMembers).catch(() => {});
+    fetch('/api/members')
+      .then((response) => readApiJson<TeamMember[]>(response, 'Không thể tải danh sách thành viên'))
+      .then(setMembers)
+      .catch(() => {});
     if (user.role !== 'admin') {
-      fetch('/api/tasks').then((r) => r.json()).then(setTasks).catch(() => {});
-      fetch('/api/projects').then((r) => r.json()).then(setProjects).catch(() => {});
-      fetch('/api/polls').then((r) => r.json()).then(setPolls).catch(() => {});
+      fetch('/api/tasks')
+        .then((response) => readApiJson<Task[]>(response, 'Không thể tải danh sách công việc'))
+        .then(setTasks)
+        .catch(() => {});
+      fetch('/api/projects')
+        .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
+        .then(setProjects)
+        .catch(() => {});
+      fetch('/api/polls')
+        .then((response) => readApiJson<Poll[]>(response, 'Không thể tải danh sách bình chọn'))
+        .then(setPolls)
+        .catch(() => {});
     } else {
       setTasks([]);
       setProjects([]);
@@ -112,7 +126,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!user) return;
     fetch(`/api/notifications?userId=${user.id}`)
-      .then((r) => r.json())
+      .then((response) => readApiJson<Notification[]>(response, 'Không thể tải thông báo'))
       .then((data) => {
         if (Array.isArray(data)) {
           setNotifications(data);

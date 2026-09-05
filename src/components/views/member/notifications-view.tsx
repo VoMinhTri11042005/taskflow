@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 
 const typeConfig: Record<string, { icon: React.ElementType; color: string; bgColor: string }> = {
   task_assigned: { icon: ClipboardList, color: 'text-blue-500', bgColor: 'bg-blue-50' },
@@ -56,7 +57,7 @@ export function NotificationsView() {
     async function fetchNotifications() {
       try {
         const res = await fetch(`/api/notifications?userId=${userId}`);
-        const data = await res.json();
+        const data = await readApiJson<Notification[]>(res, 'Không thể tải thông báo');
         setNotifications(data);
         const unread = data.filter((n: Notification) => !n.read).length;
         setUnreadCount(unread);
@@ -72,11 +73,12 @@ export function NotificationsView() {
   async function handleMarkRead(notification: Notification) {
     if (notification.read) return;
     try {
-      await fetch(`/api/notifications/${notification.id}`, {
+      const response = await fetch(`/api/notifications/${notification.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ read: true }),
       });
+      await ensureApiSuccess(response, 'Không thể đánh dấu đã đọc');
       setNotifications(
         notifications.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
       );
@@ -90,7 +92,7 @@ export function NotificationsView() {
     const unreadNotifications = notifications.filter((n) => !n.read);
     if (unreadNotifications.length === 0) return;
     try {
-      await Promise.all(
+      const responses = await Promise.all(
         unreadNotifications.map((n) =>
           fetch(`/api/notifications/${n.id}`, {
             method: 'PUT',
@@ -98,6 +100,9 @@ export function NotificationsView() {
             body: JSON.stringify({ read: true }),
           })
         )
+      );
+      await Promise.all(
+        responses.map((response) => ensureApiSuccess(response, 'Không thể đánh dấu đã đọc tất cả thông báo'))
       );
       setNotifications(notifications.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);

@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { FolderKanban } from 'lucide-react';
+import { readApiJson } from '@/lib/client-api';
+import type { Project, Task } from '@/types';
 
 const statusLabels: Record<string, { label: string; color: string }> = {
   todo: { label: 'Cần làm', color: 'text-slate-600' },
@@ -19,8 +21,14 @@ export function MemberProjectsView() {
   const { tasks, setTasks, projects, setProjects } = useAppStore();
 
   useEffect(() => {
-    fetch('/api/tasks').then((r) => r.json()).then(setTasks).catch(() => {});
-    fetch('/api/projects').then((r) => r.json()).then(setProjects).catch(() => {});
+    fetch('/api/tasks')
+      .then((response) => readApiJson<Task[]>(response, 'Không thể tải danh sách công việc'))
+      .then(setTasks)
+      .catch(() => {});
+    fetch('/api/projects')
+      .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
+      .then(setProjects)
+      .catch(() => {});
   }, [setTasks, setProjects]);
 
   const activeProjects = projects.filter((p) => p.status === 'active');
