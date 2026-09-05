@@ -287,31 +287,30 @@ export function AdminSidebar() {
 
       {/* Footer with toggle and logout */}
       <div className="p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          {!isMobile && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleSidebar}
-              className="w-full justify-center"
-            >
-              {showFull ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleLogout}
+          className={cn(
+            'w-full text-destructive hover:text-destructive hover:bg-destructive/10',
+            showFull ? 'justify-start gap-2 px-3' : 'justify-center px-0'
           )}
+          title="Đăng xuất"
+        >
+          <LogOut className="h-4 w-4" />
+          {showFull && <span>Đăng xuất</span>}
+        </Button>
+        {!isMobile && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleLogout}
-            className={cn(
-              'w-full justify-center text-destructive hover:text-destructive hover:bg-destructive/10',
-              isMobile && 'justify-start gap-2 px-3'
-            )}
-            title="Đăng xuất"
+            onClick={toggleSidebar}
+            className="w-full justify-center"
+            title={showFull ? 'Thu gọn thanh bên' : 'Mở rộng thanh bên'}
           >
-            <LogOut className="h-4 w-4" />
-            {isMobile && <span>Đăng xuất</span>}
+            {showFull ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </Button>
-        </div>
+        )}
         {showFull && (
           <p className="text-xs text-center text-muted-foreground">
             {activeTasks} việc cần làm
