@@ -16,8 +16,10 @@ TaskFlow is a team task-management application built with Next.js App Router, Ty
 5. Optionally load sample data: `npm run db:seed`
 6. Start development: `npm run dev`
 
-To initialise only an administrator account without deleting existing data, add
-`DATABASE_URL` and `ADMIN_PASSWORD` to `.env` and run `npm run setup:admin`.
+To initialise only the single administrator account without deleting existing data,
+add `DATABASE_URL`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` to `.env` and run
+`npm run setup:admin`. Use the same database URL in Vercel and run this command
+once from a trusted machine before the first production login.
 The production UI does not expose demo accounts; `npm run db:seed` is for local
 sample data only.
 
@@ -53,6 +55,9 @@ public/         # Static assets
 ## Deployment
 
 - Docker: `docker compose up --build`
-- Render/Vercel: configure at least `DATABASE_URL`, then use `npm run build`.
+- Render/Vercel: configure `DATABASE_URL` and a long random `SESSION_SECRET`, then
+  deploy from `main`. The build is network-independent (fonts are system fonts),
+  and the existing Vercel adapter no longer expects standalone tracing. Run
+  `npm run setup:admin` once against the production database before signing in.
 
 Never commit `.env` or production credentials. For production schema changes, use reviewed Prisma migrations rather than `db:push`.
