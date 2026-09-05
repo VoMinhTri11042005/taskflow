@@ -56,27 +56,27 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Notifications
   notifications: [],
-  setNotifications: (notifications) => set({ notifications }),
+  setNotifications: (notifications) => set({ notifications: Array.isArray(notifications) ? notifications : [] }),
   unreadCount: 0,
   setUnreadCount: (count) => set({ unreadCount: count }),
 
   // Data
   members: [],
-  setMembers: (members) => set({ members }),
+  setMembers: (members) => set({ members: Array.isArray(members) ? members : [] }),
   projects: [],
-  setProjects: (projects) => set({ projects }),
+  setProjects: (projects) => set({ projects: Array.isArray(projects) ? projects : [] }),
   tasks: [],
-  setTasks: (tasks) => set({ tasks }),
+  setTasks: (tasks) => set({ tasks: Array.isArray(tasks) ? tasks : [] }),
   stats: null,
   setStats: (stats) => set({ stats }),
 
   // Polls
   polls: [],
-  setPolls: (polls) => set({ polls }),
+  setPolls: (polls) => set({ polls: Array.isArray(polls) ? polls : [] }),
 
   // Activity
   activityLogs: [],
-  setActivityLogs: (logs) => set({ activityLogs: logs }),
+  setActivityLogs: (logs) => set({ activityLogs: Array.isArray(logs) ? logs : [] }),
 
   // Filters
   selectedProjectId: null,
