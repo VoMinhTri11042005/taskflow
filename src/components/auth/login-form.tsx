@@ -20,8 +20,24 @@ export function LoginForm() {
   const [role, setRole] = useState<'member' | 'leader'>('member');
   const [loginRole, setLoginRole] = useState<'admin' | 'leader' | 'member' | null>(null);
   const [loginFieldsActive, setLoginFieldsActive] = useState(false);
+  const [registerFieldsActive, setRegisterFieldsActive] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  function changeMode(nextMode: 'login' | 'register') {
+    // Login and registration must never share credentials. Besides clearing the
+    // controlled values, the inactive fields stay read-only until selected to
+    // stop browser password managers from treating registration as login.
+    setMode(nextMode);
+    setName('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setRole('member');
+    setShowPassword(false);
+    setLoginFieldsActive(false);
+    setRegisterFieldsActive(false);
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -95,11 +111,7 @@ export function LoginForm() {
         return;
       }
       toast.success(data.message || 'Đăng ký thành công');
-      setMode('login');
-      setName('');
-      setPassword('');
-      setConfirmPassword('');
-      setRole('member');
+      changeMode('login');
     } catch {
       toast.error('Lỗi kết nối server');
     } finally {
@@ -123,7 +135,7 @@ export function LoginForm() {
        type="button"
        variant={mode === 'login' ? 'default' : 'ghost'}
        size="sm"
-       onClick={() => setMode('login')}
+       onClick={() => changeMode('login')}
      >
        Đăng nhập
      </Button>
@@ -131,7 +143,7 @@ export function LoginForm() {
        type="button"
        variant={mode === 'register' ? 'default' : 'ghost'}
        size="sm"
-       onClick={() => setMode('register')}
+       onClick={() => changeMode('register')}
      >
        Đăng ký
      </Button>
@@ -215,13 +227,19 @@ export function LoginForm() {
        </Button>
      </form>
    ) : (
-     <form onSubmit={handleRegister} className="space-y-4">
+     <form key="taskflow-register-form" onSubmit={handleRegister} className="space-y-4" autoComplete="off">
        <div className="space-y-2">
          <Label htmlFor="name">Họ và tên</Label>
          <Input
            id="name"
            value={name}
            onChange={(e) => setName(e.target.value)}
+           onFocus={() => setRegisterFieldsActive(true)}
+           readOnly={!registerFieldsActive}
+           name="taskflow-new-account-name"
+           autoComplete="off"
+           data-lpignore="true"
+           data-1p-ignore="true"
            placeholder="Nguyễn Văn A"
          />
        </div>
@@ -232,6 +250,12 @@ export function LoginForm() {
            type="email"
            value={email}
            onChange={(e) => setEmail(e.target.value)}
+           onFocus={() => setRegisterFieldsActive(true)}
+           readOnly={!registerFieldsActive}
+           name="taskflow-new-account-email"
+           autoComplete="off"
+           data-lpignore="true"
+           data-1p-ignore="true"
            placeholder="email@taskflow.vn"
          />
        </div>
@@ -265,6 +289,12 @@ export function LoginForm() {
            type={showPassword ? 'text' : 'password'}
            value={password}
            onChange={(e) => setPassword(e.target.value)}
+           onFocus={() => setRegisterFieldsActive(true)}
+           readOnly={!registerFieldsActive}
+           name="taskflow-new-account-password"
+           autoComplete="new-password"
+           data-lpignore="true"
+           data-1p-ignore="true"
            placeholder="Nhập mật khẩu"
          />
        </div>
@@ -275,6 +305,12 @@ export function LoginForm() {
            type={showPassword ? 'text' : 'password'}
            value={confirmPassword}
            onChange={(e) => setConfirmPassword(e.target.value)}
+           onFocus={() => setRegisterFieldsActive(true)}
+           readOnly={!registerFieldsActive}
+           name="taskflow-confirm-new-account-password"
+           autoComplete="new-password"
+           data-lpignore="true"
+           data-1p-ignore="true"
            placeholder="Nhập lại mật khẩu"
          />
        </div>
