@@ -7,6 +7,11 @@
       POSTGRES_USER: taskflow_user
       POSTGRES_PASSWORD: taskflow_password_secret
       POSTGRES_DB: taskflow_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskflow_user -d taskflow_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - "5432:5432"
     volumes:
@@ -23,7 +28,14 @@
       - NODE_ENV=production
       - PORT=3000
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "for i in 1 2 3 4 5 6 7 8 9 10; do
+      npx prisma db push --accept-data-loss && break || sleep 5;
+      done;
+      npx prisma db seed || true;
+      node server.js"
 
 volumes:
   postgres_data:
