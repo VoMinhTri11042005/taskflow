@@ -68,7 +68,7 @@ export function MemberSidebar() {
   return (
     <aside
       className={cn(
-        'flex flex-col border-r bg-card transition-all duration-300 ease-in-out h-full relative',
+        'sticky top-0 flex h-dvh shrink-0 flex-col border-r bg-card transition-all duration-300 ease-in-out',
         showFull ? 'w-64' : 'w-16'
       )}
     >
@@ -102,7 +102,7 @@ export function MemberSidebar() {
       <Separator />
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1">
+      <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
@@ -194,8 +194,8 @@ export function MemberSidebar() {
           size="sm"
           onClick={handleLogout}
           className={cn(
-            'w-full justify-center text-muted-foreground hover:text-destructive',
-            isMobile ? 'justify-start gap-2 px-3' : (!showFull && 'p-0 h-8 w-8 mx-auto')
+            'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground',
+            isMobile || showFull ? 'justify-start gap-2 px-3' : 'mx-auto h-8 w-8 p-0'
           )}
           title={!showFull ? 'Đăng xuất' : undefined}
         >

@@ -180,7 +180,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background">
       {isMobile && (
         <header className="sticky top-0 z-50 flex items-center justify-between border-b bg-background/95 backdrop-blur px-4 h-14">
           <div className="flex items-center gap-2">
@@ -196,7 +196,7 @@ export default function HomePage() {
         </header>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {isMobile && mobileMenuOpen && (
           <>
             <div className="fixed inset-0 z-40 bg-black/50 animate-in fade-in duration-200" onClick={() => setMobileMenuOpen(false)} />
@@ -208,7 +208,7 @@ export default function HomePage() {
 
         {!isMobile && <Sidebar />}
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="min-h-0 flex-1 overflow-y-auto">
           <div className={currentView === 'board' || currentView === 'my-tasks' ? 'p-4 md:p-6 h-full' : 'p-4 md:p-6'}>
             {renderView()}
           </div>

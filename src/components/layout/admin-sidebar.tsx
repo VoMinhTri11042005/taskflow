@@ -75,7 +75,7 @@ export function AdminSidebar() {
   return (
     <aside
       className={cn(
-        'flex flex-col border-r bg-card transition-all duration-300 ease-in-out h-full relative',
+        'sticky top-0 flex h-dvh shrink-0 flex-col border-r bg-card transition-all duration-300 ease-in-out',
         showFull ? 'w-64' : 'w-16'
       )}
     >
@@ -191,7 +191,7 @@ export function AdminSidebar() {
       <Separator />
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1">
+      <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
@@ -226,7 +226,7 @@ export function AdminSidebar() {
           size="sm"
           onClick={handleLogout}
           className={cn(
-            'w-full text-destructive hover:text-destructive hover:bg-destructive/10',
+            'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground',
             showFull ? 'justify-start gap-2 px-3' : 'justify-center px-0'
           )}
           title="Đăng xuất"

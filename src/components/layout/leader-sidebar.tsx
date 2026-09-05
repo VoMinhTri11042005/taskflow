@@ -62,7 +62,7 @@ export function LeaderSidebar() {
   return (
     <aside
       className={cn(
-        'flex h-full flex-col border-r border-amber-200/70 bg-gradient-to-b from-amber-50/80 via-background to-background transition-all duration-300',
+        'sticky top-0 flex h-dvh shrink-0 flex-col border-r border-amber-200/70 bg-gradient-to-b from-amber-50/80 via-background to-background transition-all duration-300',
         showFull ? 'w-72' : 'w-16'
       )}
     >
@@ -99,7 +99,7 @@ export function LeaderSidebar() {
       )}
 
       <Separator />
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-3">
         {navItems.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -128,7 +128,7 @@ export function LeaderSidebar() {
           size="sm"
           onClick={handleLogout}
           className={cn(
-            'w-full text-destructive hover:bg-destructive/10 hover:text-destructive',
+            'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground',
             showFull ? 'justify-start gap-2 px-3' : 'justify-center px-0'
           )}
           title="Đăng xuất"
