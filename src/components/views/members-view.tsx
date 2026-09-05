@@ -52,7 +52,14 @@ const memberColors = [
   '#e11d48', '#0891b2', '#7c3aed', '#059669', '#d97706',
 ];
 
-export function MembersView() {
+type ManagedRole = 'leader' | 'member';
+
+interface MembersViewProps {
+  /** Admin uses this to keep Leader and Member accounts on separate screens. */
+  roleFilter?: ManagedRole;
+}
+
+export function MembersView({ roleFilter }: MembersViewProps) {
   const { members, setMembers, user } = useAppStore();
   const [pendingAccounts, setPendingAccounts] = useState<Array<{ id: string; name: string; email: string; role: string; status: string }>>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -78,6 +85,15 @@ export function MembersView() {
 
   // Online status tracking
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({});
+
+  const visibleMembers = roleFilter
+    ? members.filter((member) => member.role === roleFilter)
+    : members;
+  const visiblePendingAccounts = roleFilter
+    ? pendingAccounts.filter((account) => account.role === roleFilter)
+    : pendingAccounts;
+  const entityLabel = roleFilter === 'leader' ? 'Leader' : 'Thành viên';
+  const entityLabelLower = roleFilter === 'leader' ? 'leader' : 'thành viên';
 
   const fetchMembers = useCallback(async () => {
     const res = await fetch('/api/members');
@@ -142,7 +158,7 @@ export function MembersView() {
     setEditingMember(null);
     setFormName('');
     setFormEmail('');
-    setFormRole('member');
+    setFormRole(roleFilter || 'member');
     setFormColor(memberColors[Math.floor(Math.random() * memberColors.length)]);
     setFormPassword('');
     setDialogOpen(true);
@@ -282,20 +298,24 @@ export function MembersView() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Thành viên</h1>
-          <p className="text-muted-foreground">Quản lý đội ngũ ({members.length} người)</p>
+          <h1 className="text-2xl font-bold tracking-tight">{roleFilter ? entityLabel : 'Thành viên'}</h1>
+          <p className="text-muted-foreground">
+            {roleFilter
+              ? `Quản lý ${entityLabelLower} (${visibleMembers.length} người)`
+              : `Quản lý đội ngũ (${visibleMembers.length} người)`}
+          </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={openCreateDialog}>
               <Plus className="mr-2 h-4 w-4" />
-              Thêm thành viên
+              Thêm {roleFilter ? entityLabelLower : 'thành viên'}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {editingMember ? 'Chỉnh sửa thành viên' : 'Thêm thành viên mới'}
+                {editingMember ? `Chỉnh sửa ${entityLabelLower}` : `Thêm ${roleFilter ? entityLabelLower : 'thành viên'} mới`}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -321,15 +341,23 @@ export function MembersView() {
                 <Select
                   value={formRole}
                   onValueChange={setFormRole}
-                  disabled={editingMember?.role === 'admin'}
+                  disabled={editingMember?.role === 'admin' || Boolean(roleFilter)}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {editingMember?.role === 'admin' && (
                       <SelectItem value="admin">Quản trị viên duy nhất</SelectItem>
                     )}
-                    {user?.role === 'admin' && <SelectItem value="leader">Leader</SelectItem>}
-                    <SelectItem value="member">Thành viên</SelectItem>
+                    {roleFilter === 'leader' ? (
+                      <SelectItem value="leader">Leader</SelectItem>
+                    ) : roleFilter === 'member' ? (
+                      <SelectItem value="member">Thành viên</SelectItem>
+                    ) : (
+                      <>
+                        {user?.role === 'admin' && <SelectItem value="leader">Leader</SelectItem>}
+                        <SelectItem value="member">Thành viên</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -375,18 +403,18 @@ export function MembersView() {
         </Dialog>
       </div>
 
-      {pendingAccounts.length > 0 && (
+      {visiblePendingAccounts.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/60">
           <CardContent className="p-5 space-y-4">
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-amber-600" />
               <div>
-                <h2 className="font-semibold">Tài khoản chờ duyệt ({pendingAccounts.length})</h2>
+                <h2 className="font-semibold">Tài khoản chờ duyệt ({visiblePendingAccounts.length})</h2>
                 <p className="text-sm text-muted-foreground">Kiểm tra thông tin trước khi cho phép đăng nhập hệ thống.</p>
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              {pendingAccounts.map((account) => (
+              {visiblePendingAccounts.map((account) => (
                 <div key={account.id} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
                   <div className="min-w-0">
                     <p className="font-medium truncate">{account.name}</p>
@@ -408,19 +436,19 @@ export function MembersView() {
       )}
 
       {/* Members list */}
-      {members.length === 0 ? (
+      {visibleMembers.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Users className="h-12 w-12 text-muted-foreground/40 mb-4" />
-            <h3 className="text-lg font-medium text-muted-foreground">Chưa có thành viên</h3>
+            <h3 className="text-lg font-medium text-muted-foreground">Chưa có {roleFilter ? entityLabelLower : 'thành viên'}</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Thêm thành viên đầu tiên để bắt đầu phân chia công việc
+              Thêm {roleFilter ? entityLabelLower : 'thành viên'} đầu tiên để bắt đầu quản lý tài khoản
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {members.map((member) => (
+          {visibleMembers.map((member) => (
             <Card key={member.id} className="group hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-4">

@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { BrandMark } from '@/components/layout/brand-mark';
 
 export function LoginForm() {
-  const { setUser } = useAppStore();
+  const { setUser, setCurrentView } = useAppStore();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -47,6 +47,13 @@ export function LoginForm() {
       }
       const userData = data.user || data;
       setUser(userData);
+      setCurrentView(
+        userData.role === 'admin'
+          ? 'admin-overview'
+          : userData.role === 'leader'
+            ? 'leader-dashboard'
+            : 'my-tasks'
+      );
       toast.success(`Chào mừng ${userData.name}!`);
     } catch {
       toast.error('Lỗi kết nối server');

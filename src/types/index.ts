@@ -141,7 +141,7 @@ export interface PollVote {
   pollId: string;
 }
 
-export type AdminViewType = 'members';
+export type AdminViewType = 'admin-overview' | 'leaders' | 'members';
 export type LeaderViewType = 'leader-dashboard' | 'projects' | 'board' | 'members' | 'polls' | 'leader-time';
 export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'polls' | 'notifications' | 'profile' | 'time-tracking';
 export type ViewType = AdminViewType | LeaderViewType | MemberViewType;

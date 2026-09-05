@@ -5,11 +5,13 @@ import type { AdminViewType } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Users,
+  UserRound,
   ChevronLeft,
   ChevronRight,
   LogOut,
   Bell,
   X,
+  LayoutDashboard,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +31,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
 const navItems: { id: AdminViewType; label: string; icon: React.ElementType }[] = [
-  { id: 'members', label: 'Quản lý Leader & Thành viên', icon: Users },
+  { id: 'admin-overview', label: 'Tổng quan', icon: LayoutDashboard },
+  { id: 'leaders', label: 'Quản lý Leader', icon: UserRound },
+  { id: 'members', label: 'Quản lý thành viên', icon: Users },
 ];
 
 export function AdminSidebar() {

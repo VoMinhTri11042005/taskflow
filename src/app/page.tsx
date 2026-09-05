@@ -19,6 +19,7 @@ import { MemberPollsView } from '@/components/views/member/member-polls-view';
 import { NotificationsView } from '@/components/views/member/notifications-view';
 import { ProfileView } from '@/components/views/member/profile-view';
 import { TimeTrackingView } from '@/components/views/member/time-tracking-view';
+import { AdminOverviewView } from '@/components/views/admin/admin-overview-view';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
@@ -40,7 +41,7 @@ export default function HomePage() {
   const isAdmin = user?.role === 'admin';
   const isLeader = user?.role === 'leader';
 
-  const adminViews = ['members'] as const;
+  const adminViews = ['admin-overview', 'leaders', 'members'] as const;
   const leaderViews = ['leader-dashboard', 'projects', 'board', 'members', 'polls', 'leader-time'] as const;
   const memberViews = ['my-tasks', 'time-tracking', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
 
@@ -77,7 +78,7 @@ export default function HomePage() {
       setCurrentView('my-tasks');
     }
     if (isAdmin && !(adminViews as readonly string[]).includes(currentView)) {
-      setCurrentView('members');
+      setCurrentView('admin-overview');
     }
     if (isLeader && !(leaderViews as readonly string[]).includes(currentView)) {
       setCurrentView('leader-dashboard');
@@ -166,8 +167,10 @@ export default function HomePage() {
   function renderView() {
     if (isAdmin) {
       switch (currentView) {
-        case 'members': return <MembersView />;
-        default: return <MembersView />;
+        case 'leaders': return <MembersView roleFilter="leader" />;
+        case 'members': return <MembersView roleFilter="member" />;
+        case 'admin-overview': return <AdminOverviewView />;
+        default: return <AdminOverviewView />;
       }
     }
     if (isLeader) {
