@@ -9,6 +9,7 @@ import { z } from 'zod'
 const loginSchema = z.object({
   email: z.string().email('Email không hợp lệ'),
   password: z.string().min(1, 'Mật khẩu là bắt buộc'),
+  expectedRole: z.enum(['admin', 'leader', 'member']).optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validated = loginSchema.parse(body)
 
-    const { email, password } = validated
+    const { email, password, expectedRole } = validated
     const normalizedEmail = email.trim().toLowerCase()
 
     // Tìm user theo email
@@ -45,6 +46,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Email hoặc mật khẩu không chính xác' },
         { status: 401 }
+      )
+    }
+
+    // The role choice improves the login UX, but it never grants permission:
+    // the server always verifies it against the stored account role.
+    if (expectedRole && expectedRole !== user.role) {
+      return NextResponse.json(
+        { error: 'Vai trò đã chọn không khớp với tài khoản này' },
+        { status: 403 }
       )
     }
 

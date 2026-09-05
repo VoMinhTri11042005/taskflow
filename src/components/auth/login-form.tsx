@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound, BriefcaseBusiness } from 'lucide-react';
 import { toast } from 'sonner';
 import { BrandMark } from '@/components/layout/brand-mark';
 
@@ -18,11 +18,17 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'member' | 'leader'>('member');
+  const [loginRole, setLoginRole] = useState<'admin' | 'leader' | 'member' | null>(null);
+  const [loginFieldsActive, setLoginFieldsActive] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    if (!loginRole) {
+      toast.error('Vui lòng chọn vai trò đăng nhập');
+      return;
+    }
     if (!email.trim() || !password.trim()) {
       toast.error('Vui lòng nhập email và mật khẩu');
       return;
@@ -32,7 +38,7 @@ export function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password, expectedRole: loginRole }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -134,7 +140,25 @@ export function LoginForm() {
  </CardHeader>
  <CardContent>
    {mode === 'login' ? (
-     <form onSubmit={handleLogin} className="space-y-4">
+     <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
+       <div className="space-y-2">
+         <Label>Đăng nhập với vai trò</Label>
+         <div className="grid grid-cols-3 gap-2">
+           <Button type="button" variant={loginRole === 'admin' ? 'default' : 'outline'} size="sm" className="h-12 flex-col gap-0.5 text-xs" onClick={() => setLoginRole('admin')}>
+             <ShieldCheck className="h-4 w-4" />
+             Quản trị
+           </Button>
+           <Button type="button" variant={loginRole === 'leader' ? 'default' : 'outline'} size="sm" className="h-12 flex-col gap-0.5 text-xs" onClick={() => setLoginRole('leader')}>
+             <BriefcaseBusiness className="h-4 w-4" />
+             Leader
+           </Button>
+           <Button type="button" variant={loginRole === 'member' ? 'default' : 'outline'} size="sm" className="h-12 flex-col gap-0.5 text-xs" onClick={() => setLoginRole('member')}>
+             <UserRound className="h-4 w-4" />
+             Thành viên
+           </Button>
+         </div>
+         <p className="text-xs text-muted-foreground">Vai trò phải trùng với tài khoản đã được phê duyệt.</p>
+       </div>
        <div className="space-y-2">
          <Label htmlFor="email">Email</Label>
          <Input
@@ -143,7 +167,12 @@ export function LoginForm() {
            placeholder="email@taskflow.vn"
            value={email}
            onChange={(e) => setEmail(e.target.value)}
-           autoComplete="email"
+           onFocus={() => setLoginFieldsActive(true)}
+           readOnly={!loginFieldsActive}
+           name="taskflow-manual-email"
+           autoComplete="off"
+           data-lpignore="true"
+           data-1p-ignore="true"
          />
        </div>
        <div className="space-y-2">
@@ -152,10 +181,15 @@ export function LoginForm() {
            <Input
              id="password"
              type={showPassword ? 'text' : 'password'}
-             placeholder="Nhập mật khẩu"
+             placeholder="••••••••"
              value={password}
              onChange={(e) => setPassword(e.target.value)}
-             autoComplete="current-password"
+             onFocus={() => setLoginFieldsActive(true)}
+             readOnly={!loginFieldsActive}
+             name="taskflow-manual-password"
+             autoComplete="off"
+             data-lpignore="true"
+             data-1p-ignore="true"
            />
            <Button
              type="button"
