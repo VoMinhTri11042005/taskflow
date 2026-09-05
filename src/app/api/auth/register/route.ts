@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { hashSync } from 'bcryptjs';
 import { db, isDatabaseNotInitializedError } from '@/lib/db';
+import { duplicateAccountNameMessage, isAccountNameTaken, normalizeAccountName } from '@/lib/account-names';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Tên phải có ít nhất 2 ký tự'),
@@ -15,16 +16,23 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const parsed = registerSchema.parse(body);
 
+    const normalizedName = normalizeAccountName(parsed.name);
     const normalizedEmail = parsed.email.trim().toLowerCase();
+    if (normalizedName.length < 2) {
+      return NextResponse.json({ error: 'Tên phải có ít nhất 2 ký tự' }, { status: 400 });
+    }
     const existingUser = await db.user.findUnique({ where: { email: normalizedEmail } });
 
     if (existingUser) {
       return NextResponse.json({ error: 'Email đã tồn tại trong hệ thống' }, { status: 409 });
     }
+    if (await isAccountNameTaken(normalizedName)) {
+      return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 });
+    }
 
     const user = await db.user.create({
       data: {
-        name: parsed.name.trim(),
+        name: normalizedName,
         email: normalizedEmail,
         password: hashSync(parsed.password, 10),
         role: parsed.role,

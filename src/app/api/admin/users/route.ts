@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { hashSync } from 'bcryptjs';
 import { z } from 'zod';
+import { duplicateAccountNameMessage, isAccountNameTaken, normalizeAccountName } from '@/lib/account-names';
 
 const accountSchema = z.object({
   name: z.string().min(1, 'Tên bắt buộc'),
@@ -57,6 +58,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const parsed = accountSchema.parse(body);
+    const normalizedName = normalizeAccountName(parsed.name);
+    if (!normalizedName) {
+      return NextResponse.json({ error: 'Tên không được để trống' }, { status: 400 });
+    }
     if (session.role === 'leader' && parsed.role !== 'member') {
       return NextResponse.json({ error: 'Leader chỉ có thể tạo tài khoản Member' }, { status: 403 });
     }
@@ -66,11 +71,14 @@ export async function POST(request: NextRequest) {
     if (existing) {
       return NextResponse.json({ error: 'Email đã tồn tại trong hệ thống' }, { status: 409 });
     }
+    if (await isAccountNameTaken(normalizedName)) {
+      return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 });
+    }
 
     const user = await db.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
-          name: parsed.name,
+          name: normalizedName,
           email: parsed.email.toLowerCase(),
           role: parsed.role,
           status: parsed.status,
@@ -153,10 +161,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Tài khoản admin phải luôn được duyệt' }, { status: 409 });
     }
 
+    const normalizedName = typeof name === 'string' ? normalizeAccountName(name) : null;
+    if (normalizedName !== null && !normalizedName) {
+      return NextResponse.json({ error: 'Tên không được để trống' }, { status: 400 });
+    }
+    if (normalizedName && await isAccountNameTaken(normalizedName, targetUser.id)) {
+      return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 });
+    }
+
     const updateData: Record<string, unknown> = {};
     if (status) updateData.status = status;
     if (role) updateData.role = role;
-    if (name) updateData.name = name;
+    if (normalizedName) updateData.name = normalizedName;
     if (email) updateData.email = email.toLowerCase();
     if (password) updateData.password = hashSync(password, 10);
 

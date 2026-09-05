@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { isAdmin, isLeader } from '@/lib/permissions'
+import { duplicateAccountNameMessage, isAccountNameTaken, normalizeAccountName } from '@/lib/account-names'
 
 const updateMemberSchema = z.object({
   name: z.string().min(1).optional(),
@@ -68,21 +69,31 @@ export async function PUT(
     if (validated.role && !['leader', 'member'].includes(validated.role)) return NextResponse.json({ error: 'Vai trò không hợp lệ' }, { status: 400 })
     if (session.role === 'leader' && validated.role && validated.role !== 'member') return NextResponse.json({ error: 'Leader không được đổi vai trò Member' }, { status: 403 })
     const email = validated.email?.trim().toLowerCase()
+    const normalizedName = validated.name !== undefined ? normalizeAccountName(validated.name) : undefined
+    if (normalizedName !== undefined && !normalizedName) {
+      return NextResponse.json({ error: 'Tên không được để trống' }, { status: 400 })
+    }
     if (email && email !== current.email) {
       const duplicate = await db.user.findUnique({ where: { email } })
       if (duplicate) return NextResponse.json({ error: 'Email đã tồn tại trong hệ thống' }, { status: 409 })
+    }
+    if (normalizedName) {
+      const account = await db.user.findUnique({ where: { email: current.email }, select: { id: true } })
+      if (await isAccountNameTaken(normalizedName, account?.id)) {
+        return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 })
+      }
     }
 
     const member = await db.$transaction(async (tx) => {
       const updated = await tx.teamMember.update({
         where: { id },
-        data: { ...validated, ...(email ? { email } : {}) },
+        data: { ...validated, ...(normalizedName ? { name: normalizedName } : {}), ...(email ? { email } : {}) },
         include: { _count: { select: { tasks: true } } },
       })
       const account = await tx.user.findUnique({ where: { email: current.email } })
       if (account) {
         await tx.user.update({ where: { id: account.id, }, data: {
-          ...(validated.name ? { name: validated.name.trim() } : {}),
+          ...(normalizedName ? { name: normalizedName } : {}),
           ...(email ? { email } : {}),
           ...(validated.role ? { role: validated.role } : {}),
           ...(validated.avatar !== undefined ? { avatar: validated.avatar } : {}),

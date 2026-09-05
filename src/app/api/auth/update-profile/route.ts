@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { createSessionValue, getSession } from '@/lib/auth'
+import { duplicateAccountNameMessage, isAccountNameTaken, normalizeAccountName } from '@/lib/account-names'
 
 const sessionCookieOptions = {
   httpOnly: true,
@@ -25,7 +26,8 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    if (name.trim().length === 0) {
+    const normalizedName = typeof name === 'string' ? normalizeAccountName(name) : ''
+    if (normalizedName.length === 0) {
       return NextResponse.json(
         { error: 'Tên không được để trống' },
         { status: 400 }
@@ -45,16 +47,19 @@ export async function PUT(request: NextRequest) {
     if (user.id !== session.id && session.role !== 'admin') {
       return NextResponse.json({ error: 'Bạn không có quyền cập nhật tài khoản này' }, { status: 403 })
     }
+    if (await isAccountNameTaken(normalizedName, user.id)) {
+      return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 })
+    }
 
     const updatedUser = await db.user.update({
       where: { id: userId },
-      data: { name: name.trim() },
+      data: { name: normalizedName },
     })
 
     // Also update the corresponding TeamMember name
     await db.teamMember.updateMany({
       where: { email: user.email },
-      data: { name: name.trim() },
+      data: { name: normalizedName },
     })
 
     // Never return password hashes. When users change their own profile, refresh

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { hashSync } from 'bcryptjs'
 import { getSession } from '@/lib/auth'
 import { isManager } from '@/lib/permissions'
+import { duplicateAccountNameMessage, isAccountNameTaken, normalizeAccountName } from '@/lib/account-names'
 
 const createMemberSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -68,21 +69,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Vai trò không hợp lệ với tài khoản hiện tại' }, { status: 403 })
     }
     const email = validated.email.trim().toLowerCase()
+    const normalizedName = normalizeAccountName(validated.name)
+    if (!normalizedName) return NextResponse.json({ error: 'Tên không được để trống' }, { status: 400 })
     const password = validated.password || 'ChangeMe2026!'
     const existing = await db.user.findUnique({ where: { email } })
     if (existing) return NextResponse.json({ error: 'Email đã tồn tại trong hệ thống' }, { status: 409 })
+    if (await isAccountNameTaken(normalizedName)) {
+      return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 })
+    }
 
     const member = await db.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          name: validated.name.trim(), email, role, status: 'approved',
+          name: normalizedName, email, role, status: 'approved',
           password: hashSync(password, 10), avatar: validated.avatar || null,
           color: validated.color || '#6366f1',
         },
       })
       return tx.teamMember.create({
         data: {
-          name: validated.name.trim(), email, role,
+          name: normalizedName, email, role,
           avatar: validated.avatar || null, color: validated.color || '#6366f1',
         },
         include: { _count: { select: { tasks: true } } },
