@@ -9,6 +9,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Phiên đăng nhập không hợp lệ' }, { status: 401 })
+    if (session.role === 'admin') return NextResponse.json({ error: 'Bình chọn thuộc không gian Leader' }, { status: 403 })
 
     const poll = await db.poll.findUnique({
       where: { id },
@@ -40,6 +43,9 @@ export async function GET(
         { error: 'Không tìm thấy bình chọn' },
         { status: 404 }
       )
+    }
+    if (session.role === 'leader' && poll.createdByUserId !== session.id) {
+      return NextResponse.json({ error: 'Bạn không có quyền xem bình chọn này' }, { status: 403 })
     }
 
     return NextResponse.json(poll)

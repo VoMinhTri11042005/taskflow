@@ -8,6 +8,10 @@ export async function GET(request: NextRequest) {
     const session = getSession(request)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    if (session.role === 'admin') {
+      return NextResponse.json([])
+    }
+
     const polls = await db.poll.findMany({
       where: session.role === 'leader' ? { createdByUserId: session.id } : undefined,
       orderBy: { createdAt: 'desc' },

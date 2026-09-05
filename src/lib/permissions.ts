@@ -10,11 +10,12 @@ export function isLeader(session: SessionData) {
 }
 
 export function isManager(session: SessionData) {
-  return isAdmin(session) || isLeader(session);
+  // Workspaces, projects, tasks, shared links, polls and time tracking belong
+  // to Leaders. Admin is deliberately limited to account administration.
+  return isLeader(session);
 }
 
 export async function canManageProject(session: SessionData, projectId: string) {
-  if (isAdmin(session)) return true;
   if (!isLeader(session)) return false;
 
   const project = await db.project.findFirst({ where: { id: projectId, leaderId: session.id }, select: { id: true } });
@@ -22,6 +23,7 @@ export async function canManageProject(session: SessionData, projectId: string) 
 }
 
 export async function canAccessProject(session: SessionData, projectId: string) {
+  if (isAdmin(session)) return false;
   if (await canManageProject(session, projectId)) return true;
   if (!session.teamMemberId) return false;
 
@@ -38,6 +40,7 @@ export async function canManageTask(session: SessionData, taskId: string) {
 }
 
 export async function canAccessTask(session: SessionData, taskId: string) {
+  if (isAdmin(session)) return false;
   if (await canManageTask(session, taskId)) return true;
   if (!session.teamMemberId) return false;
 

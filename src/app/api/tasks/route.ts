@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     const assigneeId = searchParams.get('assigneeId')
 
     const where: Record<string, unknown> = session.role === 'admin'
-      ? {}
+      ? { id: '__no_task_access__' }
       : session.role === 'leader'
         ? { project: { leaderId: session.id } }
         : session.teamMemberId

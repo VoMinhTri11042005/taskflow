@@ -44,7 +44,7 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  currentView: 'dashboard',
+  currentView: 'members',
   setCurrentView: (view) => set({ currentView: view }),
   sidebarOpen: true,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),

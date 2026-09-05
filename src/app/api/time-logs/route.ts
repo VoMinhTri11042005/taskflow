@@ -15,17 +15,15 @@ export async function GET(req: NextRequest) {
     const dateFrom = searchParams.get('from')
     const dateTo = searchParams.get('to')
 
-    /* Admin/Leader summary: working hours for the managed team only. */
-    if (mode === 'admin-summary' && (session.role === 'admin' || session.role === 'leader')) {
+    /* Leader summary: working hours for the managed team only. */
+    if (mode === 'admin-summary' && session.role === 'leader') {
       let memberUserIds: string[] | undefined
-      if (session.role === 'leader') {
-        const projects = await db.project.findMany({ where: { leaderId: session.id }, select: { id: true } })
-        const tasks = await db.task.findMany({ where: { projectId: { in: projects.map((project) => project.id) }, assigneeId: { not: null } }, select: { assigneeId: true } })
-        const teamMemberIds = [...new Set(tasks.flatMap((task) => task.assigneeId ? [task.assigneeId] : []))]
-        const teamMembers = await db.teamMember.findMany({ where: { id: { in: teamMemberIds }, role: 'member' }, select: { email: true } })
-        const users = await db.user.findMany({ where: { role: 'member', email: { in: teamMembers.map((member) => member.email) } }, select: { id: true } })
-        memberUserIds = users.map((user) => user.id)
-      }
+      const projects = await db.project.findMany({ where: { leaderId: session.id }, select: { id: true } })
+      const tasks = await db.task.findMany({ where: { projectId: { in: projects.map((project) => project.id) }, assigneeId: { not: null } }, select: { assigneeId: true } })
+      const teamMemberIds = [...new Set(tasks.flatMap((task) => task.assigneeId ? [task.assigneeId] : []))]
+      const teamMembers = await db.teamMember.findMany({ where: { id: { in: teamMemberIds }, role: 'member' }, select: { email: true } })
+      const memberAccounts = await db.user.findMany({ where: { role: 'member', email: { in: teamMembers.map((member) => member.email) } }, select: { id: true } })
+      memberUserIds = memberAccounts.map((user) => user.id)
       const users = await db.user.findMany({
         where: { role: 'member', ...(memberUserIds ? { id: { in: memberUserIds } } : {}) },
         select: { id: true, name: true, color: true, email: true },
@@ -91,9 +89,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(summary)
     }
 
-    /* Member's own logs or leader/admin viewing team logs */
+    /* Member's own logs or Leader viewing their team logs */
     const userId = searchParams.get('userId') || session.id
-    const isManager = session.role === 'admin' || session.role === 'leader'
+    const isManager = session.role === 'leader'
     if (!isManager && userId !== session.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

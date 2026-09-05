@@ -4,11 +4,7 @@ import { useAppStore } from '@/stores/app-store';
 import type { AdminViewType } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
-  LayoutDashboard,
   Users,
-  Activity,
-  TrendingUp,
-  Settings,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -33,11 +29,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
 const navItems: { id: AdminViewType; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Tổng quan hệ thống', icon: LayoutDashboard },
-  { id: 'members', label: 'Tài khoản & phê duyệt', icon: Users },
-  { id: 'activity', label: 'Nhật ký hệ thống', icon: Activity },
-  { id: 'reports', label: 'Báo cáo', icon: TrendingUp },
-  { id: 'settings', label: 'Cài đặt', icon: Settings },
+  { id: 'members', label: 'Quản lý Leader & Thành viên', icon: Users },
 ];
 
 export function AdminSidebar() {
@@ -46,7 +38,6 @@ export function AdminSidebar() {
     setCurrentView,
     sidebarOpen,
     toggleSidebar,
-    tasks,
     user,
     setUser,
     notifications,
@@ -56,8 +47,6 @@ export function AdminSidebar() {
   const isMobile = useIsMobile();
   // On mobile drawer, always show full content. On desktop, respect sidebarOpen.
   const showFull = isMobile || sidebarOpen;
-
-  const activeTasks = tasks.filter((t) => t.status !== 'done').length;
 
   const userInitials = user?.name
     ? user.name
@@ -256,11 +245,7 @@ export function AdminSidebar() {
             {showFull ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </Button>
         )}
-        {showFull && (
-          <p className="text-xs text-center text-muted-foreground">
-            {activeTasks} việc cần làm
-          </p>
-        )}
+        {showFull && <p className="text-xs text-center text-muted-foreground">Quản lý tài khoản và yêu cầu duyệt</p>}
       </div>
     </aside>
   );

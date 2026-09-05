@@ -32,6 +32,9 @@ export async function GET(
     if (!member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
+    if (member.role === 'admin') {
+      return NextResponse.json({ error: 'Tài khoản admin không nằm trong danh sách quản lý' }, { status: 403 })
+    }
 
     if (session.role === 'leader' && member.role !== 'member') {
       return NextResponse.json({ error: 'Leader chỉ được xem tài khoản Member' }, { status: 403 })
@@ -58,6 +61,7 @@ export async function PUT(
     if (!isAdmin(session) && !isLeader(session)) return NextResponse.json({ error: 'Bạn không có quyền cập nhật thành viên' }, { status: 403 })
     const current = await db.teamMember.findUnique({ where: { id } })
     if (!current) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+    if (current.role === 'admin') return NextResponse.json({ error: 'Không thể chỉnh sửa tài khoản admin duy nhất ở đây' }, { status: 403 })
     if (session.role === 'leader' && current.role !== 'member') return NextResponse.json({ error: 'Leader chỉ được cập nhật Member' }, { status: 403 })
     const body = await request.json()
     const validated = updateMemberSchema.parse(body)
@@ -123,6 +127,7 @@ export async function DELETE(
     if (!isAdmin(session) && !isLeader(session)) return NextResponse.json({ error: 'Bạn không có quyền xóa thành viên' }, { status: 403 })
     const member = await db.teamMember.findUnique({ where: { id } })
     if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+    if (member.role === 'admin') return NextResponse.json({ error: 'Không thể xóa tài khoản admin duy nhất' }, { status: 403 })
     if (session.role === 'leader' && member.role !== 'member') return NextResponse.json({ error: 'Leader chỉ được xóa Member' }, { status: 403 })
     const account = await db.user.findUnique({ where: { email: member.email }, select: { id: true, role: true } })
     if (account?.role === 'admin') return NextResponse.json({ error: 'Không thể xóa tài khoản admin duy nhất' }, { status: 409 })

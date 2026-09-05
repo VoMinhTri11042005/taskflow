@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const where = session.role === 'admin'
-      ? {}
+      ? { id: '__no_project_access__' }
       : session.role === 'leader'
         ? { leaderId: session.id }
         : session.teamMemberId

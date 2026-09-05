@@ -6,14 +6,10 @@ import { AdminSidebar } from '@/components/layout/admin-sidebar';
 import { LeaderSidebar } from '@/components/layout/leader-sidebar';
 import { MemberSidebar } from '@/components/layout/member-sidebar';
 import { LoginForm } from '@/components/auth/login-form';
-import { DashboardView } from '@/components/views/dashboard-view';
 import { ProjectsView } from '@/components/views/projects-view';
 import { BoardView } from '@/components/views/board-view';
 import { MembersView } from '@/components/views/members-view';
 import { AdminPollsView } from '@/components/views/admin/admin-polls-view';
-import { AdminActivityView } from '@/components/views/admin/admin-activity-view';
-import { AdminReportsView } from '@/components/views/admin/admin-reports-view';
-import { AdminSettingsView } from '@/components/views/admin/admin-settings-view';
 import { LeaderDashboardView } from '@/components/views/leader/leader-dashboard-view';
 import { LeaderTimeView } from '@/components/views/leader/leader-time-view';
 import { MyTasksView } from '@/components/views/member/my-tasks-view';
@@ -42,7 +38,7 @@ export default function HomePage() {
   const isAdmin = user?.role === 'admin';
   const isLeader = user?.role === 'leader';
 
-  const adminViews = ['dashboard', 'members', 'activity', 'reports', 'settings'] as const;
+  const adminViews = ['members'] as const;
   const leaderViews = ['leader-dashboard', 'projects', 'board', 'members', 'polls', 'leader-time'] as const;
   const memberViews = ['my-tasks', 'time-tracking', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
 
@@ -79,7 +75,7 @@ export default function HomePage() {
       setCurrentView('my-tasks');
     }
     if (isAdmin && !(adminViews as readonly string[]).includes(currentView)) {
-      setCurrentView('dashboard');
+      setCurrentView('members');
     }
     if (isLeader && !(leaderViews as readonly string[]).includes(currentView)) {
       setCurrentView('leader-dashboard');
@@ -99,10 +95,16 @@ export default function HomePage() {
   /* Fetch data when user is logged in */
   useEffect(() => {
     if (!user) return;
-    fetch('/api/tasks').then((r) => r.json()).then(setTasks).catch(() => {});
-    fetch('/api/projects').then((r) => r.json()).then(setProjects).catch(() => {});
     fetch('/api/members').then((r) => r.json()).then(setMembers).catch(() => {});
-    fetch('/api/polls').then((r) => r.json()).then(setPolls).catch(() => {});
+    if (user.role !== 'admin') {
+      fetch('/api/tasks').then((r) => r.json()).then(setTasks).catch(() => {});
+      fetch('/api/projects').then((r) => r.json()).then(setProjects).catch(() => {});
+      fetch('/api/polls').then((r) => r.json()).then(setPolls).catch(() => {});
+    } else {
+      setTasks([]);
+      setProjects([]);
+      setPolls([]);
+    }
     trackActivity('login');
   }, [setTasks, setProjects, setMembers, setPolls, user, trackActivity]);
 
@@ -150,12 +152,8 @@ export default function HomePage() {
   function renderView() {
     if (isAdmin) {
       switch (currentView) {
-        case 'dashboard': return <DashboardView />;
         case 'members': return <MembersView />;
-        case 'activity': return <AdminActivityView />;
-        case 'reports': return <AdminReportsView />;
-        case 'settings': return <AdminSettingsView />;
-        default: return <DashboardView />;
+        default: return <MembersView />;
       }
     }
     if (isLeader) {

@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     // Admins can see every team record. Leaders manage members, while a member
     // only needs their own record for profile/task screens.
     const visible = session.role === 'admin'
-      ? members
+      ? members.filter((member) => member.role === 'leader' || member.role === 'member')
       : session.role === 'leader'
         ? members.filter((member) => member.role === 'member')
         : members.filter((member) => member.id === session.teamMemberId)
