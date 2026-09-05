@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isDatabaseNotInitializedError } from '@/lib/db'
+import { createSessionValue } from '@/lib/auth'
 import { compareSync } from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     // Set session cookie
     const cookieStore = await cookies()
-    cookieStore.set('session', JSON.stringify(sessionData), {
+    cookieStore.set('session', createSessionValue(sessionData), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

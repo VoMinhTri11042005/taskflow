@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { isAdmin } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
+import { canManageTask } from '@/lib/permissions'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!isAdmin(request)) {
-      return NextResponse.json({ error: 'Không có quyền' }, { status: 403 })
-    }
-
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const link = await db.taskLink.findUnique({ where: { id }, select: { taskId: true } })
+    if (!link) return NextResponse.json({ error: 'Không tìm thấy link' }, { status: 404 })
+    if (!(await canManageTask(session, link.taskId))) {
+      return NextResponse.json({ error: 'Chỉ Leader quản lý công việc mới có thể xóa link' }, { status: 403 })
+    }
     await db.taskLink.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {

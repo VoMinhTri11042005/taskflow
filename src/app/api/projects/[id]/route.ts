@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
+import { getSession } from '@/lib/auth'
+import { canAccessProject, canManageProject } from '@/lib/permissions'
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
@@ -10,11 +12,14 @@ const updateProjectSchema = z.object({
 })
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await canAccessProject(session, id))) return NextResponse.json({ error: 'Bạn không có quyền xem dự án này' }, { status: 403 })
     const project = await db.project.findUnique({
       where: { id },
       include: {
@@ -44,6 +49,9 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await canManageProject(session, id))) return NextResponse.json({ error: 'Bạn không có quyền chỉnh sửa dự án này' }, { status: 403 })
     const body = await request.json()
     const validated = updateProjectSchema.parse(body)
 
@@ -82,11 +90,14 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await canManageProject(session, id))) return NextResponse.json({ error: 'Bạn không có quyền xóa dự án này' }, { status: 403 })
     await db.project.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogIn, Eye, EyeOff, Loader2, UserPlus } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { BrandMark } from '@/components/layout/brand-mark';
 
@@ -91,19 +91,6 @@ export function LoginForm() {
       toast.error('Lỗi kết nối server');
     } finally {
       setLoading(false);
-    }
-  }
-
-  function fillDemo(role: 'admin' | 'leader' | 'member') {
-    if (role === 'admin') {
-      setEmail('admin@taskflow.vn');
-      setPassword('admin123');
-    } else if (role === 'leader') {
-      setEmail('leader@taskflow.vn');
-      setPassword('leader123');
-    } else {
-      setEmail('lan@taskflow.vn');
-      setPassword('member123');
     }
   }
 
@@ -216,6 +203,7 @@ export function LoginForm() {
              size="sm"
              onClick={() => setRole('member')}
            >
+             <UserRound className="mr-1.5 h-4 w-4" />
              Thành viên
            </Button>
            <Button
@@ -224,6 +212,7 @@ export function LoginForm() {
              size="sm"
              onClick={() => setRole('leader')}
            >
+             <ShieldCheck className="mr-1.5 h-4 w-4" />
              Leader
            </Button>
          </div>
@@ -255,25 +244,6 @@ export function LoginForm() {
      </form>
    )}
 
-   {mode === 'login' && (
-     <div className="mt-6 pt-6 border-t">
-       <p className="text-xs text-muted-foreground text-center mb-3">Tài khoản demo</p>
-       <div className="grid grid-cols-3 gap-2">
-         <Button variant="outline" size="sm" className="text-xs" onClick={() => fillDemo('admin')}>
-           <div className="h-2 w-2 rounded-full bg-red-500 mr-2" />
-           Admin
-         </Button>
-         <Button variant="outline" size="sm" className="text-xs" onClick={() => fillDemo('leader')}>
-           <div className="h-2 w-2 rounded-full bg-amber-500 mr-2" />
-           Leader
-         </Button>
-         <Button variant="outline" size="sm" className="text-xs" onClick={() => fillDemo('member')}>
-           <div className="h-2 w-2 rounded-full bg-emerald-500 mr-2" />
-           Thành viên
-         </Button>
-       </div>
-     </div>
-   )}
  </CardContent>
         </Card>
 

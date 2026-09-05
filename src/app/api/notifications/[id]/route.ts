@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { id } = await params
+    const existing = await db.notification.findUnique({ where: { id } })
+    if (!existing) return NextResponse.json({ error: 'Không tìm thấy thông báo' }, { status: 404 })
+    if (existing.userId !== session.id && session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const notification = await db.notification.update({
       where: { id },
@@ -28,7 +34,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { id } = await params
+    const existing = await db.notification.findUnique({ where: { id } })
+    if (!existing) return NextResponse.json({ error: 'Không tìm thấy thông báo' }, { status: 404 })
+    if (existing.userId !== session.id && session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     await db.notification.delete({
       where: { id },

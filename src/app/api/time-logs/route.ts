@@ -15,10 +15,19 @@ export async function GET(req: NextRequest) {
     const dateFrom = searchParams.get('from')
     const dateTo = searchParams.get('to')
 
-    /* Admin/Leader summary: all members' working hours sorted desc */
+    /* Admin/Leader summary: working hours for the managed team only. */
     if (mode === 'admin-summary' && (session.role === 'admin' || session.role === 'leader')) {
+      let memberUserIds: string[] | undefined
+      if (session.role === 'leader') {
+        const projects = await db.project.findMany({ where: { leaderId: session.id }, select: { id: true } })
+        const tasks = await db.task.findMany({ where: { projectId: { in: projects.map((project) => project.id) }, assigneeId: { not: null } }, select: { assigneeId: true } })
+        const teamMemberIds = [...new Set(tasks.flatMap((task) => task.assigneeId ? [task.assigneeId] : []))]
+        const teamMembers = await db.teamMember.findMany({ where: { id: { in: teamMemberIds }, role: 'member' }, select: { email: true } })
+        const users = await db.user.findMany({ where: { role: 'member', email: { in: teamMembers.map((member) => member.email) } }, select: { id: true } })
+        memberUserIds = users.map((user) => user.id)
+      }
       const users = await db.user.findMany({
-        where: { role: 'member' },
+        where: { role: 'member', ...(memberUserIds ? { id: { in: memberUserIds } } : {}) },
         select: { id: true, name: true, color: true, email: true },
         orderBy: { name: 'asc' },
       })
@@ -87,6 +96,14 @@ export async function GET(req: NextRequest) {
     const isManager = session.role === 'admin' || session.role === 'leader'
     if (!isManager && userId !== session.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (session.role === 'leader' && userId !== session.id) {
+      const projects = await db.project.findMany({ where: { leaderId: session.id }, select: { id: true } })
+      const assigned = await db.task.findFirst({
+        where: { projectId: { in: projects.map((project) => project.id) }, assignee: { email: (await db.user.findUnique({ where: { id: userId }, select: { email: true } }))?.email || '__unknown__' } },
+        select: { id: true },
+      })
+      if (!assigned) return NextResponse.json({ error: 'Bạn không có quyền xem nhật ký của thành viên này' }, { status: 403 })
     }
 
     const where: Record<string, unknown> = { userId }

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { compareSync, hashSync } from 'bcryptjs'
+import { getSession } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, currentPassword, newPassword } = body
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Phiên đăng nhập không hợp lệ' }, { status: 401 })
+    const { userId: requestedUserId, currentPassword, newPassword } = body
+    const userId = requestedUserId || session.id
 
     if (!userId || !currentPassword || !newPassword) {
       return NextResponse.json(
@@ -32,12 +36,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const isValidPassword = compareSync(currentPassword, user.password)
-    if (!isValidPassword) {
-      return NextResponse.json(
-        { error: 'Mật khẩu hiện tại không đúng' },
-        { status: 401 }
-      )
+    const isChangingAnotherUser = user.id !== session.id
+    if (isChangingAnotherUser) {
+      if (session.role !== 'admin' && !(session.role === 'leader' && user.role === 'member')) {
+        return NextResponse.json({ error: 'Bạn không có quyền đổi mật khẩu tài khoản này' }, { status: 403 })
+      }
+    } else {
+      const isValidPassword = compareSync(currentPassword, user.password)
+      if (!isValidPassword) {
+        return NextResponse.json({ error: 'Mật khẩu hiện tại không đúng' }, { status: 401 })
+      }
     }
 
     const hashedPassword = hashSync(newPassword, 10)

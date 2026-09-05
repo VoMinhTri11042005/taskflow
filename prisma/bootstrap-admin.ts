@@ -8,11 +8,17 @@ if (existsSync(".env")) {
 
 const databaseUrl = process.env.DATABASE_URL;
 const email = (process.env.ADMIN_EMAIL ?? "admin@taskflow.vn").trim().toLowerCase();
-const password = process.env.ADMIN_PASSWORD ?? "admin123";
+const configuredPassword = process.env.ADMIN_PASSWORD;
 
 if (!databaseUrl || databaseUrl.includes("PASTE_POSTGRESQL_URL_HERE")) {
   throw new Error("Hãy dán DATABASE_URL PostgreSQL thật vào file .env trước khi chạy.");
 }
+
+if (!configuredPassword) {
+  throw new Error("Hãy đặt ADMIN_PASSWORD trong file .env trước khi chạy.");
+}
+
+const password = configuredPassword;
 
 if (password.length < 8) {
   throw new Error("ADMIN_PASSWORD phải có ít nhất 8 ký tự.");

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, name } = body
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Phiên đăng nhập không hợp lệ' }, { status: 401 })
+    const { userId: requestedUserId, name } = body
+    const userId = requestedUserId || session.id
 
     if (!userId || !name) {
       return NextResponse.json(
@@ -29,6 +33,9 @@ export async function PUT(request: NextRequest) {
         { error: 'Không tìm thấy người dùng' },
         { status: 404 }
       )
+    }
+    if (user.id !== session.id && session.role !== 'admin') {
+      return NextResponse.json({ error: 'Bạn không có quyền cập nhật tài khoản này' }, { status: 403 })
     }
 
     const updatedUser = await db.user.update({

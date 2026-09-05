@@ -5,10 +5,7 @@ import type { AdminViewType } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   LayoutDashboard,
-  FolderKanban,
-  KanbanSquare,
   Users,
-  BarChart3,
   Activity,
   TrendingUp,
   Settings,
@@ -36,12 +33,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
 const navItems: { id: AdminViewType; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
-  { id: 'board', label: 'Bảng công việc', icon: KanbanSquare },
-  { id: 'projects', label: 'Dự án', icon: FolderKanban },
-  { id: 'members', label: 'Thành viên', icon: Users },
-  { id: 'polls', label: 'Bình chọn', icon: BarChart3 },
-  { id: 'activity', label: 'Hoạt động', icon: Activity },
+  { id: 'dashboard', label: 'Tổng quan hệ thống', icon: LayoutDashboard },
+  { id: 'members', label: 'Tài khoản & phê duyệt', icon: Users },
+  { id: 'activity', label: 'Nhật ký hệ thống', icon: Activity },
   { id: 'reports', label: 'Báo cáo', icon: TrendingUp },
   { id: 'settings', label: 'Cài đặt', icon: Settings },
 ];
@@ -52,9 +46,6 @@ export function AdminSidebar() {
     setCurrentView,
     sidebarOpen,
     toggleSidebar,
-    projects,
-    setSelectedProjectId,
-    selectedProjectId,
     tasks,
     user,
     setUser,
@@ -67,7 +58,6 @@ export function AdminSidebar() {
   const showFull = isMobile || sidebarOpen;
 
   const activeTasks = tasks.filter((t) => t.status !== 'done').length;
-  const isLeader = user?.role === 'leader';
 
   const userInitials = user?.name
     ? user.name
@@ -115,7 +105,7 @@ export function AdminSidebar() {
         {showFull && (
           <div className="flex flex-col overflow-hidden flex-1">
             <h2 className="text-sm font-bold truncate">TaskFlow</h2>
-            <p className="text-xs text-muted-foreground truncate">{isLeader ? 'Leader' : 'Quản trị viên'}</p>
+            <p className="text-xs text-muted-foreground truncate">Quản trị viên hệ thống</p>
           </div>
         )}
         {showFull && (
@@ -221,7 +211,6 @@ export function AdminSidebar() {
               key={item.id}
               onClick={() => {
                 setCurrentView(item.id);
-                if (item.id === 'board') setSelectedProjectId(null);
                 closeMobileMenu();
               }}
               className={cn(
@@ -238,50 +227,6 @@ export function AdminSidebar() {
           );
         })}
       </nav>
-
-      <Separator />
-
-      {/* Projects quick filter */}
-      {showFull && (
-        <div className="p-3">
-          <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Dự án nhanh
-          </p>
-          <div className="max-h-36 overflow-y-auto space-y-0.5">
-            <button
-              onClick={() => setSelectedProjectId(null)}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent',
-                selectedProjectId === null ? 'bg-accent font-medium' : 'text-muted-foreground'
-              )}
-            >
-              <span className="h-2 w-2 rounded-full bg-gray-400" />
-              Tất cả dự án
-            </button>
-            {projects.filter((p) => p.status === 'active').map((project) => (
-              <button
-                key={project.id}
-                onClick={() => {
-                  setSelectedProjectId(project.id);
-                  setCurrentView('board');
-                  closeMobileMenu();
-                }}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent truncate',
-                  selectedProjectId === project.id ? 'bg-accent font-medium' : 'text-muted-foreground'
-                )}
-                title={project.name}
-              >
-                <span
-                  className="h-2 w-2 rounded-full shrink-0"
-                  style={{ backgroundColor: project.color }}
-                />
-                <span className="truncate">{project.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <Separator />
 

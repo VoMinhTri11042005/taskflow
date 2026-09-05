@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (session.role !== 'admin') return NextResponse.json({ error: 'Chỉ Admin mới được xem báo cáo tổng hệ thống' }, { status: 403 })
     const now = new Date()
     const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 

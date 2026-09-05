@@ -7,6 +7,9 @@ export interface TeamMember {
   color: string;
   createdAt: string;
   updatedAt: string;
+  leaderId?: string | null;
+  userId?: string | null;
+  accountStatus?: 'pending' | 'approved' | 'rejected' | string;
   _count?: { tasks: number };
 }
 
@@ -18,6 +21,7 @@ export interface Project {
   status: string;
   createdAt: string;
   updatedAt: string;
+  leaderId?: string | null;
   _count?: { tasks: number };
 }
 
@@ -137,6 +141,7 @@ export interface PollVote {
   pollId: string;
 }
 
-export type AdminViewType = 'dashboard' | 'projects' | 'board' | 'members' | 'polls' | 'activity' | 'reports' | 'settings';
+export type AdminViewType = 'dashboard' | 'members' | 'activity' | 'reports' | 'settings';
+export type LeaderViewType = 'leader-dashboard' | 'projects' | 'board' | 'members' | 'polls' | 'leader-time';
 export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'polls' | 'notifications' | 'profile' | 'time-tracking';
-export type ViewType = AdminViewType | MemberViewType;
+export type ViewType = AdminViewType | LeaderViewType | MemberViewType;

@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Users, Mail, Shield, Key, KeyRound, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, Mail, Shield, Key, KeyRound, Loader2, Check, X, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
 const roleLabels: Record<string, string> = {
@@ -52,7 +52,7 @@ const memberColors = [
 ];
 
 export function MembersView() {
-  const { members, setMembers } = useAppStore();
+  const { members, setMembers, user } = useAppStore();
   const [pendingAccounts, setPendingAccounts] = useState<Array<{ id: string; name: string; email: string; role: string; status: string }>>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
@@ -60,6 +60,7 @@ export function MembersView() {
   const [formEmail, setFormEmail] = useState('');
   const [formRole, setFormRole] = useState('member');
   const [formColor, setFormColor] = useState('#10b981');
+  const [formPassword, setFormPassword] = useState('');
 
   // Credential dialog
   const [credOpen, setCredOpen] = useState(false);
@@ -77,13 +78,14 @@ export function MembersView() {
   // Online status tracking
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({});
 
-  async function fetchMembers() {
+  const fetchMembers = useCallback(async () => {
     const res = await fetch('/api/members');
+    if (!res.ok) return;
     const data = await res.json();
-    setMembers(data);
-  }
+    if (Array.isArray(data)) setMembers(data);
+  }, [setMembers]);
 
-  async function fetchPendingAccounts() {
+  const fetchPendingAccounts = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/users?status=pending');
       if (!res.ok) return;
@@ -92,7 +94,7 @@ export function MembersView() {
     } catch {
       setPendingAccounts([]);
     }
-  }
+  }, []);
 
   const checkOnlineStatus = useCallback(async (memberId: string) => {
     try {
@@ -141,6 +143,7 @@ export function MembersView() {
     setFormEmail('');
     setFormRole('member');
     setFormColor(memberColors[Math.floor(Math.random() * memberColors.length)]);
+    setFormPassword('');
     setDialogOpen(true);
   }
 
@@ -150,6 +153,7 @@ export function MembersView() {
     setFormEmail(member.email);
     setFormRole(member.role);
     setFormColor(member.color);
+    setFormPassword('');
     setDialogOpen(true);
   }
 
@@ -157,23 +161,25 @@ export function MembersView() {
     if (!formName.trim() || !formEmail.trim()) return;
     try {
       if (editingMember) {
-        await fetch(`/api/members/${editingMember.id}`, {
+        const response = await fetch(`/api/members/${editingMember.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: formName, email: formEmail, role: formRole, color: formColor }),
         });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Không thể cập nhật thành viên');
         toast.success('Đã cập nhật thành viên');
       } else {
-        const response = await fetch('/api/members', {
+        const response = await fetch('/api/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: formName, email: formEmail, role: formRole, color: formColor, password: 'member123' }),
+          body: JSON.stringify({ name: formName, email: formEmail, role: formRole, color: formColor, password: formPassword || undefined }),
         });
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data.error || 'Failed');
         }
-        toast.success(`Đã thêm thành viên mới${data.defaultPassword ? ` - mật khẩu mặc định: ${data.defaultPassword}` : ''}`);
+        toast.success(`Đã tạo tài khoản ${formRole === 'leader' ? 'Leader' : 'Member'} thành công`);
       }
       setDialogOpen(false);
       fetchMembers();
@@ -193,14 +199,34 @@ export function MembersView() {
     }
   }
 
+  async function handleApproval(id: string, status: 'approved' | 'rejected') {
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Không thể cập nhật trạng thái');
+      toast.success(status === 'approved' ? 'Đã duyệt tài khoản' : 'Đã từ chối tài khoản');
+      await Promise.all([fetchMembers(), fetchPendingAccounts()]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+    }
+  }
+
   // View credentials
   async function openCredDialog(member: TeamMember) {
+    if (user?.role !== 'admin') {
+      toast.error('Chỉ Admin mới được xem thông tin đăng nhập');
+      return;
+    }
     setCredMemberId(member.id);
     setCredEmail('');
     setCredLoading(true);
     setCredOpen(true);
     try {
-      const res = await fetch(`/api/members/credentials?userId=${member.id}`);
+      const res = await fetch(`/api/members/credentials?userId=${member.userId || member.id}`);
       const data = await res.json();
       setCredEmail(data.email || member.email);
     } catch {
@@ -233,7 +259,7 @@ export function MembersView() {
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: resetMemberId, newPassword: newPassword.trim() }),
+        body: JSON.stringify({ userId: members.find((member) => member.id === resetMemberId)?.userId || resetMemberId, newPassword: newPassword.trim() }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -300,11 +326,23 @@ export function MembersView() {
                     {editingMember?.role === 'admin' && (
                       <SelectItem value="admin">Quản trị viên duy nhất</SelectItem>
                     )}
-                    <SelectItem value="leader">Leader</SelectItem>
+                    {user?.role === 'admin' && <SelectItem value="leader">Leader</SelectItem>}
                     <SelectItem value="member">Thành viên</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {!editingMember && (
+                <div className="space-y-2">
+                  <Label>Mật khẩu ban đầu *</Label>
+                  <Input
+                    type="password"
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
+                    placeholder="Tối thiểu 6 ký tự"
+                  />
+                  <p className="text-xs text-muted-foreground">Gửi mật khẩu này cho người dùng và yêu cầu đổi sau lần đăng nhập đầu.</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Màu sắc</Label>
                 <div className="flex flex-wrap gap-2">
@@ -327,13 +365,45 @@ export function MembersView() {
               <DialogClose asChild>
                 <Button variant="outline">Hủy</Button>
               </DialogClose>
-              <Button onClick={handleSave} disabled={!formName.trim() || !formEmail.trim()}>
+              <Button onClick={handleSave} disabled={!formName.trim() || !formEmail.trim() || (!editingMember && formPassword.length < 6)}>
                 {editingMember ? 'Cập nhật' : 'Thêm mới'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
+
+      {pendingAccounts.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/60">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-amber-600" />
+              <div>
+                <h2 className="font-semibold">Tài khoản chờ duyệt ({pendingAccounts.length})</h2>
+                <p className="text-sm text-muted-foreground">Kiểm tra thông tin trước khi cho phép đăng nhập hệ thống.</p>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {pendingAccounts.map((account) => (
+                <div key={account.id} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{account.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{account.email} · {roleLabels[account.role] || account.role}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button size="icon" variant="outline" className="text-emerald-600" title="Duyệt" onClick={() => handleApproval(account.id, 'approved')}>
+                      <Check className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="outline" className="text-destructive" title="Từ chối" onClick={() => handleApproval(account.id, 'rejected')}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Members list */}
       {members.length === 0 ? (
@@ -382,26 +452,27 @@ export function MembersView() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    {/* View credentials */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => openCredDialog(member)}
-                      title="Xem thông tin đăng nhập"
-                    >
-                      <Key className="h-4 w-4" />
-                    </Button>
-                    {/* Reset password */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => openResetDialog(member)}
-                      title="Đặt lại mật khẩu"
-                    >
-                      <KeyRound className="h-4 w-4" />
-                    </Button>
+                    {user?.role === 'admin' && <>
+                      {/* Passwords are never displayed; Admin can view the login email and reset it. */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => openCredDialog(member)}
+                        title="Xem thông tin đăng nhập"
+                      >
+                        <Key className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => openResetDialog(member)}
+                        title="Đặt lại mật khẩu"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                    </>}
                     {/* Edit */}
                     <Button
                       variant="ghost"

@@ -25,6 +25,7 @@ model User {
   pollsCreated  Poll[]
   votes         PollVote[]
   timeLogs      TimeLog[]
+  ledProjects   Project[] @relation("ProjectLeader")
 
   @@map("users")
 }
@@ -53,8 +54,12 @@ model Project {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  leaderId String? @map("leader_id")
+  leader   User?   @relation("ProjectLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+
   tasks Task[]
 
+  @@index([leaderId])
   @@map("projects")
 }
 

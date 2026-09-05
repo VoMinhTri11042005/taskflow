@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { isAdmin, getSession } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
+import { isManager } from '@/lib/permissions'
 
 export async function GET(
   request: NextRequest,
@@ -56,9 +57,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!isAdmin(request)) {
+    const session = getSession(request)
+    if (!session) {
+      return NextResponse.json({ error: 'Phiên đăng nhập không hợp lệ' }, { status: 401 })
+    }
+    if (!isManager(session)) {
       return NextResponse.json(
-        { error: 'Bạn không có quyền thực hiện thao tác này' },
+        { error: 'Chỉ Leader mới có thể cập nhật bình chọn' },
         { status: 403 }
       )
     }
@@ -73,6 +78,9 @@ export async function PUT(
         { error: 'Không tìm thấy bình chọn' },
         { status: 404 }
       )
+    }
+    if (session.role === 'leader' && existingPoll.createdByUserId !== session.id) {
+      return NextResponse.json({ error: 'Bạn chỉ được cập nhật bình chọn do mình tạo' }, { status: 403 })
     }
 
     const poll = await db.poll.update({
@@ -108,9 +116,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!isAdmin(request)) {
+    const session = getSession(request)
+    if (!session) {
+      return NextResponse.json({ error: 'Phiên đăng nhập không hợp lệ' }, { status: 401 })
+    }
+    if (!isManager(session)) {
       return NextResponse.json(
-        { error: 'Bạn không có quyền thực hiện thao tác này' },
+        { error: 'Chỉ Leader mới có thể xóa bình chọn' },
         { status: 403 }
       )
     }
@@ -123,6 +135,9 @@ export async function DELETE(
         { error: 'Không tìm thấy bình chọn' },
         { status: 404 }
       )
+    }
+    if (session.role === 'leader' && existingPoll.createdByUserId !== session.id) {
+      return NextResponse.json({ error: 'Bạn chỉ được xóa bình chọn do mình tạo' }, { status: 403 })
     }
 
     await db.poll.delete({ where: { id } })

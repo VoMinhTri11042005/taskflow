@@ -1,12 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
-    const where = userId ? { userId } : {}
+    let allowedUserIds: string[] | null = null
+    if (session.role === 'leader') {
+      const projects = await db.project.findMany({ where: { leaderId: session.id }, select: { id: true } })
+      const tasks = await db.task.findMany({ where: { projectId: { in: projects.map((project) => project.id) }, assigneeId: { not: null } }, select: { assigneeId: true } })
+      const memberIds = [...new Set(tasks.flatMap((task) => task.assigneeId ? [task.assigneeId] : []))]
+      const members = await db.teamMember.findMany({ where: { id: { in: memberIds } }, select: { email: true } })
+      const users = await db.user.findMany({ where: { email: { in: members.map((member) => member.email) } }, select: { id: true } })
+      allowedUserIds = [session.id, ...users.map((user) => user.id)]
+    } else if (session.role === 'member') {
+      allowedUserIds = [session.id]
+    }
+
+    if (userId && allowedUserIds && !allowedUserIds.includes(userId)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const where = userId ? { userId } : allowedUserIds ? { userId: { in: allowedUserIds } } : {}
 
     const logs = await db.activityLog.findMany({
       where,
@@ -33,10 +51,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const body = await request.json()
-    const { userId, action, details } = body
+    const { action, details } = body
 
-    if (!userId || !action) {
+    if (!action) {
       return NextResponse.json(
         { error: 'Thiếu userId hoặc action' },
         { status: 400 }
@@ -53,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     const log = await db.activityLog.create({
       data: {
-        userId,
+        userId: session.id,
         action,
         details: details || null,
       },

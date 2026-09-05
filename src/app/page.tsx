@@ -3,6 +3,7 @@
 import { useEffect, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { AdminSidebar } from '@/components/layout/admin-sidebar';
+import { LeaderSidebar } from '@/components/layout/leader-sidebar';
 import { MemberSidebar } from '@/components/layout/member-sidebar';
 import { LoginForm } from '@/components/auth/login-form';
 import { DashboardView } from '@/components/views/dashboard-view';
@@ -13,6 +14,8 @@ import { AdminPollsView } from '@/components/views/admin/admin-polls-view';
 import { AdminActivityView } from '@/components/views/admin/admin-activity-view';
 import { AdminReportsView } from '@/components/views/admin/admin-reports-view';
 import { AdminSettingsView } from '@/components/views/admin/admin-settings-view';
+import { LeaderDashboardView } from '@/components/views/leader/leader-dashboard-view';
+import { LeaderTimeView } from '@/components/views/leader/leader-time-view';
 import { MyTasksView } from '@/components/views/member/my-tasks-view';
 import { MemberProjectsView } from '@/components/views/member/member-projects-view';
 import { MemberTeamView } from '@/components/views/member/member-team-view';
@@ -36,9 +39,11 @@ export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const isManagementRole = user?.role === 'admin' || user?.role === 'leader';
+  const isAdmin = user?.role === 'admin';
+  const isLeader = user?.role === 'leader';
 
-  const adminViews = ['dashboard', 'board', 'projects', 'members', 'polls', 'activity', 'reports', 'settings'] as const;
+  const adminViews = ['dashboard', 'members', 'activity', 'reports', 'settings'] as const;
+  const leaderViews = ['leader-dashboard', 'projects', 'board', 'members', 'polls', 'leader-time'] as const;
   const memberViews = ['my-tasks', 'time-tracking', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
 
   /* Check session on mount */
@@ -73,10 +78,13 @@ export default function HomePage() {
     if (user.role === 'member' && !(memberViews as readonly string[]).includes(currentView)) {
       setCurrentView('my-tasks');
     }
-    if (isManagementRole && !(adminViews as readonly string[]).includes(currentView)) {
+    if (isAdmin && !(adminViews as readonly string[]).includes(currentView)) {
       setCurrentView('dashboard');
     }
-  }, [user, currentView, setCurrentView, isManagementRole]);
+    if (isLeader && !(leaderViews as readonly string[]).includes(currentView)) {
+      setCurrentView('leader-dashboard');
+    }
+  }, [user, currentView, setCurrentView, isAdmin, isLeader]);
 
   /* Track login activity */
   const trackActivity = useCallback((action: string) => {
@@ -137,32 +145,39 @@ export default function HomePage() {
     return <LoginForm />;
   }
 
-  const Sidebar = isManagementRole ? AdminSidebar : MemberSidebar;
+  const Sidebar = isAdmin ? AdminSidebar : isLeader ? LeaderSidebar : MemberSidebar;
 
   function renderView() {
-    if (isManagementRole) {
+    if (isAdmin) {
       switch (currentView) {
         case 'dashboard': return <DashboardView />;
-        case 'projects': return <ProjectsView />;
-        case 'board': return <BoardView />;
         case 'members': return <MembersView />;
-        case 'polls': return <AdminPollsView />;
         case 'activity': return <AdminActivityView />;
         case 'reports': return <AdminReportsView />;
         case 'settings': return <AdminSettingsView />;
         default: return <DashboardView />;
       }
-    } else {
+    }
+    if (isLeader) {
       switch (currentView) {
-        case 'my-tasks': return <MyTasksView />;
-        case 'time-tracking': return <TimeTrackingView />;
-        case 'projects': return <MemberProjectsView />;
-        case 'team': return <MemberTeamView />;
-        case 'polls': return <MemberPollsView />;
-        case 'notifications': return <NotificationsView />;
-        case 'profile': return <ProfileView />;
-        default: return <MyTasksView />;
+        case 'leader-dashboard': return <LeaderDashboardView />;
+        case 'projects': return <ProjectsView />;
+        case 'board': return <BoardView />;
+        case 'members': return <MembersView />;
+        case 'polls': return <AdminPollsView />;
+        case 'leader-time': return <LeaderTimeView />;
+        default: return <LeaderDashboardView />;
       }
+    }
+    switch (currentView) {
+      case 'my-tasks': return <MyTasksView />;
+      case 'time-tracking': return <TimeTrackingView />;
+      case 'projects': return <MemberProjectsView />;
+      case 'team': return <MemberTeamView />;
+      case 'polls': return <MemberPollsView />;
+      case 'notifications': return <NotificationsView />;
+      case 'profile': return <ProfileView />;
+      default: return <MyTasksView />;
     }
   }
 

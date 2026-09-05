@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    const baseWhere = session.role === 'leader' ? { role: { in: ['leader', 'member'] } } : undefined;
+    const baseWhere = session.role === 'leader' ? { role: 'member' } : undefined;
 
     const users = await db.user.findMany({
       where: status ? { ...baseWhere, status } : baseWhere,
@@ -57,6 +57,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const parsed = accountSchema.parse(body);
+    if (session.role === 'leader' && parsed.role !== 'member') {
+      return NextResponse.json({ error: 'Leader chỉ có thể tạo tài khoản Member' }, { status: 403 });
+    }
     const password = parsed.password || 'member123';
 
     const existing = await db.user.findUnique({ where: { email: parsed.email.toLowerCase() } });
@@ -64,25 +67,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email đã tồn tại trong hệ thống' }, { status: 409 });
     }
 
-    const user = await db.user.create({
-      data: {
-        name: parsed.name,
-        email: parsed.email.toLowerCase(),
-        role: parsed.role,
-        status: parsed.status,
-        password: hashSync(password, 10),
-        color: parsed.color || '#6366f1',
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        color: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    const user = await db.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          name: parsed.name,
+          email: parsed.email.toLowerCase(),
+          role: parsed.role,
+          status: parsed.status,
+          password: hashSync(password, 10),
+          color: parsed.color || '#6366f1',
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          color: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      await tx.teamMember.upsert({
+        where: { email: created.email },
+        create: { name: created.name, email: created.email, role: created.role, color: created.color },
+        update: { name: created.name, role: created.role, color: created.color },
+      });
+      return created;
     });
 
     return NextResponse.json({ user, defaultPassword: password }, { status: 201 });
@@ -118,8 +129,8 @@ export async function PATCH(request: NextRequest) {
     if (!targetUser) {
       return NextResponse.json({ error: 'Không tìm thấy tài khoản' }, { status: 404 });
     }
-    if (session.role === 'leader' && targetUser.role === 'admin') {
-      return NextResponse.json({ error: 'Leader không được quản lý tài khoản admin' }, { status: 403 });
+    if (session.role === 'leader' && targetUser.role !== 'member') {
+      return NextResponse.json({ error: 'Leader chỉ được quản lý tài khoản Member' }, { status: 403 });
     }
 
     if (role && !['admin', 'leader', 'member'].includes(role)) {
@@ -132,6 +143,10 @@ export async function PATCH(request: NextRequest) {
 
     if (targetUser.role !== 'admin' && role === 'admin') {
       return NextResponse.json({ error: 'Hệ thống chỉ cho phép một tài khoản admin' }, { status: 409 });
+    }
+
+    if (session.role === 'leader' && role && role !== 'member') {
+      return NextResponse.json({ error: 'Leader không được thay đổi vai trò tài khoản' }, { status: 403 });
     }
 
     if (targetUser.role === 'admin' && status && status !== 'approved') {
@@ -157,6 +172,14 @@ export async function PATCH(request: NextRequest) {
         color: true,
       },
     });
+
+    if (user.status === 'approved') {
+      await db.teamMember.upsert({
+        where: { email: user.email },
+        create: { name: user.name, email: user.email, role: user.role, color: user.color },
+        update: { name: user.name, role: user.role, color: user.color },
+      });
+    }
 
     return NextResponse.json(user);
   } catch (error) {

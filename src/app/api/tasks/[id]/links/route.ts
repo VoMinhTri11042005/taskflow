@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
+import { getSession } from '@/lib/auth'
+import { canAccessTask, canManageTask } from '@/lib/permissions'
 
 const createLinkSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -9,11 +11,14 @@ const createLinkSchema = z.object({
 })
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await canAccessTask(session, id))) return NextResponse.json({ error: 'Bạn không có quyền xem link của công việc này' }, { status: 403 })
 
     // Verify task exists
     const task = await db.task.findUnique({ where: { id } })
@@ -42,6 +47,9 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await canManageTask(session, id))) return NextResponse.json({ error: 'Chỉ Leader mới có thể thêm link làm việc chung' }, { status: 403 })
 
     // Verify task exists
     const task = await db.task.findUnique({ where: { id } })

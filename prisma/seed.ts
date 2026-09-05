@@ -30,10 +30,10 @@ async function main() {
   const m2 = await prisma.teamMember.create({ data: { name: 'Phạm Đức Minh', email: 'minh@taskflow.vn', role: 'member', color: '#f59e0b' } });
   const m3 = await prisma.teamMember.create({ data: { name: 'Lê Thị Hoa', email: 'hoa@taskflow.vn', role: 'member', color: '#8b5cf6' } });
 
-  const p1 = await prisma.project.create({ data: { name: 'Redesign Website', description: 'Thiết kế lại giao diện website công ty', color: '#10b981', status: 'active' } });
-  const p2 = await prisma.project.create({ data: { name: 'App Mobile', description: 'Phát triển ứng dụng di động', color: '#f59e0b', status: 'active' } });
-  const p3 = await prisma.project.create({ data: { name: 'Marketing Q4', description: 'Chiến dịch marketing quý 4', color: '#ec4899', status: 'active' } });
-  const p4 = await prisma.project.create({ data: { name: 'Báo cáo cuối kỳ Q4/2024', description: 'Tổng hợp báo cáo tài chính, nhân sự, và hiệu suất kinh doanh quý 4. Admin phụ trách tổng hợp, Lan viết báo cáo, Minh xử lý dữ liệu, Hoa làm slide thuyết trình.', color: '#0ea5e9', status: 'active' } });
+  const p1 = await prisma.project.create({ data: { name: 'Redesign Website', description: 'Thiết kế lại giao diện website công ty', color: '#10b981', status: 'active', leaderId: leaderUser.id } });
+  const p2 = await prisma.project.create({ data: { name: 'App Mobile', description: 'Phát triển ứng dụng di động', color: '#f59e0b', status: 'active', leaderId: leaderUser.id } });
+  const p3 = await prisma.project.create({ data: { name: 'Marketing Q4', description: 'Chiến dịch marketing quý 4', color: '#ec4899', status: 'active', leaderId: leaderUser.id } });
+  const p4 = await prisma.project.create({ data: { name: 'Báo cáo cuối kỳ Q4/2024', description: 'Tổng hợp báo cáo tài chính, nhân sự, và hiệu suất kinh doanh quý 4. Admin phụ trách tổng hợp, Lan viết báo cáo, Minh xử lý dữ liệu, Hoa làm slide thuyết trình.', color: '#0ea5e9', status: 'active', leaderId: leaderUser.id } });
 
   const taskData = [
     { title: 'Thiết kế mockup trang chủ', description: 'Tạo wireframe và mockup cho trang chủ mới', status: 'done', priority: 'high', projectId: p1.id, assigneeId: m1.id, dueDate: new Date(now.getTime() - 3*86400000) },

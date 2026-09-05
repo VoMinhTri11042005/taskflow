@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
+import { getSession } from '@/lib/auth'
+import { canAccessTask, canManageProject, canManageTask } from '@/lib/permissions'
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
@@ -13,11 +15,14 @@ const updateTaskSchema = z.object({
 })
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await canAccessTask(session, id))) return NextResponse.json({ error: 'Bạn không có quyền xem công việc này' }, { status: 403 })
     const task = await db.task.findUnique({
       where: { id },
       include: {
@@ -47,8 +52,30 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const body = await request.json()
     const validated = updateTaskSchema.parse(body)
+
+    const canManage = await canManageTask(session, id)
+    const currentTask = await db.task.findUnique({ where: { id }, select: { projectId: true } })
+    if (!currentTask) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    if (!canManage) {
+      if (!(await canAccessTask(session, id))) return NextResponse.json({ error: 'Bạn không có quyền cập nhật công việc này' }, { status: 403 })
+      const attemptedManagerFields = ['title', 'description', 'priority', 'dueDate', 'projectId', 'assigneeId']
+        .some((field) => validated[field as keyof typeof validated] !== undefined)
+      if (attemptedManagerFields || validated.status === undefined) {
+        return NextResponse.json({ error: 'Thành viên chỉ được cập nhật trạng thái công việc được giao' }, { status: 403 })
+      }
+    } else {
+      if (validated.projectId && !(await canManageProject(session, validated.projectId))) {
+        return NextResponse.json({ error: 'Bạn không có quyền chuyển công việc sang dự án này' }, { status: 403 })
+      }
+      if (validated.assigneeId) {
+        const assignee = await db.teamMember.findUnique({ where: { id: validated.assigneeId }, select: { role: true } })
+        if (!assignee || assignee.role !== 'member') return NextResponse.json({ error: 'Chỉ có thể giao việc cho tài khoản Member' }, { status: 400 })
+      }
+    }
 
     const data: Record<string, unknown> = { ...validated }
     if (validated.dueDate !== undefined) {
@@ -90,11 +117,14 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await canManageTask(session, id))) return NextResponse.json({ error: 'Bạn không có quyền xóa công việc này' }, { status: 403 })
     await db.task.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,23 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { hashSync } from 'bcryptjs'
-import { cookies } from 'next/headers'
-
-async function getManagerRole(): Promise<string | null> {
-  const cookieStore = await cookies()
-  const sessionCookie = cookieStore.get('session')
-  if (!sessionCookie?.value) return null
-  try {
-    const session = JSON.parse(sessionCookie.value)
-    return session.role || null
-  } catch {
-    return null
-  }
-}
+import { getSession } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const role = await getManagerRole()
+    const session = getSession(request)
+    const role = session?.role || null
     const isManager = role === 'admin' || role === 'leader'
     if (!isManager) {
       return NextResponse.json(
@@ -52,6 +41,9 @@ export async function POST(request: NextRequest) {
         { error: 'Không tìm thấy người dùng' },
         { status: 404 }
       )
+    }
+    if (role === 'leader' && user.role !== 'member') {
+      return NextResponse.json({ error: 'Leader chỉ được đặt lại mật khẩu Member' }, { status: 403 })
     }
 
     const hashedPassword = hashSync(newPassword, 10)

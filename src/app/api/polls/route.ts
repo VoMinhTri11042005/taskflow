@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { isAdmin, getUserId } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
+import { isManager } from '@/lib/permissions'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const polls = await db.poll.findMany({
+      where: session.role === 'leader' ? { createdByUserId: session.id } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
         options: {
@@ -35,9 +40,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!isAdmin(request)) {
+    const session = getSession(request)
+    if (!session) {
+      return NextResponse.json({ error: 'Phiên đăng nhập không hợp lệ' }, { status: 401 })
+    }
+    if (!isManager(session)) {
       return NextResponse.json(
-        { error: 'Bạn không có quyền thực hiện thao tác này' },
+        { error: 'Chỉ Leader mới có thể tạo bình chọn' },
         { status: 403 }
       )
     }
@@ -52,19 +61,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const userId = getUserId(request)
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Phiên đăng nhập không hợp lệ' },
-        { status: 401 }
-      )
-    }
-
     const poll = await db.poll.create({
       data: {
         title,
         description: description || null,
-        createdByUserId: userId,
+        createdByUserId: session.id,
         options: {
           create: options.map((label: string) => ({ label })),
         },

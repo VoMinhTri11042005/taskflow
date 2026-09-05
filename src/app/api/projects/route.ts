@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
+import { getSession } from '@/lib/auth'
+import { isLeader, isManager } from '@/lib/permissions'
 
 const createProjectSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -9,9 +11,21 @@ const createProjectSchema = z.object({
   status: z.string().optional().default('active'),
 })
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const where = session.role === 'admin'
+      ? {}
+      : session.role === 'leader'
+        ? { leaderId: session.id }
+        : session.teamMemberId
+          ? { tasks: { some: { assigneeId: session.teamMemberId } } }
+          : { id: '__no_project_access__' }
+
     const projects = await db.project.findMany({
+      where,
       include: {
         _count: {
           select: { tasks: true },
@@ -31,11 +45,18 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!isManager(session)) return NextResponse.json({ error: 'Chỉ Leader mới có thể tạo dự án' }, { status: 403 })
+
     const body = await request.json()
     const validated = createProjectSchema.parse(body)
 
     const project = await db.project.create({
-      data: validated,
+      data: {
+        ...validated,
+        leaderId: isLeader(session) ? session.id : null,
+      },
       include: {
         _count: {
           select: { tasks: true },

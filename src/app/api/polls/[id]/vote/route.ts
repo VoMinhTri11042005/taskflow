@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = getSession(request)
+    if (!session) return NextResponse.json({ error: 'Phiên đăng nhập không hợp lệ' }, { status: 401 })
     const { id: pollId } = await params
     const body = await request.json()
-    const { userId, optionId } = body
+    const { optionId } = body
+    const userId = session.id
 
     if (!userId || !optionId) {
       return NextResponse.json(
