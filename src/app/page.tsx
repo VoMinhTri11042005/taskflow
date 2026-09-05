@@ -24,6 +24,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
+import { BrandMark } from '@/components/layout/brand-mark';
 
 export default function HomePage() {
   const {
@@ -173,6 +174,7 @@ export default function HomePage() {
             <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               <Menu className="h-5 w-5" />
             </Button>
+            <BrandMark size={28} />
             <span className="font-bold">TaskFlow</span>
           </div>
           <span className="text-xs text-muted-foreground">

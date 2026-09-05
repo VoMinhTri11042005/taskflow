@@ -15,7 +15,6 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  ClipboardList,
   Bell,
   X,
 } from 'lucide-react';
@@ -31,6 +30,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { BrandMark } from '@/components/layout/brand-mark';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -111,9 +111,7 @@ export function AdminSidebar() {
             <X className="h-5 w-5" />
           </button>
         )}
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <ClipboardList className="h-5 w-5" />
-        </div>
+        <BrandMark />
         {showFull && (
           <div className="flex flex-col overflow-hidden flex-1">
             <h2 className="text-sm font-bold truncate">TaskFlow</h2>

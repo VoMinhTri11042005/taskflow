@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ClipboardList, LogIn, Eye, EyeOff, Loader2, UserPlus } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Loader2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
+import { BrandMark } from '@/components/layout/brand-mark';
 
 export function LoginForm() {
   const { setUser } = useAppStore();
@@ -110,9 +111,7 @@ export function LoginForm() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
- <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
-   <ClipboardList className="h-7 w-7" />
- </div>
+ <BrandMark size={56} className="mx-auto shadow-lg" />
  <h1 className="text-3xl font-bold tracking-tight">TaskFlow</h1>
  <p className="text-muted-foreground">Quản lý công việc nhóm hiệu quả</p>
         </div>
