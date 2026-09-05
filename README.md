@@ -16,6 +16,9 @@ TaskFlow is a team task-management application built with Next.js App Router, Ty
 5. Optionally load sample data: `npm run db:seed`
 6. Start development: `npm run dev`
 
+To initialise only an administrator account without deleting existing data, add
+`DATABASE_URL` to `.env` and run `npm run setup:admin`.
+
 The application runs at `http://localhost:3000` by default.
 
 ## Scripts
