@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { FolderKanban } from 'lucide-react';
+import { FolderKanban, Users } from 'lucide-react';
 import { readApiJson } from '@/lib/client-api';
 import type { Project, Task } from '@/types';
 
@@ -116,17 +116,29 @@ export function MemberProjectsView() {
                     <span className="text-muted-foreground">Công việc của bạn</span>
                     <span className="font-semibold">{stats.total} việc</span>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 w-full"
-                    onClick={() => {
-                      setSelectedProjectId(project.id);
-                      setCurrentView('my-tasks');
-                    }}
-                  >
-                    Xem việc của tôi
-                  </Button>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedProjectId(project.id);
+                        setCurrentView('my-tasks');
+                      }}
+                    >
+                      Xem việc của tôi
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedProjectId(project.id);
+                        setCurrentView('team');
+                      }}
+                    >
+                      <Users className="mr-1.5 h-4 w-4" />
+                      Nhóm & tiến độ
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );
