@@ -155,7 +155,9 @@ export function AdminActivityView() {
                 <div key={j} className="flex gap-4 p-4 rounded-lg border">
                   <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
                   <div className="flex-1 space-y-2">
-                    <div className="h-4 w-48 bg-muted rounded animate-pulse" />\n                    <div className="h-3 w-32 bg-muted rounded animate-pulse" />\n                  </div>
+                    <div className="h-4 w-48 bg-muted rounded animate-pulse" />
+                    <div className="h-3 w-32 bg-muted rounded animate-pulse" />
+                  </div>
                 </div>
               ))}
             </div>

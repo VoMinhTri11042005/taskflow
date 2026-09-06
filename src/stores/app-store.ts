@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 import type { ViewType, TeamMember, Project, Task, DashboardStats, User, Notification, ActivityLog, Poll } from '@/types';
+import { withNormalizedProjectName } from '@/lib/project-name';
+
+function normalizeTaskProject(task: Task): Task {
+  return task.project
+    ? { ...task, project: withNormalizedProjectName(task.project) }
+    : task;
+}
 
 interface AppState {
   currentView: ViewType;
@@ -64,9 +71,13 @@ export const useAppStore = create<AppState>((set) => ({
   members: [],
   setMembers: (members) => set({ members: Array.isArray(members) ? members : [] }),
   projects: [],
-  setProjects: (projects) => set({ projects: Array.isArray(projects) ? projects : [] }),
+  setProjects: (projects) => set({
+    projects: Array.isArray(projects) ? projects.map(withNormalizedProjectName) : [],
+  }),
   tasks: [],
-  setTasks: (tasks) => set({ tasks: Array.isArray(tasks) ? tasks : [] }),
+  setTasks: (tasks) => set({
+    tasks: Array.isArray(tasks) ? tasks.map(normalizeTaskProject) : [],
+  }),
   stats: null,
   setStats: (stats) => set({ stats }),
 

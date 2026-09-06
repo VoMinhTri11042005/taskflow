@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { canAssignProjectMember, canManageProject, isManager } from '@/lib/permissions'
+import { withNormalizedProjectName } from '@/lib/project-name'
 
 const createTaskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -13,6 +14,10 @@ const createTaskSchema = z.object({
   projectId: z.string().min(1, 'Project ID is required'),
   assigneeId: z.string().optional().nullable(),
 })
+
+function serializeTask<T extends { project: { name: string } }>(task: T): T {
+  return { ...task, project: withNormalizedProjectName(task.project) }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,7 +60,9 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json(tasks)
+    return NextResponse.json(tasks.map(serializeTask), {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    })
   } catch (error) {
     console.error('Error fetching tasks:', error)
     return NextResponse.json(
@@ -115,7 +122,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(task, { status: 201 })
+    return NextResponse.json(serializeTask(task), { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

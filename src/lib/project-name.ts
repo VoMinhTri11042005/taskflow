@@ -13,3 +13,8 @@ export function normalizeProjectName(value: string) {
 export function getProjectDisplayName(value: string) {
   return normalizeProjectName(value) || 'Dự án chưa đặt tên';
 }
+
+/** Preserve a project object while making its label safe for UI/API output. */
+export function withNormalizedProjectName<T extends { name: string }>(project: T): T {
+  return { ...project, name: getProjectDisplayName(project.name) };
+}

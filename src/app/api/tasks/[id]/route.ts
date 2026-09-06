@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { canAccessTask, canAssignProjectMember, canManageProject, canManageTask } from '@/lib/permissions'
+import { withNormalizedProjectName } from '@/lib/project-name'
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
@@ -13,6 +14,10 @@ const updateTaskSchema = z.object({
   projectId: z.string().optional(),
   assigneeId: z.string().optional().nullable(),
 })
+
+function serializeTask<T extends { project: { name: string } }>(task: T): T {
+  return { ...task, project: withNormalizedProjectName(task.project) }
+}
 
 export async function GET(
   request: NextRequest,
@@ -36,7 +41,9 @@ export async function GET(
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
 
-    return NextResponse.json(task)
+    return NextResponse.json(serializeTask(task), {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
+    })
   } catch (error) {
     console.error('Error fetching task:', error)
     return NextResponse.json(
@@ -141,7 +148,7 @@ export async function PUT(
       })
     }
 
-    return NextResponse.json(task)
+    return NextResponse.json(serializeTask(task))
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

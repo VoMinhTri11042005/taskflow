@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { Task, TeamMember, Project } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getProjectDisplayName } from '@/lib/project-name';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -334,7 +335,7 @@ export function BoardView() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 shrink-0">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight truncate">
-            {currentProject ? currentProject.name : 'Bảng công việc'}
+            {currentProject ? getProjectDisplayName(currentProject.name) : 'Bảng công việc'}
           </h1>
           <p className="text-muted-foreground">
             {currentProject ? currentProject.description : 'Tất cả công việc của nhóm'}
@@ -439,8 +440,9 @@ export function BoardView() {
                                   <div
                                     className="h-1.5 w-1.5 rounded-full"
                                     style={{ backgroundColor: project.color }}
-                                  />\n                                  <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">
-                                    {project.name}
+                                  />
+                                  <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">
+                                    {getProjectDisplayName(project.name)}
                                   </span>
                                 </div>
                               )}
@@ -729,7 +731,7 @@ export function BoardView() {
                     {detailTask.project && (
                       <div className="flex items-center gap-2">
                         <div className="h-2.5 w-6 rounded-full" style={{ backgroundColor: detailTask.project.color }} />
-                        <span className="text-sm font-medium">{detailTask.project.name}</span>
+                        <span className="text-sm font-medium">{getProjectDisplayName(detailTask.project.name)}</span>
                       </div>
                     )}
                   </div>
