@@ -50,7 +50,10 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { createdAt: 'desc' },
     })
-    return NextResponse.json(projects)
+    return NextResponse.json(
+      projects.map((project) => ({ ...project, name: normalizeProjectName(project.name) })),
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    )
   } catch (error) {
     console.error('Error fetching projects:', error)
     return NextResponse.json(

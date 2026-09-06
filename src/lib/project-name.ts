@@ -1,7 +1,9 @@
 /** Keep project labels single-line and safe anywhere they are displayed. */
 export function normalizeProjectName(value: string) {
   return value
-    .replace(/\\[nr]/g, ' ')
+    // Some older form submissions stored one or more literal backslashes
+    // before `n`/`r` (for example `\\n EXCEL`). Remove the whole sequence.
+    .replace(/\\+[nr]/g, ' ')
     .replace(/[\u0000-\u001F\u007F]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();

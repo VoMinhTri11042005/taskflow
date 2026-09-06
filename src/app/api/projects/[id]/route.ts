@@ -42,7 +42,10 @@ export async function GET(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    return NextResponse.json(project)
+    return NextResponse.json(
+      { ...project, name: normalizeProjectName(project.name) },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    )
   } catch (error) {
     console.error('Error fetching project:', error)
     return NextResponse.json(
