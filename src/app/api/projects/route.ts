@@ -3,9 +3,15 @@ import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { isLeader, isManager } from '@/lib/permissions'
+import { normalizeProjectName } from '@/lib/project-name'
+
+const projectNameSchema = z
+  .string()
+  .transform(normalizeProjectName)
+  .pipe(z.string().min(1, 'Tên dự án không được để trống').max(120, 'Tên dự án tối đa 120 ký tự'))
 
 const createProjectSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
+  name: projectNameSchema,
   description: z.string().optional().nullable(),
   color: z.string().optional().default('#10b981'),
   status: z.string().optional().default('active'),

@@ -39,6 +39,7 @@ import { Plus, Pencil, Trash2, FolderKanban, Archive } from 'lucide-react';
 import { toast } from 'sonner';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 import { ProjectMembersDialog } from '@/components/views/leader/project-members-dialog';
+import { getProjectDisplayName, normalizeProjectName } from '@/lib/project-name';
 
 const projectColors = [
   '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
@@ -76,20 +77,24 @@ export function ProjectsView() {
 
   function openEditDialog(project: Project) {
     setEditingProject(project);
-    setFormName(project.name);
+    setFormName(normalizeProjectName(project.name));
     setFormDesc(project.description || '');
     setFormColor(project.color);
     setDialogOpen(true);
   }
 
   async function handleSave() {
-    if (!formName.trim()) return;
+    const projectName = normalizeProjectName(formName);
+    if (!projectName) {
+      toast.error('Vui lòng nhập tên dự án');
+      return;
+    }
     try {
       if (editingProject) {
         const response = await fetch(`/api/projects/${editingProject.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: formName, description: formDesc || null, color: formColor }),
+          body: JSON.stringify({ name: projectName, description: formDesc || null, color: formColor }),
         });
         await ensureApiSuccess(response, 'Không thể cập nhật dự án');
         toast.success('Đã cập nhật dự án');
@@ -97,7 +102,7 @@ export function ProjectsView() {
         const response = await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: formName, description: formDesc || null, color: formColor }),
+          body: JSON.stringify({ name: projectName, description: formDesc || null, color: formColor }),
         });
         await ensureApiSuccess(response, 'Không thể tạo dự án');
         toast.success('Đã tạo dự án mới');
@@ -239,7 +244,9 @@ export function ProjectsView() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredProjects.map((project) => (
+          {filteredProjects.map((project) => {
+            const projectName = getProjectDisplayName(project.name);
+            return (
             <Card
               key={project.id}
               className="group hover:shadow-md transition-shadow"
@@ -252,7 +259,7 @@ export function ProjectsView() {
                       style={{ backgroundColor: project.color }}
                     />
                     <CardTitle className="text-base truncate">
-                      {project.name}
+                      {projectName}
                     </CardTitle>
                   </div>
                   <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
@@ -290,7 +297,7 @@ export function ProjectsView() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Xóa dự án?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Dự án &quot;{project.name}&quot; và tất cả công việc liên quan sẽ bị xóa vĩnh viễn.
+                            Dự án &quot;{projectName}&quot; và tất cả công việc liên quan sẽ bị xóa vĩnh viễn.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -333,7 +340,8 @@ export function ProjectsView() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

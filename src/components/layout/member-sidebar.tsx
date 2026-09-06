@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { getProjectDisplayName } from '@/lib/project-name';
 
 const navItems: { id: MemberViewType; label: string; icon: React.ElementType; showBadge?: boolean }[] = [
   { id: 'my-tasks', label: 'Công việc của tôi', icon: CheckSquare },
@@ -143,23 +144,32 @@ export function MemberSidebar() {
 
       {/* Projects quick filter */}
       {showFull && (
-        <div className="p-3">
-          <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Dự án nhanh
-          </p>
-          <div className="max-h-36 overflow-y-auto space-y-0.5">
+        <div className="px-3 pb-3 pt-2">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <FolderKanban className="h-3.5 w-3.5" />
+              <span>Dự án nhanh</span>
+            </div>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {projects.filter((project) => project.status === 'active').length}
+            </span>
+          </div>
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border bg-muted/20 p-1.5">
             <button
               onClick={() => {
                 setSelectedProjectId(null);
                 setCurrentView('my-tasks');
               }}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent',
-                selectedProjectId === null ? 'bg-accent font-medium' : 'text-muted-foreground'
+                'group flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all hover:bg-background hover:shadow-sm',
+                selectedProjectId === null ? 'bg-background font-semibold text-foreground shadow-sm ring-1 ring-border/60' : 'text-muted-foreground'
               )}
             >
-              <span className="h-2 w-2 rounded-full bg-gray-400" />
-              Tất cả dự án
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-200 text-slate-600">
+                <FolderKanban className="h-3.5 w-3.5" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-left">Tất cả dự án</span>
+              {selectedProjectId === null && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
             </button>
             {projects.filter((p) => p.status === 'active').map((project) => (
               <button
@@ -169,16 +179,19 @@ export function MemberSidebar() {
                   setCurrentView('my-tasks');
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent truncate',
-                  selectedProjectId === project.id ? 'bg-accent font-medium' : 'text-muted-foreground'
+                  'group flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all hover:bg-background hover:shadow-sm',
+                  selectedProjectId === project.id ? 'bg-background font-semibold text-foreground shadow-sm ring-1 ring-border/60' : 'text-muted-foreground'
                 )}
-                title={project.name}
+                title={getProjectDisplayName(project.name)}
               >
                 <span
-                  className="h-2 w-2 rounded-full shrink-0"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white shadow-sm"
                   style={{ backgroundColor: project.color }}
-                />
-                <span className="truncate">{project.name}</span>
+                >
+                  <FolderKanban className="h-3.5 w-3.5" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-left">{getProjectDisplayName(project.name)}</span>
+                {selectedProjectId === project.id && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
               </button>
             ))}
           </div>

@@ -3,9 +3,15 @@ import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { canAccessProject, canManageProject } from '@/lib/permissions'
+import { normalizeProjectName } from '@/lib/project-name'
+
+const projectNameSchema = z
+  .string()
+  .transform(normalizeProjectName)
+  .pipe(z.string().min(1, 'Tên dự án không được để trống').max(120, 'Tên dự án tối đa 120 ký tự'))
 
 const updateProjectSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: projectNameSchema.optional(),
   description: z.string().optional().nullable(),
   color: z.string().optional(),
   status: z.string().optional(),
