@@ -130,6 +130,7 @@ export interface Poll {
   title: string;
   description?: string | null;
   status: 'active' | 'closed';
+  allowMultipleChoices: boolean;
   createdAt: string;
   updatedAt: string;
   createdByUserId: string;
@@ -142,6 +143,7 @@ export interface PollOption {
   label: string;
   pollId: string;
   votes?: PollVote[];
+  _count?: { votes: number };
 }
 
 export interface PollVote {

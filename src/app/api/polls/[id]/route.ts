@@ -18,14 +18,12 @@ export async function GET(
       include: {
         options: {
           include: {
+            _count: {
+              select: { votes: true },
+            },
             votes: {
-              include: {
-                user: {
-                  select: {
-                    name: true,
-                  },
-                },
-              },
+              where: { userId: session.id },
+              select: { id: true, createdAt: true, userId: true, optionId: true, pollId: true },
             },
           },
         },
@@ -50,9 +48,9 @@ export async function GET(
     if (session.role === 'member') {
       const member = await db.user.findUnique({
         where: { id: session.id },
-        select: { leaderId: true },
+        select: { leaderId: true, role: true, status: true },
       })
-      if (!member?.leaderId || poll.createdByUserId !== member.leaderId) {
+      if (member?.role !== 'member' || member.status !== 'approved' || !member.leaderId || poll.createdByUserId !== member.leaderId) {
         return NextResponse.json({ error: 'Bạn không có quyền xem bình chọn này' }, { status: 403 })
       }
     }

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -31,6 +32,7 @@ export function AdminPollsView() {
   const [formTitle, setFormTitle] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formOptions, setFormOptions] = useState<string[]>(['', '']);
+  const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -54,6 +56,7 @@ export function AdminPollsView() {
     setFormTitle('');
     setFormDesc('');
     setFormOptions(['', '']);
+    setAllowMultipleChoices(false);
     setCreateOpen(true);
   }
 
@@ -97,6 +100,7 @@ export function AdminPollsView() {
           title: formTitle.trim(),
           description: formDesc.trim() || null,
           options: validOptions,
+          allowMultipleChoices,
         }),
       });
       if (!res.ok) {
@@ -212,6 +216,21 @@ export function AdminPollsView() {
                   placeholder="Mô tả thêm (không bắt buộc)..."
                   rows={2}
                 />
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <Label htmlFor="allow-multiple-choices" className="cursor-pointer">Cho phép chọn nhiều phương án</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Bật để mỗi Thành viên có thể tick nhiều lựa chọn, giống Bình chọn Zalo.
+                    </p>
+                  </div>
+                  <Switch
+                    id="allow-multiple-choices"
+                    checked={allowMultipleChoices}
+                    onCheckedChange={setAllowMultipleChoices}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -340,6 +359,9 @@ export function AdminPollsView() {
                         >
                           {isActive ? 'Đang mở' : 'Đã đóng'}
                         </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {poll.allowMultipleChoices ? 'Chọn nhiều' : 'Chọn một'}
+                        </Badge>
                       </div>
                       {poll.description && (
                         <p className="text-sm text-muted-foreground">{poll.description}</p>
@@ -425,7 +447,7 @@ export function AdminPollsView() {
 
                   {/* Total votes */}
                   <div className="flex items-center justify-between pt-2 border-t">
-                    <span className="text-sm text-muted-foreground">Tổng số phiếu</span>
+                    <span className="text-sm text-muted-foreground">Tổng lượt chọn</span>
                     <Badge variant="outline" className="font-semibold">
                       {totalVotes}
                     </Badge>

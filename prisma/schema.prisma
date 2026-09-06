@@ -182,6 +182,7 @@ model Poll {
   title       String
   description String?
   status      String   @default("active")
+  allowMultipleChoices Boolean @default(false) @map("allow_multiple_choices")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -215,7 +216,8 @@ model PollVote {
   pollId    String     @map("poll_id")
   poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, pollId])
+  @@unique([userId, optionId])
+  @@index([pollId, userId])
   @@map("poll_votes")
 }
 
