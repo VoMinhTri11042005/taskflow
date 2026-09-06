@@ -25,9 +25,15 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
+    // Requests created from a project QR must be reviewed in that project's
+    // roster. Keeping them out of the generic queue prevents an account from
+    // being approved while its ProjectMember record remains pending.
+    const pendingProjectFilter = status === 'pending'
+      ? { projectMemberships: { none: { status: 'pending' } } }
+      : {};
     const baseWhere = session.role === 'leader'
-      ? { role: 'member', leaderId: session.id }
-      : undefined;
+      ? { role: 'member', leaderId: session.id, ...pendingProjectFilter }
+      : pendingProjectFilter;
 
     const users = await db.user.findMany({
       where: status ? { ...baseWhere, status } : baseWhere,
@@ -168,6 +174,20 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Bạn chỉ được quản lý Member thuộc nhóm của mình' }, { status: 403 });
     }
 
+    const pendingProjectMembership = await db.projectMember.findFirst({
+      where: { userId: targetUser.id, status: 'pending' },
+      select: { projectId: true },
+    });
+    if (
+      pendingProjectMembership &&
+      ((status === 'approved' || status === 'rejected') ||
+        (leaderId !== undefined && leaderId !== targetUser.leaderId))
+    ) {
+      return NextResponse.json({
+        error: 'Yêu cầu từ QR/link dự án phải được duyệt hoặc từ chối trong từng dự án.',
+      }, { status: 409 });
+    }
+
     if (role && !['admin', 'leader', 'member'].includes(role)) {
       return NextResponse.json({ error: 'Vai trò không hợp lệ' }, { status: 400 });
     }
@@ -178,6 +198,18 @@ export async function PATCH(request: NextRequest) {
 
     if (targetUser.role !== 'admin' && role === 'admin') {
       return NextResponse.json({ error: 'Hệ thống chỉ cho phép một tài khoản admin' }, { status: 409 });
+    }
+
+    if (
+      targetUser.role === 'leader' &&
+      ((role && role !== 'leader') || (status && status !== 'approved'))
+    ) {
+      const ownedProjectCount = await db.project.count({ where: { leaderId: targetUser.id } });
+      if (ownedProjectCount > 0) {
+        return NextResponse.json({
+          error: 'Leader này đang sở hữu dự án. Hãy chuyển hoặc xóa các dự án trước khi đổi vai trò hay từ chối tài khoản.',
+        }, { status: 409 });
+      }
     }
 
     if (session.role === 'leader' && role && role !== 'member') {
@@ -226,30 +258,76 @@ export async function PATCH(request: NextRequest) {
     if (normalizedName && await isAccountNameTaken(normalizedName, targetUser.id)) {
       return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 });
     }
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : null;
+    if (normalizedEmail && normalizedEmail !== targetUser.email) {
+      const [emailOwner, teamRecord] = await Promise.all([
+        db.user.findUnique({ where: { email: normalizedEmail }, select: { id: true } }),
+        db.teamMember.findUnique({ where: { email: normalizedEmail }, select: { id: true } }),
+      ]);
+      if (emailOwner || teamRecord) {
+        return NextResponse.json({ error: 'Email đã tồn tại trong hệ thống' }, { status: 409 });
+      }
+    }
 
     const updateData: Record<string, unknown> = {};
     if (status) updateData.status = status;
     if (role) updateData.role = role;
     if (normalizedName) updateData.name = normalizedName;
-    if (email) updateData.email = email.toLowerCase();
+    if (normalizedEmail) updateData.email = normalizedEmail;
     if (password) updateData.password = hashSync(password, 10);
     if (leaderId !== undefined) updateData.leaderId = leaderId;
     if (role && role !== 'member') updateData.leaderId = null;
 
     const hasApprovalDecision =
       (status === 'approved' || status === 'rejected') && status !== targetUser.status;
+    const membershipNeedsCleanup = targetUser.role === 'member' && (
+      (role !== undefined && role !== 'member') ||
+      (leaderId !== undefined && leaderId !== targetUser.leaderId)
+    );
 
-    const user = await db.user.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        color: true,
-      },
+    const user = await db.$transaction(async (tx) => {
+      const teamMember = await tx.teamMember.findUnique({
+        where: { email: targetUser.email },
+        select: { id: true },
+      });
+      const updated = await tx.user.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          color: true,
+        },
+      });
+
+      if (teamMember) {
+        const teamMemberData: { name?: string; email?: string; role?: string } = {};
+        if (normalizedName) teamMemberData.name = normalizedName;
+        if (normalizedEmail) teamMemberData.email = normalizedEmail;
+        if (role) teamMemberData.role = role;
+        if (Object.keys(teamMemberData).length > 0) {
+          await tx.teamMember.update({ where: { id: teamMember.id }, data: teamMemberData });
+        }
+      }
+
+      if (membershipNeedsCleanup) {
+        const memberships = await tx.projectMember.findMany({
+          where: { userId: targetUser.id },
+          select: { projectId: true },
+        });
+        if (teamMember && memberships.length > 0) {
+          await tx.task.updateMany({
+            where: { assigneeId: teamMember.id, projectId: { in: memberships.map((membership) => membership.projectId) } },
+            data: { assigneeId: null },
+          });
+        }
+        await tx.projectMember.deleteMany({ where: { userId: targetUser.id } });
+      }
+
+      return updated;
     });
 
     if (user.status === 'approved') {

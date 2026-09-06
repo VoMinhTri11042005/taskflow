@@ -16,19 +16,30 @@ export async function GET(request: NextRequest) {
     const session = getSession(request)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const where = session.role === 'admin'
-      ? { id: '__no_project_access__' }
-      : session.role === 'leader'
-        ? { leaderId: session.id }
-        : session.teamMemberId
-          ? { tasks: { some: { assigneeId: session.teamMemberId } } }
-          : { id: '__no_project_access__' }
+    let where: Record<string, unknown> = { id: '__no_project_access__' }
+    if (session.role === 'leader') {
+      where = { leaderId: session.id }
+    } else if (session.role === 'member') {
+      const memberAccount = await db.user.findUnique({
+        where: { id: session.id },
+        select: { role: true, status: true, leaderId: true },
+      })
+      if (memberAccount?.role === 'member' && memberAccount.status === 'approved' && memberAccount.leaderId) {
+        where = {
+          leaderId: memberAccount.leaderId,
+          members: { some: { userId: session.id, status: 'approved' } },
+        }
+      }
+    }
 
     const projects = await db.project.findMany({
       where,
       include: {
         _count: {
-          select: { tasks: true },
+          select: {
+            tasks: true,
+            members: { where: { status: 'approved' } },
+          },
         },
       },
       orderBy: { createdAt: 'desc' },

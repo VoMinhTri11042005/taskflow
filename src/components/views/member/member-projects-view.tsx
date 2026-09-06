@@ -5,6 +5,7 @@ import { useAppStore } from '@/stores/app-store';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { FolderKanban } from 'lucide-react';
 import { readApiJson } from '@/lib/client-api';
@@ -18,7 +19,7 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 };
 
 export function MemberProjectsView() {
-  const { tasks, setTasks, projects, setProjects } = useAppStore();
+  const { tasks, setTasks, projects, setProjects, setCurrentView, setSelectedProjectId } = useAppStore();
 
   useEffect(() => {
     fetch('/api/tasks')
@@ -49,7 +50,7 @@ export function MemberProjectsView() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dự án nhóm</h1>
-        <p className="text-muted-foreground">Xem tổng quan các dự án đang hoạt động</p>
+        <p className="text-muted-foreground">Các dự án bạn đã được Leader duyệt tham gia</p>
       </div>
 
       {/* Projects grid */}
@@ -59,7 +60,7 @@ export function MemberProjectsView() {
             <FolderKanban className="h-12 w-12 text-muted-foreground/40 mb-4" />
             <h3 className="text-lg font-medium text-muted-foreground">Chưa có dự án nào</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Dự án sẽ xuất hiện ở đây khi quản trị viên tạo
+              Dự án sẽ xuất hiện ở đây sau khi Leader duyệt bạn vào dự án
             </p>
           </CardContent>
         </Card>
@@ -110,11 +111,22 @@ export function MemberProjectsView() {
                     })}
                   </div>
 
-                  {/* Total */}
+                  {/* Personal task total */}
                   <div className="mt-3 pt-3 border-t flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Tổng cộng</span>
+                    <span className="text-muted-foreground">Công việc của bạn</span>
                     <span className="font-semibold">{stats.total} việc</span>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => {
+                      setSelectedProjectId(project.id);
+                      setCurrentView('my-tasks');
+                    }}
+                  >
+                    Xem việc của tôi
+                  </Button>
                 </CardContent>
               </Card>
             );

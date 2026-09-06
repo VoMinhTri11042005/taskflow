@@ -26,6 +26,7 @@ model User {
   votes         PollVote[]
   timeLogs      TimeLog[]
   ledProjects   Project[] @relation("ProjectLeader")
+  projectMemberships ProjectMember[]
   leaderId      String?  @map("leader_id")
   leader        User?    @relation("LeaderMembers", fields: [leaderId], references: [id], onDelete: SetNull)
   managedMembers User[]  @relation("LeaderMembers")
@@ -79,9 +80,43 @@ model Project {
   leader   User?   @relation("ProjectLeader", fields: [leaderId], references: [id], onDelete: SetNull)
 
   tasks Task[]
+  members ProjectMember[]
+  invites ProjectInvite[]
 
   @@index([leaderId])
   @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  status    String   @default("approved")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  projectId String  @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String  @map("user_id")
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId, status])
+  @@map("project_members")
+}
+
+model ProjectInvite {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  label     String?
+  active    Boolean  @default(true) @map("is_active")
+  useCount  Int      @default(0) @map("use_count")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  projectId String  @map("project_id")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, active])
+  @@map("project_invites")
 }
 
 model Task {

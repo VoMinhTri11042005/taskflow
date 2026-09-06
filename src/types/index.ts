@@ -23,7 +23,7 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   leaderId?: string | null;
-  _count?: { tasks: number };
+  _count?: { tasks: number; members?: number };
 }
 
 export interface Task {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
-import { canAccessTask, canManageProject, canManageTask } from '@/lib/permissions'
+import { canAccessTask, canAssignProjectMember, canManageProject, canManageTask } from '@/lib/permissions'
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
@@ -72,12 +72,21 @@ export async function PUT(
         return NextResponse.json({ error: 'Bạn không có quyền chuyển công việc sang dự án này' }, { status: 403 })
       }
       if (validated.assigneeId) {
-        const assignee = await db.teamMember.findUnique({ where: { id: validated.assigneeId }, select: { role: true, email: true } })
-        if (!assignee || assignee.role !== 'member') return NextResponse.json({ error: 'Chỉ có thể giao việc cho tài khoản Member' }, { status: 400 })
-        const memberAccount = await db.user.findUnique({ where: { email: assignee.email }, select: { role: true, status: true, leaderId: true } })
-        if (memberAccount?.role !== 'member' || memberAccount.status !== 'approved' || memberAccount.leaderId !== session.id) {
-          return NextResponse.json({ error: 'Bạn chỉ có thể giao việc cho Member thuộc nhóm của mình' }, { status: 403 })
+        const destinationProjectId = validated.projectId || currentTask.projectId
+        if (!(await canAssignProjectMember(session, destinationProjectId, validated.assigneeId))) {
+          return NextResponse.json({ error: 'Chỉ có thể giao việc cho Member đã thuộc dự án đích' }, { status: 403 })
         }
+      }
+      if (
+        validated.projectId &&
+        validated.projectId !== currentTask.projectId &&
+        validated.assigneeId === undefined &&
+        currentTask.assigneeId &&
+        !(await canAssignProjectMember(session, validated.projectId, currentTask.assigneeId))
+      ) {
+        return NextResponse.json({
+          error: 'Hãy bỏ giao hoặc chọn Member thuộc dự án đích trước khi chuyển công việc',
+        }, { status: 409 })
       }
     }
 

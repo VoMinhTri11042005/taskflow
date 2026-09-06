@@ -74,7 +74,7 @@ export async function PUT(
     if (current.role === 'admin') return NextResponse.json({ error: 'Không thể chỉnh sửa tài khoản admin duy nhất ở đây' }, { status: 403 })
     const currentAccount = await db.user.findUnique({
       where: { email: current.email },
-      select: { id: true, leaderId: true },
+      select: { id: true, role: true, leaderId: true },
     })
     if (session.role === 'leader' && (current.role !== 'member' || currentAccount?.leaderId !== session.id)) {
       return NextResponse.json({ error: 'Bạn chỉ được cập nhật Member thuộc nhóm của mình' }, { status: 403 })
@@ -83,6 +83,12 @@ export async function PUT(
     const validated = updateMemberSchema.parse(body)
     if (validated.role && !['leader', 'member'].includes(validated.role)) return NextResponse.json({ error: 'Vai trò không hợp lệ' }, { status: 400 })
     if (session.role === 'leader' && validated.role && validated.role !== 'member') return NextResponse.json({ error: 'Leader không được đổi vai trò Member' }, { status: 403 })
+    if (currentAccount?.role === 'leader' && validated.role && validated.role !== 'leader') {
+      const ownedProjectCount = await db.project.count({ where: { leaderId: currentAccount.id } })
+      if (ownedProjectCount > 0) {
+        return NextResponse.json({ error: 'Leader này đang sở hữu dự án. Hãy chuyển hoặc xóa các dự án trước khi đổi vai trò.' }, { status: 409 })
+      }
+    }
     const email = validated.email?.trim().toLowerCase()
     const normalizedName = validated.name !== undefined ? normalizeAccountName(validated.name) : undefined
     if (normalizedName !== undefined && !normalizedName) {
@@ -107,6 +113,10 @@ export async function PUT(
       })
       const account = await tx.user.findUnique({ where: { email: current.email } })
       if (account) {
+        if (account.role === 'member' && validated.role && validated.role !== 'member') {
+          await tx.task.updateMany({ where: { assigneeId: id }, data: { assigneeId: null } })
+          await tx.projectMember.deleteMany({ where: { userId: account.id } })
+        }
         await tx.user.update({ where: { id: account.id, }, data: {
           ...(normalizedName ? { name: normalizedName } : {}),
           ...(email ? { email } : {}),
@@ -160,6 +170,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Bạn chỉ được xóa Member thuộc nhóm của mình' }, { status: 403 })
     }
     if (account?.role === 'admin') return NextResponse.json({ error: 'Không thể xóa tài khoản admin duy nhất' }, { status: 409 })
+    if (account?.role === 'leader') {
+      const ownedProjectCount = await db.project.count({ where: { leaderId: account.id } })
+      if (ownedProjectCount > 0) {
+        return NextResponse.json({ error: 'Leader này đang sở hữu dự án. Hãy chuyển hoặc xóa các dự án trước khi xóa tài khoản.' }, { status: 409 })
+      }
+    }
     await db.$transaction(async (tx) => {
       if (account) await tx.user.delete({ where: { id: account.id } })
       await tx.teamMember.delete({ where: { id } })

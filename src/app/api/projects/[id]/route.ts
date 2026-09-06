@@ -24,7 +24,10 @@ export async function GET(
       where: { id },
       include: {
         _count: {
-          select: { tasks: true },
+          select: {
+            tasks: true,
+            members: { where: { status: 'approved' } },
+          },
         },
       },
     })
@@ -55,14 +58,26 @@ export async function PUT(
     const body = await request.json()
     const validated = updateProjectSchema.parse(body)
 
-    const project = await db.project.update({
-      where: { id },
-      data: validated,
-      include: {
-        _count: {
-          select: { tasks: true },
+    const project = await db.$transaction(async (tx) => {
+      const updated = await tx.project.update({
+        where: { id },
+        data: validated,
+        include: {
+          _count: {
+            select: {
+              tasks: true,
+              members: { where: { status: 'approved' } },
+            },
+          },
         },
-      },
+      })
+      if (validated.status === 'archived') {
+        await tx.projectInvite.updateMany({
+          where: { projectId: id, active: true },
+          data: { active: false },
+        })
+      }
+      return updated
     })
 
     return NextResponse.json(project)

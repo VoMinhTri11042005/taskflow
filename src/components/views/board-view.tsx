@@ -87,13 +87,14 @@ const linkTypeConfig: Record<string, { label: string; icon: React.ElementType; c
   other: { label: 'Liên kết', icon: LinkIcon, color: 'text-slate-600' },
 };
 
+type ProjectAssignee = Pick<TeamMember, 'id' | 'name' | 'email' | 'color'>;
+
 export function BoardView() {
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<Task['status']>('todo');
   const {
     tasks, setTasks,
     projects, setProjects,
-    members, setMembers,
     selectedProjectId,
   } = useAppStore();
 
@@ -110,6 +111,8 @@ export function BoardView() {
   const [formProjectId, setFormProjectId] = useState('');
   const [formAssigneeId, setFormAssigneeId] = useState('');
   const [formDueDate, setFormDueDate] = useState('');
+  const [projectAssignees, setProjectAssignees] = useState<ProjectAssignee[]>([]);
+  const [loadingProjectAssignees, setLoadingProjectAssignees] = useState(false);
 
   // Link form state
   const [linkTitle, setLinkTitle] = useState('');
@@ -131,13 +134,48 @@ export function BoardView() {
       fetch('/api/projects')
         .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
         .then(setProjects),
-      fetch('/api/members')
-        .then((response) => readApiJson<TeamMember[]>(response, 'Không thể tải danh sách thành viên'))
-        .then(setMembers),
     ]).catch((error) => {
       toast.error(error instanceof Error ? error.message : 'Không thể tải dữ liệu công việc');
     });
-  }, [fetchTasks, setProjects, setMembers]);
+  }, [fetchTasks, setProjects]);
+
+  const fetchProjectAssignees = useCallback(async (projectId: string) => {
+    if (!projectId) {
+      return;
+    }
+    setLoadingProjectAssignees(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/members`, { cache: 'no-store' });
+      const data = await readApiJson<{
+        members: Array<{
+          status: string;
+          user: { teamMemberId?: string | null; name: string; email: string; color: string };
+        }>;
+      }>(response, 'Không thể tải thành viên dự án');
+      setProjectAssignees(
+        (data.members || []).flatMap((membership) =>
+          membership.status === 'approved' && membership.user.teamMemberId
+            ? [{
+                id: membership.user.teamMemberId,
+                name: membership.user.name,
+                email: membership.user.email,
+                color: membership.user.color,
+              }]
+            : []
+        )
+      );
+    } catch (error) {
+      setProjectAssignees([]);
+      toast.error(error instanceof Error ? error.message : 'Không thể tải thành viên dự án');
+    } finally {
+      setLoadingProjectAssignees(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!dialogOpen || !formProjectId) return;
+    void Promise.resolve().then(() => fetchProjectAssignees(formProjectId));
+  }, [dialogOpen, formProjectId, fetchProjectAssignees]);
 
   function openCreateDialog(status?: Task['status']) {
     setEditingTask(null);
@@ -145,9 +183,10 @@ export function BoardView() {
     setFormDesc('');
     setFormStatus(status || 'todo');
     setFormPriority('medium');
-    setFormProjectId(selectedProjectId || (projects.find(p => p.status === 'active')?.id) || '');
+    setFormProjectId(projects.find((project) => project.id === selectedProjectId && project.status === 'active')?.id || '');
     setFormAssigneeId('');
     setFormDueDate('');
+    setProjectAssignees([]);
     setDialogOpen(true);
   }
 
@@ -160,11 +199,12 @@ export function BoardView() {
     setFormProjectId(task.projectId);
     setFormAssigneeId(task.assigneeId || '');
     setFormDueDate(task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '');
+    setProjectAssignees([]);
     setDialogOpen(true);
   }
 
   async function handleSave() {
-    if (!formTitle.trim()) return;
+    if (!formTitle.trim() || !formProjectId) return;
     try {
       const body: Record<string, unknown> = {
         title: formTitle,
@@ -545,10 +585,14 @@ export function BoardView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Dự án</Label>
-                <Select value={formProjectId} onValueChange={setFormProjectId}>
+                <Select value={formProjectId} onValueChange={(projectId) => {
+                  setFormProjectId(projectId);
+                  setFormAssigneeId('');
+                  setProjectAssignees([]);
+                }}>
                   <SelectTrigger><SelectValue placeholder="Chọn dự án" /></SelectTrigger>
                   <SelectContent>
-                    {projects.filter(p => p.status === 'active').map((p) => (
+                    {projects.filter((project) => project.status === 'active' || project.id === formProjectId).map((p) => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -556,15 +600,26 @@ export function BoardView() {
               </div>
               <div className="space-y-2">
                 <Label>Người thực hiện</Label>
-                <Select value={formAssigneeId} onValueChange={setFormAssigneeId}>
+                <Select
+                  value={formAssigneeId || '__unassigned__'}
+                  onValueChange={(value) => setFormAssigneeId(value === '__unassigned__' ? '' : value)}
+                  disabled={!formProjectId || loadingProjectAssignees}
+                >
                   <SelectTrigger><SelectValue placeholder="Chưa gán" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Chưa gán</SelectItem>
-                    {members.map((m) => (
+                    <SelectItem value="__unassigned__">Chưa gán</SelectItem>
+                    {projectAssignees.map((m) => (
                       <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {!formProjectId ? (
+                  <p className="text-xs text-muted-foreground">Chọn dự án trước khi giao việc.</p>
+                ) : loadingProjectAssignees ? (
+                  <p className="text-xs text-muted-foreground">Đang tải thành viên dự án...</p>
+                ) : projectAssignees.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Dự án chưa có Member được duyệt.</p>
+                ) : null}
               </div>
             </div>
             <div className="space-y-2">
@@ -580,7 +635,7 @@ export function BoardView() {
             <DialogClose asChild>
               <Button variant="outline">Hủy</Button>
             </DialogClose>
-            <Button onClick={handleSave} disabled={!formTitle.trim()}>
+            <Button onClick={handleSave} disabled={!formTitle.trim() || !formProjectId}>
               {editingTask ? 'Cập nhật' : 'Tạo mới'}
             </Button>
           </DialogFooter>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
-import { canManageProject, isManager } from '@/lib/permissions'
+import { canAssignProjectMember, canManageProject, isManager } from '@/lib/permissions'
 
 const createTaskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -23,13 +23,24 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const assigneeId = searchParams.get('assigneeId')
 
-    const where: Record<string, unknown> = session.role === 'admin'
-      ? { id: '__no_task_access__' }
-      : session.role === 'leader'
-        ? { project: { leaderId: session.id } }
-        : session.teamMemberId
-          ? { assigneeId: session.teamMemberId }
-          : { id: '__no_task_access__' }
+    let where: Record<string, unknown> = { id: '__no_task_access__' }
+    if (session.role === 'leader') {
+      where = { project: { leaderId: session.id } }
+    } else if (session.role === 'member' && session.teamMemberId) {
+      const memberAccount = await db.user.findUnique({
+        where: { id: session.id },
+        select: { role: true, status: true, leaderId: true },
+      })
+      if (memberAccount?.role === 'member' && memberAccount.status === 'approved' && memberAccount.leaderId) {
+        where = {
+          assigneeId: session.teamMemberId,
+          project: {
+            leaderId: memberAccount.leaderId,
+            members: { some: { userId: session.id, status: 'approved' } },
+          },
+        }
+      }
+    }
     if (projectId) where.projectId = projectId
     if (status) where.status = status
     if (assigneeId) where.assigneeId = assigneeId
@@ -65,11 +76,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bạn không có quyền tạo công việc trong dự án này' }, { status: 403 })
     }
     if (validated.assigneeId) {
-      const assignee = await db.teamMember.findUnique({ where: { id: validated.assigneeId }, select: { role: true, email: true } })
-      if (!assignee || assignee.role !== 'member') return NextResponse.json({ error: 'Chỉ có thể giao việc cho tài khoản Member' }, { status: 400 })
-      const memberAccount = await db.user.findUnique({ where: { email: assignee.email }, select: { role: true, status: true, leaderId: true } })
-      if (memberAccount?.role !== 'member' || memberAccount.status !== 'approved' || memberAccount.leaderId !== session.id) {
-        return NextResponse.json({ error: 'Bạn chỉ có thể giao việc cho Member thuộc nhóm của mình' }, { status: 403 })
+      if (!(await canAssignProjectMember(session, validated.projectId, validated.assigneeId))) {
+        return NextResponse.json({ error: 'Chỉ có thể giao việc cho Member đã thuộc dự án này' }, { status: 403 })
       }
     }
 

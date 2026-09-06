@@ -61,3 +61,18 @@ public/         # Static assets
   `npm run setup:admin` once against the production database before signing in.
 
 Never commit `.env` or production credentials. For production schema changes, use reviewed Prisma migrations rather than `db:push`.
+
+## Project membership and invitations
+
+- A Leader can own many projects. `ProjectMember` records are the source of truth
+  for which Member belongs to which project; a Member may belong to several
+  projects from the same Leader.
+- Add an approved Member from the project&apos;s **Thành viên** action, or create a
+  QR/link for that specific project. A new person registers as pending; an
+  existing Member sends a pending join request after opening the link.
+- Only the owning Leader can approve a project join request. The generic account
+  approval queue deliberately excludes project-link requests, preventing an
+  account from being approved without project access.
+- Task assignment is validated server-side against the selected project roster.
+  Removing or transferring a Member clears their project membership and current
+  task assignments safely.

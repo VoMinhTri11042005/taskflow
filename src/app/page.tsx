@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { AdminSidebar } from '@/components/layout/admin-sidebar';
 import { LeaderSidebar } from '@/components/layout/leader-sidebar';
@@ -27,16 +27,18 @@ import { useState } from 'react';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { readApiJson } from '@/lib/client-api';
 import type { Notification, Poll, Project, Task, TeamMember, User } from '@/types';
+import { toast } from 'sonner';
 
 export default function HomePage() {
   const {
     currentView, sidebarOpen, setSidebarOpen, setCurrentView,
-    setTasks, setProjects, setMembers, setUser,
+    setTasks, setProjects, setMembers, setUser, setSelectedProjectId,
     user, setNotifications, unreadCount, setUnreadCount, setPolls
   } = useAppStore();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const handledProjectInvite = useRef<string | null>(null);
 
   const isAdmin = user?.role === 'admin';
   const isLeader = user?.role === 'leader';
@@ -102,6 +104,48 @@ export default function HomePage() {
       setCurrentView('leader-dashboard');
     }
   }, [user, currentView, setCurrentView, isAdmin, isLeader]);
+
+  /* A signed-in Member can open a project QR/link directly. LoginForm handles
+     the first-login path; this catches an already-authenticated browser. */
+  useEffect(() => {
+    if (!user || typeof window === 'undefined') return;
+    const token = new URLSearchParams(window.location.search).get('projectInvite')?.trim();
+    if (!token) return;
+    const requestKey = `${user.id}:${token}`;
+    if (handledProjectInvite.current === requestKey) return;
+    handledProjectInvite.current = requestKey;
+
+    const clearInviteFromUrl = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('projectInvite');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    };
+
+    if (user.role !== 'member') {
+      toast.error('Link dự án chỉ dành cho tài khoản Thành viên.');
+      clearInviteFromUrl();
+      return;
+    }
+
+    void fetch('/api/project-invites/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Không thể gửi yêu cầu tham gia dự án');
+        toast.success(data.message || 'Đã gửi yêu cầu tham gia dự án.');
+        if (data.status === 'approved' && data.projectId) {
+          setSelectedProjectId(data.projectId);
+          setCurrentView('my-tasks');
+        }
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : 'Không thể gửi yêu cầu tham gia dự án');
+      })
+      .finally(clearInviteFromUrl);
+  }, [user, setCurrentView, setSelectedProjectId]);
 
   /* Track login activity */
   const trackActivity = useCallback((action: string) => {

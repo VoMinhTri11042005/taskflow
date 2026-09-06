@@ -10,6 +10,7 @@ const registerSchema = z.object({
   password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự'),
   role: z.enum(['member', 'leader']).default('member'),
   inviteToken: z.string().trim().min(16, 'Link mời không hợp lệ').optional(),
+  projectInviteToken: z.string().trim().min(16, 'Link mời dự án không hợp lệ').optional(),
 });
 
 class InvalidInviteError extends Error {}
@@ -19,7 +20,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const parsed = registerSchema.parse(body);
 
-    if (parsed.inviteToken && parsed.role !== 'member') {
+    if (parsed.inviteToken && parsed.projectInviteToken) {
+      return NextResponse.json({ error: 'Chỉ dùng một link mời cho mỗi lần đăng ký' }, { status: 400 });
+    }
+    if ((parsed.inviteToken || parsed.projectInviteToken) && parsed.role !== 'member') {
       return NextResponse.json({ error: 'Link mời chỉ dùng để đăng ký tài khoản Thành viên' }, { status: 400 });
     }
 
@@ -31,7 +35,11 @@ export async function POST(request: NextRequest) {
     const existingUser = await db.user.findUnique({ where: { email: normalizedEmail } });
 
     if (existingUser) {
-      return NextResponse.json({ error: 'Email đã tồn tại trong hệ thống' }, { status: 409 });
+      return NextResponse.json({
+        error: parsed.projectInviteToken
+          ? 'Email này đã có tài khoản. Hãy đăng nhập rồi mở lại link mời dự án để gửi yêu cầu tham gia.'
+          : 'Email đã tồn tại trong hệ thống',
+      }, { status: 409 });
     }
     if (await isAccountNameTaken(normalizedName)) {
       return NextResponse.json({ error: duplicateAccountNameMessage }, { status: 409 });
@@ -53,8 +61,31 @@ export async function POST(request: NextRequest) {
             },
           })
         : null;
+      const projectInvite = parsed.projectInviteToken
+        ? await tx.projectInvite.findFirst({
+            where: { token: parsed.projectInviteToken, active: true },
+            select: {
+              id: true,
+              label: true,
+              projectId: true,
+              project: {
+                select: {
+                  name: true,
+                  status: true,
+                  leaderId: true,
+                  leader: { select: { name: true, role: true, status: true } },
+                },
+              },
+            },
+          })
+        : null;
 
       if (parsed.inviteToken && !invite) throw new InvalidInviteError();
+      if (
+        parsed.projectInviteToken &&
+        (!projectInvite || projectInvite.project.status !== 'active' || !projectInvite.project.leaderId || !projectInvite.project.leader ||
+          projectInvite.project.leader.role !== 'leader' || projectInvite.project.leader.status !== 'approved')
+      ) throw new InvalidInviteError();
 
       const created = await tx.user.create({
         data: {
@@ -64,7 +95,7 @@ export async function POST(request: NextRequest) {
           role: parsed.role,
           status: 'pending',
           color: parsed.role === 'leader' ? '#f59e0b' : '#10b981',
-          leaderId: invite?.leaderId || null,
+          leaderId: projectInvite?.project.leaderId || invite?.leaderId || null,
         },
         select: {
           id: true,
@@ -76,7 +107,23 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      if (invite) {
+      if (projectInvite) {
+        await tx.projectInvite.update({
+          where: { id: projectInvite.id },
+          data: { useCount: { increment: 1 } },
+        });
+        await tx.projectMember.create({
+          data: { projectId: projectInvite.projectId, userId: created.id, status: 'pending' },
+        });
+        await tx.notification.create({
+          data: {
+            userId: projectInvite.project.leaderId!,
+            title: 'Yêu cầu tham gia dự án mới',
+            message: `${created.name} đã đăng ký qua link mời${projectInvite.label ? ` “${projectInvite.label}”` : ''} cho dự án “${projectInvite.project.name}” và đang chờ bạn duyệt.`,
+            type: 'account_pending',
+          },
+        });
+      } else if (invite) {
         await tx.memberInvite.update({
           where: { id: invite.id },
           data: { useCount: { increment: 1 } },
@@ -108,11 +155,17 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      return { user: created, leaderName: invite?.leader.name || null };
+      return {
+        user: created,
+        leaderName: projectInvite?.project.leader?.name || invite?.leader.name || null,
+        projectName: projectInvite?.project.name || null,
+      };
     });
 
     return NextResponse.json({
-      message: registration.leaderName
+      message: registration.projectName && registration.leaderName
+        ? `Đăng ký thành công. Tài khoản và yêu cầu vào dự án “${registration.projectName}” đang chờ Leader ${registration.leaderName} duyệt.`
+        : registration.leaderName
         ? `Đăng ký thành công. Tài khoản đang chờ Leader ${registration.leaderName} duyệt.`
         : parsed.role === 'leader'
         ? 'Yêu cầu đăng ký leader đã được gửi. Chờ quản trị viên duyệt.'

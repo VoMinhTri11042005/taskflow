@@ -25,23 +25,50 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [registrationNotice, setRegistrationNotice] = useState<string | null>(null);
   const [invite, setInvite] = useState<{ token: string; leaderName: string; label: string | null } | null>(null);
+  const [projectInvite, setProjectInvite] = useState<{
+    token: string;
+    projectId: string;
+    projectName: string;
+    leaderName: string;
+    label: string | null;
+  } | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get('invite')?.trim();
+    const searchParams = new URLSearchParams(window.location.search);
+    const projectToken = searchParams.get('projectInvite')?.trim();
+    const memberToken = searchParams.get('invite')?.trim();
+    const token = projectToken || memberToken;
     if (!token) return;
 
     let active = true;
-    setMode('register');
-    setRole('member');
-    fetch(`/api/member-invites/validate?token=${encodeURIComponent(token)}`, { cache: 'no-store' })
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setMode('register');
+      setRole('member');
+      if (projectToken) setLoginRole('member');
+      setInviteError(null);
+    });
+    const endpoint = projectToken ? '/api/project-invites/validate' : '/api/member-invites/validate';
+    fetch(`${endpoint}?token=${encodeURIComponent(token)}`, { cache: 'no-store' })
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok || !data.valid) throw new Error(data.error || 'Link mời không hợp lệ');
-        return data as { leaderName: string; label: string | null };
+        return data as { projectId?: string; projectName?: string; leaderName: string; label: string | null };
       })
       .then((data) => {
-        if (active) setInvite({ token, leaderName: data.leaderName, label: data.label });
+        if (!active) return;
+        if (projectToken && data.projectId && data.projectName) {
+          setProjectInvite({
+            token,
+            projectId: data.projectId,
+            projectName: data.projectName,
+            leaderName: data.leaderName,
+            label: data.label,
+          });
+        } else {
+          setInvite({ token, leaderName: data.leaderName, label: data.label });
+        }
       })
       .catch((error) => {
         if (active) setInviteError(error instanceof Error ? error.message : 'Link mời không hợp lệ');
@@ -62,6 +89,7 @@ export function LoginForm() {
     setPassword('');
     setConfirmPassword('');
     setRole('member');
+    setLoginRole(projectInvite ? 'member' : null);
     setShowPassword(false);
     setLoginFieldsActive(false);
     setRegisterFieldsActive(false);
@@ -91,6 +119,26 @@ export function LoginForm() {
         return;
       }
       const userData = data.user || data;
+      if (projectInvite && userData.role === 'member') {
+        try {
+          const inviteResponse = await fetch('/api/project-invites/accept', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: projectInvite.token }),
+          });
+          const inviteData = await inviteResponse.json();
+          if (inviteResponse.ok) {
+            toast.success(inviteData.message || 'Đã gửi yêu cầu tham gia dự án.');
+            const url = new URL(window.location.href);
+            url.searchParams.delete('projectInvite');
+            window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+          } else {
+            toast.error(inviteData.error || 'Không thể gửi yêu cầu tham gia dự án');
+          }
+        } catch {
+          toast.error('Không thể gửi yêu cầu tham gia dự án');
+        }
+      }
       setUser(userData);
       setCurrentView(
         userData.role === 'admin'
@@ -131,8 +179,9 @@ export function LoginForm() {
  name: name.trim(),
  email: email.trim().toLowerCase(),
  password,
- role: invite ? 'member' : role,
+ role: invite || projectInvite ? 'member' : role,
  inviteToken: invite?.token,
+ projectInviteToken: projectInvite?.token,
         }),
       });
       const data = await res.json();
@@ -205,7 +254,7 @@ export function LoginForm() {
          <p className="text-sm leading-6 text-muted-foreground">{registrationNotice}</p>
        </div>
        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-900">
-         Bạn sẽ đăng nhập được ngay sau khi tài khoản được {invite ? `Leader ${invite.leaderName}` : 'Leader hoặc Quản trị viên'} phê duyệt.
+         Bạn sẽ đăng nhập được ngay sau khi tài khoản được {projectInvite ? `Leader ${projectInvite.leaderName} duyệt vào dự án “${projectInvite.projectName}”` : invite ? `Leader ${invite.leaderName}` : 'Leader hoặc Quản trị viên'} phê duyệt.
        </div>
        <Button type="button" className="w-full" onClick={() => changeMode('login')}>
          Về trang đăng nhập
@@ -213,14 +262,19 @@ export function LoginForm() {
      </div>
    ) : mode === 'login' ? (
      <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
+       {projectInvite && (
+         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+           Bạn đang mở link vào dự án <span className="font-semibold">{projectInvite.projectName}</span>. Hãy đăng nhập bằng tài khoản Thành viên để gửi yêu cầu tham gia.
+         </div>
+       )}
        <div className="space-y-2">
          <Label>Đăng nhập với vai trò</Label>
          <div className="grid grid-cols-3 gap-2">
-           <Button type="button" variant={loginRole === 'admin' ? 'default' : 'outline'} size="sm" className="h-12 flex-col gap-0.5 text-xs" onClick={() => setLoginRole('admin')}>
+           <Button type="button" variant={loginRole === 'admin' ? 'default' : 'outline'} size="sm" className="h-12 flex-col gap-0.5 text-xs" disabled={Boolean(projectInvite)} onClick={() => setLoginRole('admin')}>
              <ShieldCheck className="h-4 w-4" />
              Quản trị
            </Button>
-           <Button type="button" variant={loginRole === 'leader' ? 'default' : 'outline'} size="sm" className="h-12 flex-col gap-0.5 text-xs" onClick={() => setLoginRole('leader')}>
+           <Button type="button" variant={loginRole === 'leader' ? 'default' : 'outline'} size="sm" className="h-12 flex-col gap-0.5 text-xs" disabled={Boolean(projectInvite)} onClick={() => setLoginRole('leader')}>
              <BriefcaseBusiness className="h-4 w-4" />
              Leader
            </Button>
@@ -312,7 +366,19 @@ export function LoginForm() {
            placeholder="email@taskflow.vn"
          />
        </div>
-       {invite ? (
+       {projectInvite ? (
+         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+           <div className="flex items-start gap-2">
+             <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+             <div className="space-y-1">
+               <p className="font-semibold">Bạn được mời vào dự án {projectInvite.projectName}</p>
+               <p className="text-xs leading-5 text-amber-800">
+                 {projectInvite.label ? `Lời mời: ${projectInvite.label}. ` : ''}Tài khoản này sẽ là Thành viên của nhóm {projectInvite.leaderName}; Leader sẽ duyệt riêng yêu cầu vào dự án.
+               </p>
+             </div>
+           </div>
+         </div>
+       ) : invite ? (
          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
            <div className="flex items-start gap-2">
              <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />

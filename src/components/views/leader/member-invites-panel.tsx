@@ -38,20 +38,19 @@ export function MemberInvitesPanel() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
   const [selectedInvite, setSelectedInvite] = useState<MemberInvite | null>(null);
-  const [appOrigin, setAppOrigin] = useState('');
 
   useEffect(() => {
-    setAppOrigin(window.location.origin);
     void loadInvites();
   }, []);
 
   const selectedInviteUrl = useMemo(
-    () => (selectedInvite ? buildInviteUrl(selectedInvite.token, appOrigin) : ''),
-    [selectedInvite, appOrigin]
+    () => (selectedInvite ? buildInviteUrl(selectedInvite.token) : ''),
+    [selectedInvite]
   );
 
-  function buildInviteUrl(token: string, origin = appOrigin) {
-    return `${origin || window.location.origin}/?invite=${encodeURIComponent(token)}`;
+  function buildInviteUrl(token: string) {
+    const origin = typeof window === 'undefined' ? '' : window.location.origin;
+    return `${origin}/?invite=${encodeURIComponent(token)}`;
   }
 
   async function loadInvites() {

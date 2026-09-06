@@ -38,6 +38,7 @@ import {
 import { Plus, Pencil, Trash2, FolderKanban, Archive } from 'lucide-react';
 import { toast } from 'sonner';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
+import { ProjectMembersDialog } from '@/components/views/leader/project-members-dialog';
 
 const projectColors = [
   '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
@@ -310,22 +311,25 @@ export function ProjectsView() {
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
                   {project.description || 'Không có mô tả'}
                 </p>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-xs text-muted-foreground">
-                    {project._count?.tasks || 0} công việc
+                    {project._count?.tasks || 0} công việc · {project._count?.members || 0} thành viên
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => handleToggleArchive(project)}
-                  >
-                    {project.status === 'active' ? (
-                      <><Archive className="mr-1 h-3 w-3" />Lưu trữ</>
-                    ) : (
-                      'Kích hoạt'
-                    )}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <ProjectMembersDialog project={project} onChanged={() => { void fetchProjects(); }} />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => handleToggleArchive(project)}
+                    >
+                      {project.status === 'active' ? (
+                        <><Archive className="mr-1 h-3 w-3" />Lưu trữ</>
+                      ) : (
+                        'Kích hoạt'
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
