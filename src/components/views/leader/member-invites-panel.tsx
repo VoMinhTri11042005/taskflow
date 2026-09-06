@@ -50,7 +50,7 @@ export function MemberInvitesPanel() {
 
   function buildInviteUrl(token: string) {
     const origin = typeof window === 'undefined' ? '' : window.location.origin;
-    return `${origin}/?invite=${encodeURIComponent(token)}`;
+    return `${origin}/join?invite=${encodeURIComponent(token)}`;
   }
 
   async function loadInvites() {

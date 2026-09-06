@@ -60,7 +60,7 @@ export function ProjectMembersDialog({ project, onChanged }: { project: Project;
 
   function buildInviteUrl(token: string) {
     const origin = typeof window === 'undefined' ? '' : window.location.origin;
-    return `${origin}/?projectInvite=${encodeURIComponent(token)}`;
+    return `${origin}/join?projectInvite=${encodeURIComponent(token)}`;
   }
 
   const selectedInviteUrl = selectedInvite ? buildInviteUrl(selectedInvite.token) : '';

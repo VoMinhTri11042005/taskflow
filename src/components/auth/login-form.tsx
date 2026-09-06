@@ -10,9 +10,13 @@ import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound, Briefcas
 import { toast } from 'sonner';
 import { BrandMark } from '@/components/layout/brand-mark';
 
-export function LoginForm() {
+type LoginFormProps = {
+  initialMode?: 'login' | 'register';
+};
+
+export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
   const { setUser, setCurrentView } = useAppStore();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

@@ -39,6 +39,14 @@ export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const handledProjectInvite = useRef<string | null>(null);
+  // New QR codes use /join, but keep older printed QR codes safe too. A
+  // Leader/Admin who scans an old invite must see registration, not their
+  // already-open workspace.
+  const [hasInviteLink] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const searchParams = new URLSearchParams(window.location.search);
+    return Boolean(searchParams.get('projectInvite')?.trim() || searchParams.get('invite')?.trim());
+  });
 
   const isAdmin = user?.role === 'admin';
   const isLeader = user?.role === 'leader';
@@ -121,11 +129,10 @@ export default function HomePage() {
       window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
     };
 
-    if (user.role !== 'member') {
-      toast.error('Link dự án chỉ dành cho tài khoản Thành viên.');
-      clearInviteFromUrl();
-      return;
-    }
+    // Do not clear the token or send a Leader/Admin to their dashboard. The
+    // render below leaves the invitation form visible so this browser can
+    // create or sign in to a Member account deliberately.
+    if (user.role !== 'member') return;
 
     void fetch('/api/project-invites/accept', {
       method: 'POST',
@@ -244,8 +251,8 @@ export default function HomePage() {
     );
   }
 
-  if (!user) {
-    return <LoginForm />;
+  if (!user || (hasInviteLink && user.role !== 'member')) {
+    return <LoginForm initialMode={hasInviteLink ? 'register' : 'login'} />;
   }
 
   const Sidebar = isAdmin ? AdminSidebar : isLeader ? LeaderSidebar : MemberSidebar;
