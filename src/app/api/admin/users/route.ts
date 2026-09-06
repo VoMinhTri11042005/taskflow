@@ -12,6 +12,7 @@ const accountSchema = z.object({
   password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự').optional(),
   status: z.enum(['pending', 'approved', 'rejected']).default('approved'),
   color: z.string().optional(),
+  leaderId: z.string().cuid().nullable().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -24,7 +25,9 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    const baseWhere = session.role === 'leader' ? { role: 'member' } : undefined;
+    const baseWhere = session.role === 'leader'
+      ? { role: 'member', leaderId: session.id }
+      : undefined;
 
     const users = await db.user.findMany({
       where: status ? { ...baseWhere, status } : baseWhere,
@@ -36,6 +39,8 @@ export async function GET(request: NextRequest) {
         role: true,
         status: true,
         color: true,
+        leaderId: true,
+        leader: { select: { name: true } },
         createdAt: true,
         updatedAt: true,
       },
@@ -65,6 +70,17 @@ export async function POST(request: NextRequest) {
     if (session.role === 'leader' && parsed.role !== 'member') {
       return NextResponse.json({ error: 'Leader chỉ có thể tạo tài khoản Member' }, { status: 403 });
     }
+    let assignedLeaderId: string | null = session.role === 'leader' ? session.id : parsed.leaderId || null;
+    if (parsed.role !== 'member') assignedLeaderId = null;
+    if (assignedLeaderId && session.role === 'admin') {
+      const assignedLeader = await db.user.findFirst({
+        where: { id: assignedLeaderId, role: 'leader', status: 'approved' },
+        select: { id: true },
+      });
+      if (!assignedLeader) {
+        return NextResponse.json({ error: 'Leader được chọn không hợp lệ' }, { status: 400 });
+      }
+    }
     const password = parsed.password || 'member123';
 
     const existing = await db.user.findUnique({ where: { email: parsed.email.toLowerCase() } });
@@ -84,6 +100,7 @@ export async function POST(request: NextRequest) {
           status: parsed.status,
           password: hashSync(password, 10),
           color: parsed.color || '#6366f1',
+          leaderId: assignedLeaderId,
         },
         select: {
           id: true,
@@ -133,7 +150,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, status, role, name, email, password } = body;
+    const { id, status, role, name, email, password, leaderId } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Thiếu id tài khoản' }, { status: 400 });
@@ -147,8 +164,8 @@ export async function PATCH(request: NextRequest) {
     if (!targetUser) {
       return NextResponse.json({ error: 'Không tìm thấy tài khoản' }, { status: 404 });
     }
-    if (session.role === 'leader' && targetUser.role !== 'member') {
-      return NextResponse.json({ error: 'Leader chỉ được quản lý tài khoản Member' }, { status: 403 });
+    if (session.role === 'leader' && (targetUser.role !== 'member' || targetUser.leaderId !== session.id)) {
+      return NextResponse.json({ error: 'Bạn chỉ được quản lý Member thuộc nhóm của mình' }, { status: 403 });
     }
 
     if (role && !['admin', 'leader', 'member'].includes(role)) {
@@ -167,8 +184,39 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Leader không được thay đổi vai trò tài khoản' }, { status: 403 });
     }
 
+    if (leaderId !== undefined) {
+      if (session.role !== 'admin') {
+        return NextResponse.json({ error: 'Chỉ Admin mới có thể chuyển Member sang Leader khác' }, { status: 403 });
+      }
+      if ((role || targetUser.role) !== 'member') {
+        return NextResponse.json({ error: 'Chỉ Member mới có thể được gán cho Leader' }, { status: 400 });
+      }
+      if (leaderId !== null) {
+        const assignedLeader = await db.user.findFirst({
+          where: { id: leaderId, role: 'leader', status: 'approved' },
+          select: { id: true },
+        });
+        if (!assignedLeader) {
+          return NextResponse.json({ error: 'Leader được chọn không hợp lệ' }, { status: 400 });
+        }
+      }
+    }
+
     if (targetUser.role === 'admin' && status && status !== 'approved') {
       return NextResponse.json({ error: 'Tài khoản admin phải luôn được duyệt' }, { status: 409 });
+    }
+
+    // A Member who used a Leader's QR/link belongs to that Leader's approval
+    // queue. Admin still manages the account record, but cannot override the
+    // ownership decision made by the invitation flow.
+    const approvalLeaderId = leaderId !== undefined ? leaderId : targetUser.leaderId;
+    if (
+      session.role === 'admin' &&
+      targetUser.role === 'member' &&
+      approvalLeaderId &&
+      (status === 'approved' || status === 'rejected')
+    ) {
+      return NextResponse.json({ error: 'Member này đang chờ Leader sở hữu link mời duyệt' }, { status: 403 });
     }
 
     const normalizedName = typeof name === 'string' ? normalizeAccountName(name) : null;
@@ -185,6 +233,8 @@ export async function PATCH(request: NextRequest) {
     if (normalizedName) updateData.name = normalizedName;
     if (email) updateData.email = email.toLowerCase();
     if (password) updateData.password = hashSync(password, 10);
+    if (leaderId !== undefined) updateData.leaderId = leaderId;
+    if (role && role !== 'member') updateData.leaderId = null;
 
     const hasApprovalDecision =
       (status === 'approved' || status === 'rejected') && status !== targetUser.status;

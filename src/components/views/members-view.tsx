@@ -38,6 +38,7 @@ import {
 import { Plus, Pencil, Trash2, Users, Mail, Shield, Key, KeyRound, Loader2, Check, X, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
+import { MemberInvitesPanel } from '@/components/views/leader/member-invites-panel';
 
 const roleLabels: Record<string, string> = {
   admin: 'Quản trị viên',
@@ -61,12 +62,21 @@ interface MembersViewProps {
 
 export function MembersView({ roleFilter }: MembersViewProps) {
   const { members, setMembers, user } = useAppStore();
-  const [pendingAccounts, setPendingAccounts] = useState<Array<{ id: string; name: string; email: string; role: string; status: string }>>([]);
+  const [pendingAccounts, setPendingAccounts] = useState<Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+    leaderId?: string | null;
+    leader?: { name: string } | null;
+  }>>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formRole, setFormRole] = useState('member');
+  const [formLeaderId, setFormLeaderId] = useState('__unassigned__');
   const [formColor, setFormColor] = useState('#10b981');
   const [formPassword, setFormPassword] = useState('');
 
@@ -94,6 +104,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
     : pendingAccounts;
   const entityLabel = roleFilter === 'leader' ? 'Leader' : 'Thành viên';
   const entityLabelLower = roleFilter === 'leader' ? 'leader' : 'thành viên';
+  const leaderOptions = members.filter((member) => member.role === 'leader' && member.userId);
 
   const fetchMembers = useCallback(async () => {
     const res = await fetch('/api/members');
@@ -159,6 +170,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
     setFormName('');
     setFormEmail('');
     setFormRole(roleFilter || 'member');
+    setFormLeaderId('__unassigned__');
     setFormColor(memberColors[Math.floor(Math.random() * memberColors.length)]);
     setFormPassword('');
     setDialogOpen(true);
@@ -169,6 +181,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
     setFormName(member.name);
     setFormEmail(member.email);
     setFormRole(member.role);
+    setFormLeaderId(member.leaderId || '__unassigned__');
     setFormColor(member.color);
     setFormPassword('');
     setDialogOpen(true);
@@ -177,6 +190,9 @@ export function MembersView({ roleFilter }: MembersViewProps) {
   async function handleSave() {
     if (!formName.trim() || !formEmail.trim()) return;
     try {
+      const leaderId = formRole === 'member' && formLeaderId !== '__unassigned__'
+        ? formLeaderId
+        : null;
       if (editingMember) {
         const response = await fetch(`/api/members/${editingMember.id}`, {
           method: 'PUT',
@@ -185,12 +201,27 @@ export function MembersView({ roleFilter }: MembersViewProps) {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Không thể cập nhật thành viên');
+        if (user?.role === 'admin' && formRole === 'member' && editingMember.userId) {
+          const assignmentResponse = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: editingMember.userId, leaderId }),
+          });
+          await ensureApiSuccess(assignmentResponse, 'Không thể cập nhật Leader quản lý');
+        }
         toast.success('Đã cập nhật thành viên');
       } else {
         const response = await fetch('/api/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: formName, email: formEmail, role: formRole, color: formColor, password: formPassword || undefined }),
+          body: JSON.stringify({
+            name: formName,
+            email: formEmail,
+            role: formRole,
+            color: formColor,
+            password: formPassword || undefined,
+            ...(user?.role === 'admin' && formRole === 'member' ? { leaderId } : {}),
+          }),
         });
         const data = await response.json();
         if (!response.ok) {
@@ -361,6 +392,21 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                   </SelectContent>
                 </Select>
               </div>
+              {user?.role === 'admin' && formRole === 'member' && (
+                <div className="space-y-2">
+                  <Label>Leader quản lý</Label>
+                  <Select value={formLeaderId} onValueChange={setFormLeaderId}>
+                    <SelectTrigger><SelectValue placeholder="Chọn Leader" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__unassigned__">Chưa phân Leader</SelectItem>
+                      {leaderOptions.map((leader) => (
+                        <SelectItem key={leader.userId} value={leader.userId!}>{leader.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Member được gán chỉ do Leader này quản lý.</p>
+                </div>
+              )}
               {!editingMember && (
                 <div className="space-y-2">
                   <Label>Mật khẩu ban đầu *</Label>
@@ -403,6 +449,8 @@ export function MembersView({ roleFilter }: MembersViewProps) {
         </Dialog>
       </div>
 
+      {user?.role === 'leader' && <MemberInvitesPanel />}
+
       {visiblePendingAccounts.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/60">
           <CardContent className="p-5 space-y-4">
@@ -419,15 +467,20 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                   <div className="min-w-0">
                     <p className="font-medium truncate">{account.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{account.email} · {roleLabels[account.role] || account.role}</p>
+                    {user?.role === 'admin' && account.leader && (
+                      <p className="mt-1 text-xs text-amber-700">Đang chờ Leader {account.leader.name} duyệt</p>
+                    )}
                   </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button size="icon" variant="outline" className="text-emerald-600" title="Duyệt" onClick={() => handleApproval(account.id, 'approved')}>
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="outline" className="text-destructive" title="Từ chối" onClick={() => handleApproval(account.id, 'rejected')}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {(user?.role === 'leader' || !account.leaderId) && (
+                    <div className="flex shrink-0 gap-1">
+                      <Button size="icon" variant="outline" className="text-emerald-600" title="Duyệt" onClick={() => handleApproval(account.id, 'approved')}>
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button size="icon" variant="outline" className="text-destructive" title="Từ chối" onClick={() => handleApproval(account.id, 'rejected')}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -479,6 +532,11 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                         <Mail className="h-3 w-3" />
                         <span className="truncate">{member.email}</span>
                       </div>
+                      {user?.role === 'admin' && member.role === 'member' && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {member.leaderName ? `Leader: ${member.leaderName}` : 'Chưa phân Leader'}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">

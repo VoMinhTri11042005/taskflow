@@ -21,6 +21,21 @@ export async function POST(
       )
     }
 
+    if (session.role !== 'member') {
+      return NextResponse.json({ error: 'Chỉ Thành viên mới có thể bình chọn' }, { status: 403 })
+    }
+
+    const [member, poll] = await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { leaderId: true } }),
+      db.poll.findUnique({ where: { id: pollId }, select: { createdByUserId: true } }),
+    ])
+    if (!poll) {
+      return NextResponse.json({ error: 'Không tìm thấy bình chọn' }, { status: 404 })
+    }
+    if (!member?.leaderId || poll.createdByUserId !== member.leaderId) {
+      return NextResponse.json({ error: 'Bạn không có quyền bình chọn trong nhóm này' }, { status: 403 })
+    }
+
     // Verify poll and option exist and belong together
     const option = await db.pollOption.findFirst({
       where: { id: optionId, pollId },

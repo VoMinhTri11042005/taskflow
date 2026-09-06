@@ -65,8 +65,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bạn không có quyền tạo công việc trong dự án này' }, { status: 403 })
     }
     if (validated.assigneeId) {
-      const assignee = await db.teamMember.findUnique({ where: { id: validated.assigneeId }, select: { role: true } })
+      const assignee = await db.teamMember.findUnique({ where: { id: validated.assigneeId }, select: { role: true, email: true } })
       if (!assignee || assignee.role !== 'member') return NextResponse.json({ error: 'Chỉ có thể giao việc cho tài khoản Member' }, { status: 400 })
+      const memberAccount = await db.user.findUnique({ where: { email: assignee.email }, select: { role: true, status: true, leaderId: true } })
+      if (memberAccount?.role !== 'member' || memberAccount.status !== 'approved' || memberAccount.leaderId !== session.id) {
+        return NextResponse.json({ error: 'Bạn chỉ có thể giao việc cho Member thuộc nhóm của mình' }, { status: 403 })
+      }
     }
 
     const task = await db.task.create({

@@ -30,7 +30,14 @@ export async function GET(request: NextRequest) {
     })
     const users = await db.user.findMany({
       where: { email: { in: members.map((member) => member.email) } },
-      select: { id: true, email: true, status: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        leaderId: true,
+        leader: { select: { name: true } },
+      },
     })
     const userByEmail = new Map(users.map((user) => [user.email, user]))
 
@@ -39,13 +46,18 @@ export async function GET(request: NextRequest) {
     const visible = session.role === 'admin'
       ? members.filter((member) => member.role === 'leader' || member.role === 'member')
       : session.role === 'leader'
-        ? members.filter((member) => member.role === 'member')
+        ? members.filter((member) => {
+            const account = userByEmail.get(member.email);
+            return member.role === 'member' && account?.role === 'member' && account.leaderId === session.id;
+          })
         : members.filter((member) => member.id === session.teamMemberId)
 
     return NextResponse.json(visible.map((member) => ({
       ...member,
       userId: userByEmail.get(member.email)?.id || null,
       accountStatus: userByEmail.get(member.email)?.status || 'approved',
+      leaderId: userByEmail.get(member.email)?.leaderId || null,
+      leaderName: userByEmail.get(member.email)?.leader?.name || null,
     })))
   } catch (error) {
     console.error('Error fetching members:', error)
@@ -84,6 +96,7 @@ export async function POST(request: NextRequest) {
           name: normalizedName, email, role, status: 'approved',
           password: hashSync(password, 10), avatar: validated.avatar || null,
           color: validated.color || '#6366f1',
+          leaderId: session.role === 'leader' ? session.id : null,
         },
       })
       await tx.notification.create({

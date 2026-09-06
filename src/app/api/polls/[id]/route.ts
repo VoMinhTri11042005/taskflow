@@ -47,6 +47,15 @@ export async function GET(
     if (session.role === 'leader' && poll.createdByUserId !== session.id) {
       return NextResponse.json({ error: 'Bạn không có quyền xem bình chọn này' }, { status: 403 })
     }
+    if (session.role === 'member') {
+      const member = await db.user.findUnique({
+        where: { id: session.id },
+        select: { leaderId: true },
+      })
+      if (!member?.leaderId || poll.createdByUserId !== member.leaderId) {
+        return NextResponse.json({ error: 'Bạn không có quyền xem bình chọn này' }, { status: 403 })
+      }
+    }
 
     return NextResponse.json(poll)
   } catch (error) {

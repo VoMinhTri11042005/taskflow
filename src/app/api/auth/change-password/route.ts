@@ -38,8 +38,12 @@ export async function POST(request: NextRequest) {
 
     const isChangingAnotherUser = user.id !== session.id
     if (isChangingAnotherUser) {
-      if (session.role !== 'admin' && !(session.role === 'leader' && user.role === 'member')) {
-        return NextResponse.json({ error: 'Bạn không có quyền đổi mật khẩu tài khoản này' }, { status: 403 })
+      const isManagedMember =
+        session.role === 'leader' &&
+        user.role === 'member' &&
+        user.leaderId === session.id
+      if (session.role !== 'admin' && !isManagedMember) {
+        return NextResponse.json({ error: 'Bạn chỉ được đổi mật khẩu Member thuộc nhóm của mình' }, { status: 403 })
       }
     } else {
       const isValidPassword = compareSync(currentPassword, user.password)

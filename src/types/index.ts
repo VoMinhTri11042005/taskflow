@@ -8,6 +8,7 @@ export interface TeamMember {
   createdAt: string;
   updatedAt: string;
   leaderId?: string | null;
+  leaderName?: string | null;
   userId?: string | null;
   accountStatus?: 'pending' | 'approved' | 'rejected' | string;
   _count?: { tasks: number };

@@ -37,11 +37,20 @@ export async function GET(
       return NextResponse.json({ error: 'Tài khoản admin không nằm trong danh sách quản lý' }, { status: 403 })
     }
 
-    if (session.role === 'leader' && member.role !== 'member') {
-      return NextResponse.json({ error: 'Leader chỉ được xem tài khoản Member' }, { status: 403 })
+    const account = await db.user.findUnique({
+      where: { email: member.email },
+      select: { id: true, status: true, leaderId: true, leader: { select: { name: true } } },
+    })
+    if (session.role === 'leader' && (member.role !== 'member' || account?.leaderId !== session.id)) {
+      return NextResponse.json({ error: 'Bạn chỉ được xem Member thuộc nhóm của mình' }, { status: 403 })
     }
-    const account = await db.user.findUnique({ where: { email: member.email }, select: { id: true, status: true } })
-    return NextResponse.json({ ...member, userId: account?.id || null, accountStatus: account?.status || 'approved' })
+    return NextResponse.json({
+      ...member,
+      userId: account?.id || null,
+      accountStatus: account?.status || 'approved',
+      leaderId: account?.leaderId || null,
+      leaderName: account?.leader?.name || null,
+    })
   } catch (error) {
     console.error('Error fetching member:', error)
     return NextResponse.json(
@@ -63,7 +72,13 @@ export async function PUT(
     const current = await db.teamMember.findUnique({ where: { id } })
     if (!current) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     if (current.role === 'admin') return NextResponse.json({ error: 'Không thể chỉnh sửa tài khoản admin duy nhất ở đây' }, { status: 403 })
-    if (session.role === 'leader' && current.role !== 'member') return NextResponse.json({ error: 'Leader chỉ được cập nhật Member' }, { status: 403 })
+    const currentAccount = await db.user.findUnique({
+      where: { email: current.email },
+      select: { id: true, leaderId: true },
+    })
+    if (session.role === 'leader' && (current.role !== 'member' || currentAccount?.leaderId !== session.id)) {
+      return NextResponse.json({ error: 'Bạn chỉ được cập nhật Member thuộc nhóm của mình' }, { status: 403 })
+    }
     const body = await request.json()
     const validated = updateMemberSchema.parse(body)
     if (validated.role && !['leader', 'member'].includes(validated.role)) return NextResponse.json({ error: 'Vai trò không hợp lệ' }, { status: 400 })
@@ -98,6 +113,7 @@ export async function PUT(
           ...(validated.role ? { role: validated.role } : {}),
           ...(validated.avatar !== undefined ? { avatar: validated.avatar } : {}),
           ...(validated.color ? { color: validated.color } : {}),
+          ...(validated.role === 'leader' ? { leaderId: null } : {}),
         } })
       }
       return { ...updated, userId: account?.id || null }
@@ -139,8 +155,10 @@ export async function DELETE(
     const member = await db.teamMember.findUnique({ where: { id } })
     if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     if (member.role === 'admin') return NextResponse.json({ error: 'Không thể xóa tài khoản admin duy nhất' }, { status: 403 })
-    if (session.role === 'leader' && member.role !== 'member') return NextResponse.json({ error: 'Leader chỉ được xóa Member' }, { status: 403 })
-    const account = await db.user.findUnique({ where: { email: member.email }, select: { id: true, role: true } })
+    const account = await db.user.findUnique({ where: { email: member.email }, select: { id: true, role: true, leaderId: true } })
+    if (session.role === 'leader' && (member.role !== 'member' || account?.leaderId !== session.id)) {
+      return NextResponse.json({ error: 'Bạn chỉ được xóa Member thuộc nhóm của mình' }, { status: 403 })
+    }
     if (account?.role === 'admin') return NextResponse.json({ error: 'Không thể xóa tài khoản admin duy nhất' }, { status: 409 })
     await db.$transaction(async (tx) => {
       if (account) await tx.user.delete({ where: { id: account.id } })

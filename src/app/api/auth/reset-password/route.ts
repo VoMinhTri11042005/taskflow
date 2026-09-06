@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       )
     }
-    if (role === 'leader' && user.role !== 'member') {
-      return NextResponse.json({ error: 'Leader chỉ được đặt lại mật khẩu Member' }, { status: 403 })
+    if (role === 'leader' && (user.role !== 'member' || user.leaderId !== session?.id)) {
+      return NextResponse.json({ error: 'Leader chỉ được đặt lại mật khẩu Member thuộc nhóm của mình' }, { status: 403 })
     }
 
     const hashedPassword = hashSync(newPassword, 10)
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId,
         title: 'Đặt lại mật khẩu',
-        message: 'Mật khẩu của bạn đã được quản trị viên đặt lại. Vui lòng đăng nhập bằng mật khẩu mới.',
+        message: `Mật khẩu của bạn đã được ${role === 'leader' ? 'Leader' : 'quản trị viên'} đặt lại. Vui lòng đăng nhập bằng mật khẩu mới.`,
         type: 'warning',
       },
     })

@@ -12,8 +12,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([])
     }
 
+    let where: { createdByUserId: string } | undefined
+    if (session.role === 'leader') {
+      where = { createdByUserId: session.id }
+    } else {
+      const member = await db.user.findUnique({
+        where: { id: session.id },
+        select: { leaderId: true },
+      })
+      if (!member?.leaderId) return NextResponse.json([])
+      where = { createdByUserId: member.leaderId }
+    }
+
     const polls = await db.poll.findMany({
-      where: session.role === 'leader' ? { createdByUserId: session.id } : undefined,
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         options: {

@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "prisma generate && next build",
+    "vercel-build": "prisma migrate deploy && npm run build",
     "start": "next start",
     "lint": "eslint .",
     "db:push": "prisma db push",
@@ -64,6 +65,7 @@
     "next": "^16.1.1",
     "pg": "^8.23.0",
     "prisma": "^6.11.1",
+    "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
     "react-day-picker": "^9.8.0",
     "react-dom": "^19.0.0",

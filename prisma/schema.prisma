@@ -26,8 +26,29 @@ model User {
   votes         PollVote[]
   timeLogs      TimeLog[]
   ledProjects   Project[] @relation("ProjectLeader")
+  leaderId      String?  @map("leader_id")
+  leader        User?    @relation("LeaderMembers", fields: [leaderId], references: [id], onDelete: SetNull)
+  managedMembers User[]  @relation("LeaderMembers")
+  memberInvites MemberInvite[] @relation("InviteLeader")
 
+  @@index([leaderId])
   @@map("users")
+}
+
+model MemberInvite {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  label     String?
+  active    Boolean  @default(true) @map("is_active")
+  useCount  Int      @default(0) @map("use_count")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  leaderId String @map("leader_id")
+  leader   User   @relation("InviteLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+
+  @@index([leaderId, active])
+  @@map("member_invites")
 }
 
 model TeamMember {

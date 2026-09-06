@@ -11,12 +11,11 @@ export async function GET(request: NextRequest) {
 
     let allowedUserIds: string[] | null = null
     if (session.role === 'leader') {
-      const projects = await db.project.findMany({ where: { leaderId: session.id }, select: { id: true } })
-      const tasks = await db.task.findMany({ where: { projectId: { in: projects.map((project) => project.id) }, assigneeId: { not: null } }, select: { assigneeId: true } })
-      const memberIds = [...new Set(tasks.flatMap((task) => task.assigneeId ? [task.assigneeId] : []))]
-      const members = await db.teamMember.findMany({ where: { id: { in: memberIds } }, select: { email: true } })
-      const users = await db.user.findMany({ where: { email: { in: members.map((member) => member.email) } }, select: { id: true } })
-      allowedUserIds = [session.id, ...users.map((user) => user.id)]
+      const members = await db.user.findMany({
+        where: { role: 'member', leaderId: session.id },
+        select: { id: true },
+      })
+      allowedUserIds = [session.id, ...members.map((member) => member.id)]
     } else if (session.role === 'member') {
       allowedUserIds = [session.id]
     }

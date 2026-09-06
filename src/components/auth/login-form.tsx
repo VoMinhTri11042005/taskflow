@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound, BriefcaseBusiness, Clock3 } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound, BriefcaseBusiness, Clock3, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BrandMark } from '@/components/layout/brand-mark';
 
@@ -24,6 +24,33 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [registrationNotice, setRegistrationNotice] = useState<string | null>(null);
+  const [invite, setInvite] = useState<{ token: string; leaderName: string; label: string | null } | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('invite')?.trim();
+    if (!token) return;
+
+    let active = true;
+    setMode('register');
+    setRole('member');
+    fetch(`/api/member-invites/validate?token=${encodeURIComponent(token)}`, { cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok || !data.valid) throw new Error(data.error || 'Link mời không hợp lệ');
+        return data as { leaderName: string; label: string | null };
+      })
+      .then((data) => {
+        if (active) setInvite({ token, leaderName: data.leaderName, label: data.label });
+      })
+      .catch((error) => {
+        if (active) setInviteError(error instanceof Error ? error.message : 'Link mời không hợp lệ');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function changeMode(nextMode: 'login' | 'register') {
     // Login and registration must never share credentials. Besides clearing the
@@ -104,7 +131,8 @@ export function LoginForm() {
  name: name.trim(),
  email: email.trim().toLowerCase(),
  password,
- role,
+ role: invite ? 'member' : role,
+ inviteToken: invite?.token,
         }),
       });
       const data = await res.json();
@@ -177,7 +205,7 @@ export function LoginForm() {
          <p className="text-sm leading-6 text-muted-foreground">{registrationNotice}</p>
        </div>
        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-900">
-         Bạn sẽ đăng nhập được ngay sau khi tài khoản được Leader hoặc Quản trị viên phê duyệt.
+         Bạn sẽ đăng nhập được ngay sau khi tài khoản được {invite ? `Leader ${invite.leaderName}` : 'Leader hoặc Quản trị viên'} phê duyệt.
        </div>
        <Button type="button" className="w-full" onClick={() => changeMode('login')}>
          Về trang đăng nhập
@@ -284,29 +312,44 @@ export function LoginForm() {
            placeholder="email@taskflow.vn"
          />
        </div>
-       <div className="space-y-2">
-         <Label htmlFor="register-role">Vai trò</Label>
-         <div className="grid grid-cols-2 gap-2">
-           <Button
-             type="button"
-             variant={role === 'member' ? 'default' : 'outline'}
-             size="sm"
-             onClick={() => setRole('member')}
-           >
-             <UserRound className="mr-1.5 h-4 w-4" />
-             Thành viên
-           </Button>
-           <Button
-             type="button"
-             variant={role === 'leader' ? 'default' : 'outline'}
-             size="sm"
-             onClick={() => setRole('leader')}
-           >
-             <ShieldCheck className="mr-1.5 h-4 w-4" />
-             Leader
-           </Button>
+       {invite ? (
+         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+           <div className="flex items-start gap-2">
+             <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+             <div className="space-y-1">
+               <p className="font-semibold">Bạn được mời vào nhóm của {invite.leaderName}</p>
+               <p className="text-xs leading-5 text-amber-800">
+                 {invite.label ? `Lời mời: ${invite.label}. ` : ''}Tài khoản này sẽ là Thành viên và chỉ Leader trên mới có thể duyệt.
+               </p>
+             </div>
+           </div>
          </div>
-       </div>
+       ) : (
+         <div className="space-y-2">
+           <Label htmlFor="register-role">Vai trò</Label>
+           <div className="grid grid-cols-2 gap-2">
+             <Button
+               type="button"
+               variant={role === 'member' ? 'default' : 'outline'}
+               size="sm"
+               onClick={() => setRole('member')}
+             >
+               <UserRound className="mr-1.5 h-4 w-4" />
+               Thành viên
+             </Button>
+             <Button
+               type="button"
+               variant={role === 'leader' ? 'default' : 'outline'}
+               size="sm"
+               onClick={() => setRole('leader')}
+             >
+               <ShieldCheck className="mr-1.5 h-4 w-4" />
+               Leader
+             </Button>
+           </div>
+           {inviteError && <p className="text-xs text-destructive">{inviteError}. Bạn vẫn có thể đăng ký theo luồng thông thường.</p>}
+         </div>
+       )}
        <div className="space-y-2">
          <Label htmlFor="register-password">Mật khẩu</Label>
          <Input
