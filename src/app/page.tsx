@@ -167,11 +167,18 @@ export default function HomePage() {
   /* Fetch data when user is logged in */
   useEffect(() => {
     if (!user) return;
-    fetch('/api/members')
-      .then((response) => readApiJson<TeamMember[]>(response, 'Không thể tải danh sách thành viên'))
-      .then(setMembers)
-      .catch(() => {});
-    if (user.role !== 'admin') {
+    if (user.role === 'admin') {
+      // The admin overview has its own paginated server-side directory. Do
+      // not preload every account here: that becomes expensive for large teams.
+      setMembers([]);
+      setTasks([]);
+      setProjects([]);
+      setPolls([]);
+    } else {
+      fetch('/api/members')
+        .then((response) => readApiJson<TeamMember[]>(response, 'Không thể tải danh sách thành viên'))
+        .then(setMembers)
+        .catch(() => {});
       fetch('/api/tasks')
         .then((response) => readApiJson<Task[]>(response, 'Không thể tải danh sách công việc'))
         .then(setTasks)
@@ -184,10 +191,6 @@ export default function HomePage() {
         .then((response) => readApiJson<Poll[]>(response, 'Không thể tải danh sách bình chọn'))
         .then(setPolls)
         .catch(() => {});
-    } else {
-      setTasks([]);
-      setProjects([]);
-      setPolls([]);
     }
     trackActivity('login');
   }, [setTasks, setProjects, setMembers, setPolls, user, trackActivity]);

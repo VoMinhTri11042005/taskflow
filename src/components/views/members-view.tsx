@@ -160,10 +160,15 @@ export function MembersView({ roleFilter }: MembersViewProps) {
   }, [fetchMembers, fetchPendingAccounts]);
 
   useEffect(() => {
+    // Admin uses the paginated directory on the overview. Avoid one activity
+    // request per account when the system contains hundreds or thousands of users.
+    if (user?.role === 'admin') {
+      return;
+    }
     members.forEach((m) => {
       checkOnlineStatus(m.id);
     });
-  }, [members, checkOnlineStatus]);
+  }, [members, checkOnlineStatus, user?.role]);
 
   function openCreateDialog() {
     setEditingMember(null);
