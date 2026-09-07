@@ -164,6 +164,34 @@ export default function HomePage() {
     }).catch(() => {});
   }, [user]);
 
+  /* Presence is based on fresh heartbeats from a visible app tab rather than
+     old login/logout records. A stopped heartbeat naturally becomes offline
+     on the server after a short grace period. */
+  useEffect(() => {
+    if (!user) return;
+
+    const reportPresence = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetch('/api/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'online' }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+
+    reportPresence();
+    const intervalId = window.setInterval(reportPresence, 20_000);
+    document.addEventListener('visibilitychange', reportPresence);
+    window.addEventListener('focus', reportPresence);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', reportPresence);
+      window.removeEventListener('focus', reportPresence);
+    };
+  }, [user?.id]);
+
   /* Fetch data when user is logged in */
   useEffect(() => {
     if (!user) return;

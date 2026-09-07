@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
-import type { TeamMember, ActivityLog } from '@/types';
+import type { TeamMember } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -124,32 +124,23 @@ export function MembersView({ roleFilter }: MembersViewProps) {
     }
   }, []);
 
-  const checkOnlineStatus = useCallback(async (memberId: string) => {
+  const refreshOnlineStatus = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch(`/api/activity-logs?userId=${memberId}`);
-      const logs: ActivityLog[] = await res.json();
-      if (logs.length === 0) {
-        setOnlineStatus((prev) => ({ ...prev, [memberId]: false }));
-        return;
-      }
-      const now = new Date();
-      const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
-      const recentLogs = logs.filter(
-        (log) => new Date(log.createdAt) >= thirtyMinAgo
+      const response = await fetch('/api/presence', { cache: 'no-store', signal });
+      const data = await readApiJson<{ presence: Array<{ userId: string; online: boolean }> }>(
+        response,
+        'Không thể tải trạng thái trực tuyến'
       );
-      // Check if last login was more recent than last logout
-      const lastLogin = recentLogs
-        .filter((l) => l.action === 'login')
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-      const lastLogout = recentLogs
-        .filter((l) => l.action === 'logout')
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-      const isOnline = lastLogin && (!lastLogout || new Date(lastLogin.createdAt) > new Date(lastLogout.createdAt));
-      setOnlineStatus((prev) => ({ ...prev, [memberId]: !!isOnline }));
+      if (signal?.aborted) return;
+
+      const statusByUserId = new Map(data.presence.map((item) => [item.userId, item.online]));
+      setOnlineStatus(Object.fromEntries(
+        members.map((member) => [member.id, Boolean(member.userId && statusByUserId.get(member.userId))])
+      ));
     } catch {
-      setOnlineStatus((prev) => ({ ...prev, [memberId]: false }));
+      // Keep the most recent state during a temporary network failure.
     }
-  }, []);
+  }, [members]);
 
   useEffect(() => {
     const run = () => {
@@ -160,15 +151,20 @@ export function MembersView({ roleFilter }: MembersViewProps) {
   }, [fetchMembers, fetchPendingAccounts]);
 
   useEffect(() => {
-    // Admin uses the paginated directory on the overview. Avoid one activity
-    // request per account when the system contains hundreds or thousands of users.
-    if (user?.role === 'admin') {
-      return;
-    }
-    members.forEach((m) => {
-      checkOnlineStatus(m.id);
-    });
-  }, [members, checkOnlineStatus, user?.role]);
+    if (!user) return;
+    const controller = new AbortController();
+    const refresh = () => void refreshOnlineStatus(controller.signal);
+
+    // One bulk request replaces the previous one-request-per-account pattern.
+    queueMicrotask(refresh);
+    const intervalId = window.setInterval(refresh, 20_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [refreshOnlineStatus, user?.id]);
 
   function openCreateDialog() {
     setEditingMember(null);

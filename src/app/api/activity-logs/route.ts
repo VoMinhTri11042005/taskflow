@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 
@@ -23,7 +24,11 @@ export async function GET(request: NextRequest) {
     if (userId && allowedUserIds && !allowedUserIds.includes(userId)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-    const where = userId ? { userId } : allowedUserIds ? { userId: { in: allowedUserIds } } : {}
+    // Presence heartbeats are an internal implementation detail, not an item
+    // in the human-readable activity timeline.
+    const where: Prisma.ActivityLogWhereInput = { action: { not: 'presence' } }
+    if (userId) where.userId = userId
+    else if (allowedUserIds) where.userId = { in: allowedUserIds }
 
     const logs = await db.activityLog.findMany({
       where,
