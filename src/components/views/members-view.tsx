@@ -606,15 +606,43 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                     </AlertDialog>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <Badge variant="outline" className="text-xs">
-                    <Shield className="mr-1 h-3 w-3" />
-                    {roleLabels[member.role] || member.role}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {member._count?.tasks || 0} việc
-                  </span>
-                </div>
+                {roleFilter === 'leader' ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="text-xs">
+                        <Shield className="mr-1 h-3 w-3" />
+                        Leader
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {member._count?.tasks || 0} việc
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 overflow-hidden rounded-lg border bg-muted/30 text-center">
+                      <div className="border-r px-2 py-2.5">
+                        <p className="text-base font-bold">{member.managedMemberCount || 0}</p>
+                        <p className="text-[10px] text-muted-foreground">Tổng Member</p>
+                      </div>
+                      <div className="border-r px-2 py-2.5">
+                        <p className="text-base font-bold text-emerald-700">{member.managedMemberApprovedCount || 0}</p>
+                        <p className="text-[10px] text-emerald-700">Hoạt động</p>
+                      </div>
+                      <div className="px-2 py-2.5">
+                        <p className="text-base font-bold text-amber-700">{member.managedMemberPendingCount || 0}</p>
+                        <p className="text-[10px] text-amber-700">Chờ duyệt</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline" className="text-xs">
+                      <Shield className="mr-1 h-3 w-3" />
+                      {roleLabels[member.role] || member.role}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {member._count?.tasks || 0} việc
+                    </span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

@@ -52,13 +52,51 @@ export async function GET(request: NextRequest) {
           })
         : members.filter((member) => member.id === session.teamMemberId)
 
-    return NextResponse.json(visible.map((member) => ({
-      ...member,
-      userId: userByEmail.get(member.email)?.id || null,
-      accountStatus: userByEmail.get(member.email)?.status || 'approved',
-      leaderId: userByEmail.get(member.email)?.leaderId || null,
-      leaderName: userByEmail.get(member.email)?.leader?.name || null,
-    })))
+    // Build every Leader's roster statistics in one grouped query. This is
+    // deliberately not calculated by issuing one request per Leader.
+    const leaderIds = visible
+      .filter((member) => member.role === 'leader')
+      .map((member) => userByEmail.get(member.email)?.id)
+      .filter((id): id is string => Boolean(id))
+    const memberGroups = leaderIds.length > 0
+      ? await db.user.groupBy({
+          by: ['leaderId', 'status'],
+          where: {
+            role: 'member',
+            status: { not: 'rejected' },
+            leaderId: { in: leaderIds },
+          },
+          _count: { _all: true },
+        })
+      : []
+    const managedCounts = new Map<string, { total: number; approved: number; pending: number }>()
+    for (const group of memberGroups) {
+      if (!group.leaderId) continue
+      const count = managedCounts.get(group.leaderId) || { total: 0, approved: 0, pending: 0 }
+      count.total += group._count._all
+      if (group.status === 'approved') count.approved += group._count._all
+      if (group.status === 'pending') count.pending += group._count._all
+      managedCounts.set(group.leaderId, count)
+    }
+
+    return NextResponse.json(visible.map((member) => {
+      const account = userByEmail.get(member.email)
+      const managedMemberCounts = member.role === 'leader' && account?.id
+        ? managedCounts.get(account.id) || { total: 0, approved: 0, pending: 0 }
+        : null
+      return {
+        ...member,
+        userId: account?.id || null,
+        accountStatus: account?.status || 'approved',
+        leaderId: account?.leaderId || null,
+        leaderName: account?.leader?.name || null,
+        ...(managedMemberCounts && {
+          managedMemberCount: managedMemberCounts.total,
+          managedMemberApprovedCount: managedMemberCounts.approved,
+          managedMemberPendingCount: managedMemberCounts.pending,
+        }),
+      }
+    }))
   } catch (error) {
     console.error('Error fetching members:', error)
     return NextResponse.json(

@@ -11,6 +11,9 @@ export interface TeamMember {
   leaderName?: string | null;
   userId?: string | null;
   accountStatus?: 'pending' | 'approved' | 'rejected' | string;
+  managedMemberCount?: number;
+  managedMemberApprovedCount?: number;
+  managedMemberPendingCount?: number;
   _count?: { tasks: number };
 }
 
