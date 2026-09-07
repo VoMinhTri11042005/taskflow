@@ -27,6 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { toast } from 'sonner';
+import { notifyAuthSessionChange } from '@/lib/auth-session-client';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
@@ -72,6 +73,7 @@ export function AdminSidebar() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
+      notifyAuthSessionChange();
       toast.success('Đã đăng xuất thành công');
     } catch {
       toast.error('Có lỗi xảy ra khi đăng xuất');

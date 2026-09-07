@@ -26,8 +26,25 @@ import { Bell, FolderKanban, KanbanSquare, LayoutDashboard, ListTodo, Menu, User
 import { useState } from 'react';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { readApiJson } from '@/lib/client-api';
+import { AUTH_SESSION_CHANGE_KEY } from '@/lib/auth-session-client';
 import type { Notification, Poll, Project, Task, TeamMember, User } from '@/types';
 import { toast } from 'sonner';
+
+function sessionUsersMatch(current: User | null, next: User) {
+  return current?.id === next.id
+    && current.email === next.email
+    && current.name === next.name
+    && current.role === next.role
+    && current.color === next.color
+    && current.avatar === next.avatar
+    && current.teamMemberId === next.teamMemberId
+}
+
+function defaultViewForRole(role: User['role']) {
+  if (role === 'admin') return 'admin-overview' as const
+  if (role === 'leader') return 'leader-dashboard' as const
+  return 'my-tasks' as const
+}
 
 export default function HomePage() {
   const {
@@ -39,6 +56,7 @@ export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const handledProjectInvite = useRef<string | null>(null);
+  const activeUserRef = useRef<User | null>(null);
   // New QR codes use /join, but keep older printed QR codes safe too. A
   // Leader/Admin who scans an old invite must see registration, not their
   // already-open workspace.
@@ -73,18 +91,93 @@ export default function HomePage() {
   const leaderViews = ['leader-dashboard', 'projects', 'board', 'members', 'polls', 'leader-time', 'notifications'] as const;
   const memberViews = ['my-tasks', 'time-tracking', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
 
-  /* Check session on mount */
   useEffect(() => {
-    fetch('/api/auth/session')
-      .then((response) => readApiJson<{ user: User | null }>(response, 'Không thể xác thực phiên đăng nhập'))
-      .then((data) => {
-        if (data.user) {
-          setUser(data.user);
+    activeUserRef.current = user;
+  }, [user]);
+
+  const clearWorkspaceState = useCallback(() => {
+    setTasks([]);
+    setProjects([]);
+    setMembers([]);
+    setPolls([]);
+    setNotifications([]);
+    setUnreadCount(0);
+    setSelectedProjectId(null);
+  }, [setMembers, setNotifications, setPolls, setProjects, setSelectedProjectId, setTasks, setUnreadCount]);
+
+  /*
+   * A normal browser profile can hold only one TaskFlow session cookie. Keep
+   * a stale tab honest when another tab signs in as a different account.
+   */
+  const syncSession = useCallback(async (announceChange = false) => {
+    try {
+      const response = await fetch('/api/auth/session', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      const data = await readApiJson<{ user: User | null }>(response, 'Không thể xác thực phiên đăng nhập');
+      const nextUser = data.user;
+      const currentUser = activeUserRef.current;
+
+      if (!nextUser) {
+        if (currentUser) {
+          activeUserRef.current = null;
+          clearWorkspaceState();
+          setUser(null);
+          if (announceChange) toast.info('Phiên đăng nhập đã kết thúc hoặc đã được thay đổi ở tab khác.');
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [setUser]);
+        return null;
+      }
+
+      if (!sessionUsersMatch(currentUser, nextUser)) {
+        const identityChanged = Boolean(
+          currentUser && (currentUser.id !== nextUser.id || currentUser.role !== nextUser.role)
+        );
+        activeUserRef.current = nextUser;
+
+        if (identityChanged) {
+          clearWorkspaceState();
+          setCurrentView(defaultViewForRole(nextUser.role));
+          if (announceChange) {
+            toast.info(`Tab này đã chuyển sang tài khoản ${nextUser.name}. Dùng Ẩn danh, profile khác hoặc thiết bị khác để mở đồng thời nhiều tài khoản.`);
+          }
+        }
+
+        setUser(nextUser);
+      }
+
+      return nextUser;
+    } catch {
+      // A transient network failure must not sign the user out locally.
+      return null;
+    }
+  }, [clearWorkspaceState, setCurrentView, setUser]);
+
+  /* Check session on mount. */
+  useEffect(() => {
+    let mounted = true;
+    void syncSession().finally(() => {
+      if (mounted) setLoading(false);
+    });
+    return () => { mounted = false; };
+  }, [syncSession]);
+
+  /* Revalidate when another tab changes the shared session cookie. */
+  useEffect(() => {
+    if (!user) return;
+    const revalidate = () => { void syncSession(true); };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_SESSION_CHANGE_KEY) revalidate();
+    };
+    const intervalId = window.setInterval(revalidate, 30_000);
+    window.addEventListener('focus', revalidate);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', revalidate);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [syncSession, user?.id]);
 
   useEffect(() => {
     if (isMobile) { setSidebarOpen(false); } else { setSidebarOpen(true); }
@@ -164,24 +257,34 @@ export default function HomePage() {
     }).catch(() => {});
   }, [user]);
 
-  /* Presence is based on fresh heartbeats from a visible app tab rather than
-     old login/logout records. A stopped heartbeat naturally becomes offline
-     on the server after a short grace period. */
+  /* Presence means the app remains open in an authenticated browser. Keep
+     background tabs alive too: an Admin viewing a Leader in another browser
+     should not make that Leader instantly look offline. */
   useEffect(() => {
     if (!user) return;
 
-    const reportPresence = () => {
-      if (document.visibilityState !== 'visible') return;
-      fetch('/api/presence', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'online' }),
-        keepalive: true,
-      }).catch(() => {});
+    const reportPresence = async () => {
+      try {
+        const response = await fetch('/api/presence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'online', expectedUserId: user.id }),
+          cache: 'no-store',
+          credentials: 'same-origin',
+          keepalive: true,
+        });
+        const data = await response.json().catch(() => null) as { userId?: string } | null;
+
+        if (response.status === 401 || response.status === 409 || (response.ok && data?.userId !== user.id)) {
+          void syncSession(true);
+        }
+      } catch {
+        // Presence is best effort; the next heartbeat retries automatically.
+      }
     };
 
-    reportPresence();
-    const intervalId = window.setInterval(reportPresence, 20_000);
+    void reportPresence();
+    const intervalId = window.setInterval(() => void reportPresence(), 30_000);
     document.addEventListener('visibilitychange', reportPresence);
     window.addEventListener('focus', reportPresence);
 
@@ -190,7 +293,7 @@ export default function HomePage() {
       document.removeEventListener('visibilitychange', reportPresence);
       window.removeEventListener('focus', reportPresence);
     };
-  }, [user?.id]);
+  }, [syncSession, user?.id]);
 
   /* Fetch data when user is logged in */
   useEffect(() => {
@@ -260,19 +363,6 @@ export default function HomePage() {
       window.removeEventListener('focus', loadNotifications);
     };
   }, [user?.id, setNotifications, setUnreadCount]);
-
-  /* Track logout on unmount */
-  useEffect(() => {
-    return () => {
-      if (user) {
-        fetch('/api/activity-logs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, action: 'logout' }),
-        }).catch(() => {});
-      }
-    };
-  }, [user]);
 
   if (loading) {
     return (

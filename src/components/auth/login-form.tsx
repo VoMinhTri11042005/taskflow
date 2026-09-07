@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound, BriefcaseBusiness, Clock3, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BrandMark } from '@/components/layout/brand-mark';
+import { notifyAuthSessionChange } from '@/lib/auth-session-client';
 
 type LoginFormProps = {
   initialMode?: 'login' | 'register';
@@ -144,6 +145,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
         }
       }
       setUser(userData);
+      notifyAuthSessionChange();
       setCurrentView(
         userData.role === 'admin'
           ? 'admin-overview'

@@ -22,6 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { toast } from 'sonner';
+import { notifyAuthSessionChange } from '@/lib/auth-session-client';
 
 const navItems: { id: LeaderViewType; label: string; icon: React.ElementType; showBadge?: boolean }[] = [
   { id: 'leader-dashboard', label: 'Không gian nhóm', icon: LayoutDashboard },
@@ -56,6 +57,7 @@ export function LeaderSidebar() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
+      notifyAuthSessionChange();
       toast.success('Đã đăng xuất thành công');
     } catch {
       toast.error('Không thể đăng xuất. Vui lòng thử lại.');

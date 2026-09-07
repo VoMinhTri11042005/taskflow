@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { getProjectDisplayName } from '@/lib/project-name';
+import { notifyAuthSessionChange } from '@/lib/auth-session-client';
 
 const navItems: { id: MemberViewType; label: string; icon: React.ElementType; showBadge?: boolean }[] = [
   { id: 'my-tasks', label: 'Công việc của tôi', icon: CheckSquare },
@@ -61,6 +62,7 @@ export function MemberSidebar() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
+      notifyAuthSessionChange();
     } catch {
       /* silent fail */
     }

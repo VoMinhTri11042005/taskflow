@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isDatabaseNotInitializedError } from '@/lib/db'
 import { createSessionValue } from '@/lib/auth'
+import { renewPresence } from '@/lib/presence'
 import { compareSync } from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
@@ -84,6 +85,15 @@ export async function POST(request: NextRequest) {
       path: '/',
       maxAge: 60 * 60 * 24 * 7, // 7 ngày
     })
+
+    // Do not wait for the client effect: a just authenticated account should
+    // be visible to its manager immediately.
+    try {
+      await renewPresence(user.id)
+    } catch (presenceError) {
+      // Authentication remains available if this non-critical signal fails.
+      console.error('Error renewing presence during login:', presenceError)
+    }
 
     return NextResponse.json({ user: sessionData })
   } catch (error) {

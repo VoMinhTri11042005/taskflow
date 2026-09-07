@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSessionValue, getSession, type SessionData } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { renewPresence } from '@/lib/presence'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +48,16 @@ export async function GET(request: NextRequest) {
     })
 
     if (!account || account.status !== 'approved') return clearSession()
+
+    // A successful session validation means this account has just opened the
+    // app. Renewing here makes presence resilient even if a browser delays the
+    // first client heartbeat.
+    try {
+      await renewPresence(account.id)
+    } catch (presenceError) {
+      // Presence must never prevent a valid user from reaching the app.
+      console.error('Error renewing presence during session check:', presenceError)
+    }
 
     const teamMember = await db.teamMember.findFirst({
       where: { email: account.email },

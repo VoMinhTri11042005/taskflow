@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-
-// A tab renews this signal every 20 seconds. Keeping a short grace period
-// handles an occasional delayed request without leaving a closed tab online.
-const ONLINE_WINDOW_MS = 55_000
-const MIN_UPDATE_INTERVAL_MS = 10_000
+import { ONLINE_WINDOW_MS, renewPresence } from '@/lib/presence'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,10 +27,15 @@ export async function GET(request: NextRequest) {
       select: { id: true },
     })
     const userIds = users.map((user) => user.id)
+    const cutoff = new Date(Date.now() - ONLINE_WINDOW_MS)
     const presenceLogs = userIds.length > 0
       ? await db.activityLog.findMany({
-          where: { userId: { in: userIds }, action: 'presence' },
-          orderBy: { createdAt: 'desc' },
+          where: {
+            userId: { in: userIds },
+            action: 'presence',
+            details: 'online',
+            createdAt: { gte: cutoff },
+          },
           select: { userId: true, details: true, createdAt: true },
         })
       : []
@@ -45,12 +46,11 @@ export async function GET(request: NextRequest) {
     for (const log of presenceLogs) {
       if (!latestByUser.has(log.userId)) latestByUser.set(log.userId, log)
     }
-    const cutoff = Date.now() - ONLINE_WINDOW_MS
     const presence = userIds.map((userId) => {
       const latest = latestByUser.get(userId)
       return {
         userId,
-        online: Boolean(latest && latest.details === 'online' && latest.createdAt.getTime() >= cutoff),
+        online: Boolean(latest),
         lastSeenAt: latest?.createdAt.toISOString() || null,
       }
     })
@@ -76,31 +76,26 @@ export async function POST(request: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json().catch(() => null)
-    if (body?.status !== 'online') {
+    if (body?.status !== 'online' || typeof body.expectedUserId !== 'string') {
       return NextResponse.json({ error: 'Trạng thái hiện diện không hợp lệ' }, { status: 400 })
     }
 
-    const now = new Date()
-    const existing = await db.activityLog.findFirst({
-      where: { userId: session.id, action: 'presence' },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, createdAt: true },
-    })
-    const shouldRenew = !existing || now.getTime() - existing.createdAt.getTime() >= MIN_UPDATE_INTERVAL_MS
-    if (shouldRenew) {
-      if (existing) {
-        await db.activityLog.update({
-          where: { id: existing.id },
-          data: { details: 'online', createdAt: now },
-        })
-      } else {
-        await db.activityLog.create({
-          data: { userId: session.id, action: 'presence', details: 'online', createdAt: now },
-        })
-      }
+    // Normal tabs in the same browser profile share one HTTP-only session
+    // cookie. Do not let a stale Admin/Leader screen renew presence for the
+    // newer account that replaced its cookie in another tab.
+    if (body.expectedUserId !== session.id) {
+      return NextResponse.json(
+        { error: 'Phiên đăng nhập trong tab này đã thay đổi', code: 'SESSION_CHANGED' },
+        { status: 409 }
+      )
     }
 
-    return NextResponse.json({ online: true }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+    const lastSeenAt = await renewPresence(session.id)
+
+    return NextResponse.json(
+      { online: true, userId: session.id, lastSeenAt: lastSeenAt.toISOString() },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+    )
   } catch (error) {
     console.error('Error updating presence:', error)
     return NextResponse.json({ error: 'Không thể cập nhật trạng thái trực tuyến' }, { status: 500 })

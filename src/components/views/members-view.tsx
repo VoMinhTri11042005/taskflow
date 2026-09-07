@@ -514,20 +514,24 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                       >
                         {member.name.charAt(0).toUpperCase()}
                       </div>
-                      {/* Online indicator */}
+                      {/* Presence is refreshed in one bulk request. */}
                       <span
                         className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-background ${
-                          onlineStatus[member.id] ? 'bg-emerald-500' : 'bg-gray-300'
+                          onlineStatus[member.id] ? 'bg-emerald-500' : 'bg-slate-300'
                         }`}
-                        title={onlineStatus[member.id] ? 'Đang trực tuyến' : 'Ngoại tuyến'}
+                        title={onlineStatus[member.id] ? 'Đang online' : 'Ngoại tuyến'}
                       />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold truncate">{member.name}</h3>
-                        {onlineStatus[member.id] && (
-                          <span className="text-[10px] text-emerald-600 font-medium">Trực tuyến</span>
-                        )}
+                        <span
+                          className={`text-[10px] font-medium ${
+                            onlineStatus[member.id] ? 'text-emerald-600' : 'text-muted-foreground'
+                          }`}
+                        >
+                          {onlineStatus[member.id] ? 'Đang online' : 'Ngoại tuyến'}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Mail className="h-3 w-3" />
