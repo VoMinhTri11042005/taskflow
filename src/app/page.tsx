@@ -1,10 +1,14 @@
-'use client';
+﻿'use client';
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { AdminSidebar } from '@/components/layout/admin-sidebar';
 import { LeaderSidebar } from '@/components/layout/leader-sidebar';
 import { MemberSidebar } from '@/components/layout/member-sidebar';
+import { GlobalHeader } from '@/components/layout/global-header';
+import { CommandPalette } from '@/components/layout/command-palette';
+import { TaskDrawer } from '@/components/tasks/task-drawer';
+import { FloatingTimer } from '@/components/time-tracking/floating-timer';
 import { LoginForm } from '@/components/auth/login-form';
 import { ProjectsView } from '@/components/views/projects-view';
 import { BoardView } from '@/components/views/board-view';
@@ -23,7 +27,6 @@ import { AdminOverviewView } from '@/components/views/admin/admin-overview-view'
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Bell, FolderKanban, KanbanSquare, LayoutDashboard, ListTodo, Menu, UserRound, Users } from 'lucide-react';
-import { useState } from 'react';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { readApiJson } from '@/lib/client-api';
 import { AUTH_SESSION_CHANGE_KEY } from '@/lib/auth-session-client';
@@ -37,13 +40,13 @@ function sessionUsersMatch(current: User | null, next: User) {
     && current.role === next.role
     && current.color === next.color
     && current.avatar === next.avatar
-    && current.teamMemberId === next.teamMemberId
+    && current.teamMemberId === next.teamMemberId;
 }
 
 function defaultViewForRole(role: User['role']) {
-  if (role === 'admin') return 'admin-overview' as const
-  if (role === 'leader') return 'leader-dashboard' as const
-  return 'my-tasks' as const
+  if (role === 'admin') return 'admin-overview' as const;
+  if (role === 'leader') return 'leader-dashboard' as const;
+  return 'my-tasks' as const;
 }
 
 export default function HomePage() {
@@ -57,9 +60,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const handledProjectInvite = useRef<string | null>(null);
   const activeUserRef = useRef<User | null>(null);
-  // New QR codes use /join, but keep older printed QR codes safe too. A
-  // Leader/Admin who scans an old invite must see registration, not their
-  // already-open workspace.
+
   const [hasInviteLink] = useState(() => {
     if (typeof window === 'undefined') return false;
     const searchParams = new URLSearchParams(window.location.search);
@@ -105,10 +106,6 @@ export default function HomePage() {
     setSelectedProjectId(null);
   }, [setMembers, setNotifications, setPolls, setProjects, setSelectedProjectId, setTasks, setUnreadCount]);
 
-  /*
-   * A normal browser profile can hold only one TaskFlow session cookie. Keep
-   * a stale tab honest when another tab signs in as a different account.
-   */
   const syncSession = useCallback(async (announceChange = false) => {
     try {
       const response = await fetch('/api/auth/session', {
@@ -139,7 +136,7 @@ export default function HomePage() {
           clearWorkspaceState();
           setCurrentView(defaultViewForRole(nextUser.role));
           if (announceChange) {
-            toast.info(`Tab này đã chuyển sang tài khoản ${nextUser.name}. Dùng Ẩn danh, profile khác hoặc thiết bị khác để mở đồng thời nhiều tài khoản.`);
+            toast.info(`Tab này đã chuyển sang tài khoản ${nextUser.name}.`);
           }
         }
 
@@ -148,12 +145,10 @@ export default function HomePage() {
 
       return nextUser;
     } catch {
-      // A transient network failure must not sign the user out locally.
       return null;
     }
   }, [clearWorkspaceState, setCurrentView, setUser]);
 
-  /* Check session on mount. */
   useEffect(() => {
     let mounted = true;
     void syncSession().finally(() => {
@@ -162,7 +157,6 @@ export default function HomePage() {
     return () => { mounted = false; };
   }, [syncSession]);
 
-  /* Revalidate when another tab changes the shared session cookie. */
   useEffect(() => {
     if (!user) return;
     const revalidate = () => { void syncSession(true); };
@@ -183,7 +177,6 @@ export default function HomePage() {
     if (isMobile) { setSidebarOpen(false); } else { setSidebarOpen(true); }
   }, [isMobile, setSidebarOpen]);
 
-  /* Close mobile menu when view changes via custom event */
   useEffect(() => {
     function handleCloseMobile() {
       setMobileMenuOpen(false);
@@ -192,22 +185,19 @@ export default function HomePage() {
     return () => window.removeEventListener('close-mobile-menu', handleCloseMobile);
   }, [setMobileMenuOpen]);
 
-  /* Set correct initial view based on role */
   useEffect(() => {
     if (!user) return;
-    if (user.role === 'member' && !(memberViews as readonly string[]).includes(currentView)) {
+    if (user.role === 'member' && !(memberViews as readonly string[]).includes(currentView as any)) {
       setCurrentView('my-tasks');
     }
-    if (isAdmin && !(adminViews as readonly string[]).includes(currentView)) {
+    if (isAdmin && !(adminViews as readonly string[]).includes(currentView as any)) {
       setCurrentView('admin-overview');
     }
-    if (isLeader && !(leaderViews as readonly string[]).includes(currentView)) {
+    if (isLeader && !(leaderViews as readonly string[]).includes(currentView as any)) {
       setCurrentView('leader-dashboard');
     }
   }, [user, currentView, setCurrentView, isAdmin, isLeader]);
 
-  /* A signed-in Member can open a project QR/link directly. LoginForm handles
-     the first-login path; this catches an already-authenticated browser. */
   useEffect(() => {
     if (!user || typeof window === 'undefined') return;
     const token = new URLSearchParams(window.location.search).get('projectInvite')?.trim();
@@ -222,9 +212,6 @@ export default function HomePage() {
       window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
     };
 
-    // Do not clear the token or send a Leader/Admin to their dashboard. The
-    // render below leaves the invitation form visible so this browser can
-    // create or sign in to a Member account deliberately.
     if (user.role !== 'member') return;
 
     void fetch('/api/project-invites/accept', {
@@ -247,7 +234,6 @@ export default function HomePage() {
       .finally(clearInviteFromUrl);
   }, [user, setCurrentView, setSelectedProjectId]);
 
-  /* Track login activity */
   const trackActivity = useCallback((action: string) => {
     if (!user) return;
     fetch('/api/activity-logs', {
@@ -257,50 +243,9 @@ export default function HomePage() {
     }).catch(() => {});
   }, [user]);
 
-  /* Presence means the app remains open in an authenticated browser. Keep
-     background tabs alive too: an Admin viewing a Leader in another browser
-     should not make that Leader instantly look offline. */
-  useEffect(() => {
-    if (!user) return;
-
-    const reportPresence = async () => {
-      try {
-        const response = await fetch('/api/presence', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'online', expectedUserId: user.id }),
-          cache: 'no-store',
-          credentials: 'same-origin',
-          keepalive: true,
-        });
-        const data = await response.json().catch(() => null) as { userId?: string } | null;
-
-        if (response.status === 401 || response.status === 409 || (response.ok && data?.userId !== user.id)) {
-          void syncSession(true);
-        }
-      } catch {
-        // Presence is best effort; the next heartbeat retries automatically.
-      }
-    };
-
-    void reportPresence();
-    const intervalId = window.setInterval(() => void reportPresence(), 30_000);
-    document.addEventListener('visibilitychange', reportPresence);
-    window.addEventListener('focus', reportPresence);
-
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', reportPresence);
-      window.removeEventListener('focus', reportPresence);
-    };
-  }, [syncSession, user?.id]);
-
-  /* Fetch data when user is logged in */
   useEffect(() => {
     if (!user) return;
     if (user.role === 'admin') {
-      // The admin overview has its own paginated server-side directory. Do
-      // not preload every account here: that becomes expensive for large teams.
       setMembers([]);
       setTasks([]);
       setProjects([]);
@@ -326,9 +271,6 @@ export default function HomePage() {
     trackActivity('login');
   }, [setTasks, setProjects, setMembers, setPolls, user, trackActivity]);
 
-  /* Keep the inbox current while the user is signed in. Server-side events
-     (for example a new registration in another browser) cannot update this
-     tab directly, so refresh on focus and at a modest interval. */
   useEffect(() => {
     const userId = user?.id;
     if (!userId) {
@@ -348,9 +290,7 @@ export default function HomePage() {
           setNotifications(data);
           setUnreadCount(data.filter((notification) => !notification.read).length);
         }
-      } catch {
-        // A temporary request failure must not clear the notifications already shown.
-      }
+      } catch {}
     };
 
     void loadNotifications();
@@ -367,7 +307,10 @@ export default function HomePage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-muted-foreground">Đang tải...</div>
+        <div className="flex flex-col items-center gap-3 animate-pulse text-muted-foreground">
+          <div className="h-10 w-10 rounded-2xl bg-primary/20 flex items-center justify-center font-bold text-primary">TF</div>
+          <span className="text-sm font-medium">Đang tải không gian làm việc...</span>
+        </div>
       </div>
     );
   }
@@ -413,49 +356,52 @@ export default function HomePage() {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
-      {isMobile && (
-        <header className="sticky top-0 z-50 flex items-center justify-between border-b bg-background/95 backdrop-blur px-4 h-14">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-              <Menu className="h-5 w-5" />
-            </Button>
-            <BrandMark size={28} />
-            <span className="font-bold">TaskFlow</span>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {user?.role === 'admin' ? 'Quản trị viên' : user?.role === 'leader' ? 'Leader' : 'Thành viên'}
-          </span>
-        </header>
-      )}
+      {/* Global Command Palette (Cmd+K) */}
+      <CommandPalette />
+
+      {/* Global Task Detail Drawer (Slide-over) */}
+      <TaskDrawer />
+
+      {/* Live Floating Timer */}
+      <FloatingTimer />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Mobile Drawer */}
         {isMobile && mobileMenuOpen && (
           <>
-            <div className="fixed inset-0 z-40 bg-black/50 animate-in fade-in duration-200" onClick={() => setMobileMenuOpen(false)} />
-            <div className="fixed inset-y-0 left-0 z-50 animate-in slide-in-from-left duration-200">
+            <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200" onClick={() => setMobileMenuOpen(false)} />
+            <div className="fixed inset-y-0 left-0 z-50 animate-in slide-in-from-left duration-200 shadow-2xl">
               <Sidebar />
             </div>
           </>
         )}
 
+        {/* Desktop Sidebar */}
         {!isMobile && <Sidebar />}
 
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className={currentView === 'board' || currentView === 'my-tasks' ? 'p-4 md:p-6 h-full' : 'p-4 md:p-6'}>
-            {renderView()}
-          </div>
+        {/* Main Content Area */}
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          {/* Global Header */}
+          <GlobalHeader />
 
-          <footer className="mt-auto border-t pb-16 md:pb-0">
-            <div className="flex flex-col gap-1 px-4 py-3 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between md:px-6">
-              <span>TaskFlow v2.0 - {user?.role === 'admin' ? 'Giao diện Quản trị' : user?.role === 'leader' ? 'Giao diện Leader' : 'Giao diện Thành viên'}</span>
-              <span>Tích hợp Google Docs, Sheets, Slides</span>
+          <main className="flex-1 overflow-y-auto overscroll-contain bg-muted/10">
+            <div className={currentView === 'board' || currentView === 'my-tasks' ? 'p-3 md:p-5 h-full' : 'p-4 md:p-6'}>
+              {renderView()}
             </div>
-          </footer>
-        </main>
+
+            <footer className="border-t border-border/40 bg-background/50 py-3 px-4 md:px-6 mt-auto">
+              <div className="flex flex-col gap-1 text-[11px] text-muted-foreground md:flex-row md:items-center md:justify-between">
+                <span>TaskFlow Enterprise v2.0 • {isAdmin ? 'Quản trị' : isLeader ? 'Leader' : 'Thành viên'}</span>
+                <span>Tích hợp Google Docs, Sheets, Slides, Forms & Chấm công</span>
+              </div>
+            </footer>
+          </main>
+        </div>
       </div>
 
+      {/* Mobile Bottom Navigation Bar */}
       {isMobile && (
-        <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-background/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-lg backdrop-blur-xl">
           <div className="mx-auto flex max-w-md items-stretch justify-around">
             {mobileNavItems.map(({ view, label, icon: Icon }) => {
               const isActive = currentView === view;
@@ -469,13 +415,13 @@ export default function HomePage() {
                     setMobileMenuOpen(false);
                   }}
                   className={`relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] font-medium transition-colors ${
-                    isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground active:bg-muted'
+                    isActive ? 'bg-primary/10 text-primary font-bold' : 'text-muted-foreground active:bg-muted'
                   }`}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="max-w-full truncate">{label}</span>
                   {hasUnread && (
-                    <span className="absolute top-1 right-1/2 ml-3 h-2 w-2 rounded-full bg-destructive" />
+                    <span className="absolute top-1 right-1/2 ml-3 h-2 w-2 rounded-full bg-rose-500" />
                   )}
                 </button>
               );
@@ -487,7 +433,7 @@ export default function HomePage() {
                 className="flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] font-medium text-muted-foreground transition-colors active:bg-muted"
               >
                 <Menu className="h-4 w-4" />
-                <span>Thêm</span>
+                <span>Menu</span>
               </button>
             )}
           </div>

@@ -1,283 +1,180 @@
 'use client';
 
+import * as React from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { AdminViewType } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
+  LayoutDashboard,
+  FolderKanban,
+  CheckSquare,
   Users,
   UserRound,
+  Vote,
+  Activity,
+  BarChart3,
+  Settings,
+  LogOut,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  Bell,
   X,
-  LayoutDashboard,
+  Sparkles,
+  Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { BrandMark } from '@/components/layout/brand-mark';
 import { toast } from 'sonner';
-import { notifyAuthSessionChange } from '@/lib/auth-session-client';
-import { formatDistanceToNow } from 'date-fns';
-import { vi } from 'date-fns/locale';
 
-const navItems: { id: AdminViewType; label: string; icon: React.ElementType }[] = [
-  { id: 'admin-overview', label: 'Tổng quan', icon: LayoutDashboard },
-  { id: 'leaders', label: 'Quản lý Leader', icon: UserRound },
-  { id: 'members', label: 'Quản lý thành viên', icon: Users },
+const adminNavItems: { id: AdminViewType; label: string; icon: React.ElementType; badge?: string }[] = [
+  { id: 'admin-overview', label: 'Tổng quan hệ thống', icon: LayoutDashboard },
+  { id: 'leaders', label: 'Danh sách Leader', icon: UserRound },
+  { id: 'members', label: 'Danh sách Thành viên', icon: Users },
 ];
 
 export function AdminSidebar() {
   const {
     currentView,
     setCurrentView,
-    sidebarOpen,
-    toggleSidebar,
+    sidebarCollapsed,
+    toggleSidebarCollapsed,
     user,
     setUser,
-    notifications,
-    unreadCount,
-    setNotifications,
-    setUnreadCount,
+    members,
   } = useAppStore();
 
   const isMobile = useIsMobile();
-  // On mobile drawer, always show full content. On desktop, respect sidebarOpen.
-  const showFull = isMobile || sidebarOpen;
+  const showFull = isMobile || !sidebarCollapsed;
 
-  const userInitials = user?.name
-    ? user.name
-        .split(' ')
-        .map((n) => n.charAt(0).toUpperCase())
-        .slice(0, 2)
-        .join('')
-    : '?';
-
-  const latestNotifications = notifications.slice(0, 5);
-
-  function closeMobileMenu() {
+  const closeMobileMenu = () => {
     window.dispatchEvent(new CustomEvent('close-mobile-menu'));
-  }
+  };
 
-  async function handleLogout() {
+  const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
-      notifyAuthSessionChange();
       toast.success('Đã đăng xuất thành công');
     } catch {
-      toast.error('Có lỗi xảy ra khi đăng xuất');
+      toast.error('Có lỗi xảy ra');
     }
-  }
+  };
 
-  async function markNotificationAsRead(notification: (typeof notifications)[number]) {
-    if (notification.read) return;
-    try {
-      const response = await fetch(`/api/notifications/${notification.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ read: true }),
-      });
-      if (!response.ok) return;
-      setNotifications(
-        notifications.map((item) => (item.id === notification.id ? { ...item, read: true } : item))
-      );
-      setUnreadCount(Math.max(0, unreadCount - 1));
-    } catch {
-      // Leave the notification unread when the request cannot be completed.
+  const getItemBadge = (id: AdminViewType) => {
+    switch (id) {
+      case 'members':
+        return members.length;
+      default:
+        return 0;
     }
-  }
+  };
 
   return (
     <aside
       className={cn(
-        'sticky top-0 flex h-dvh shrink-0 flex-col border-r bg-card transition-all duration-300 ease-in-out',
-        isMobile ? 'w-[min(20rem,calc(100vw-1rem))]' : showFull ? 'w-64' : 'w-16'
+        'sticky top-0 flex h-dvh shrink-0 flex-col border-r border-border/60 bg-card/95 backdrop-blur-xl transition-all duration-300 ease-in-out z-20',
+        isMobile ? 'w-[min(18rem,calc(100vw-1rem))]' : showFull ? 'w-64' : 'w-[68px]'
       )}
     >
-      {/* Header with logo and notification bell */}
-      <div className="flex min-h-[65px] items-center gap-2 p-4">
-        <BrandMark />
-        {showFull && (
-          <div className="flex flex-col overflow-hidden flex-1">
-            <h2 className="text-sm font-bold truncate">TaskFlow</h2>
-            <p className="text-xs text-muted-foreground truncate">Quản trị viên hệ thống</p>
+      {/* Brand & Logo Header */}
+      <div className="flex h-14 items-center justify-between px-4 border-b border-border/40">
+        <div className="flex items-center gap-2.5 overflow-hidden">
+          <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-600 flex items-center justify-center text-primary-foreground font-black text-sm shadow-md shrink-0">
+            TF
           </div>
-        )}
-        {showFull && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 relative">
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className={cn('w-80', isMobile && 'w-[calc(100vw-2rem)]')}>
-              <DropdownMenuLabel className="flex items-center justify-between">
-                <span>Thông báo</span>
-                {unreadCount > 0 && (
-                  <Badge variant="secondary" className="text-xs">
-                    {unreadCount} mới
-                  </Badge>
-                )}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {latestNotifications.length === 0 ? (
-                <div className="py-6 text-center">
-                  <p className="text-sm text-muted-foreground">Chưa có thông báo</p>
-                </div>
-              ) : (
-                latestNotifications.map((notif) => (
-                  <DropdownMenuItem
-                    key={notif.id}
-                    className="flex cursor-pointer flex-col items-start gap-1 p-3"
-                    onSelect={() => void markNotificationAsRead(notif)}
-                  >
-                    <div className="flex items-center gap-2 w-full">
-                      {!notif.read && (
-                        <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
-                      )}
-                      <span className="text-sm font-medium truncate flex-1">
-                        {notif.title}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2 pl-4">
-                      {notif.message}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/60 pl-4">
-                      {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true, locale: vi })}
-                    </p>
-                  </DropdownMenuItem>
-                ))
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+          {showFull && (
+            <div className="flex flex-col truncate">
+              <span className="font-extrabold text-sm tracking-tight leading-tight">TaskFlow</span>
+              <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Quản trị viên</span>
+            </div>
+          )}
+        </div>
+
         {isMobile && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={closeMobileMenu}
-            className="h-9 w-9 shrink-0"
-            aria-label="Đóng menu"
-          >
-            <X className="h-5 w-5" />
+          <Button variant="ghost" size="icon" onClick={closeMobileMenu} className="h-8 w-8">
+            <X className="h-4 w-4" />
           </Button>
-        )}
-        {!showFull && unreadCount > 0 && (
-          <div className="relative">
-            <Bell className="h-4 w-4 text-muted-foreground" />
-            <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-destructive-foreground">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          </div>
         )}
       </div>
 
-      {/* User info section */}
-      {showFull && user && (
-        <div className="px-4 pb-3">
-          <div className="flex items-center gap-3 rounded-lg border p-3">
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-              style={{ backgroundColor: user.color || '#6366f1' }}
-            >
-              {userInitials}
-            </div>
-            <div className="flex flex-col min-w-0 overflow-hidden">
-              <span className="text-sm font-medium truncate">{user.name}</span>
-              <Badge variant="secondary" className="text-[10px] w-fit px-1.5 py-0">
-                {user.role === 'admin' ? 'Quản trị viên' : user.role === 'leader' ? 'Leader' : 'Thành viên'}
-              </Badge>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!showFull && user && (
-        <div className="flex justify-center px-2 pb-3">
-          <div
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-            style={{ backgroundColor: user.color || '#6366f1' }}
-            title={user.name}
-          >
-            {userInitials}
-          </div>
-        </div>
-      )}
-
-      <Separator />
-
-      {/* Navigation */}
-      <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-2">
-        {navItems.map((item) => {
+      {/* Navigation Links */}
+      <nav className="flex-1 overflow-y-auto p-2.5 space-y-1">
+        {adminNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
+          const count = getItemBadge(item.id);
+
           return (
             <button
               key={item.id}
               onClick={() => {
                 setCurrentView(item.id);
-                closeMobileMenu();
+                if (isMobile) closeMobileMenu();
               }}
-              className={cn(
-                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground',
-                isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground'
-              )}
               title={!showFull ? item.label : undefined}
+              className={cn(
+                'group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold transition-all',
+                isActive
+                  ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                  : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+              )}
             >
-              <Icon className="h-5 w-5 shrink-0" />
-              {showFull && <span>{item.label}</span>}
+              <Icon className={cn('h-4 w-4 shrink-0 transition-transform group-hover:scale-110', isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground')} />
+              
+              {showFull && (
+                <div className="flex-1 flex items-center justify-between text-left truncate">
+                  <span className="truncate">{item.label}</span>
+                  {count > 0 && (
+                    <span
+                      className={cn(
+                        'text-[10px] font-bold px-1.5 py-0.2 rounded-full',
+                        isActive
+                          ? 'bg-primary-foreground/20 text-primary-foreground'
+                          : 'bg-muted text-muted-foreground border border-border/50'
+                      )}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </div>
+              )}
             </button>
           );
         })}
       </nav>
 
-      <Separator />
+      <Separator className="opacity-50" />
 
-      {/* Footer with toggle and logout */}
-      <div className="space-y-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      {/* Footer Profile & Action */}
+      <div className="p-3 space-y-2">
+        {showFull && user && (
+          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-muted/40 border border-border/40">
+            <div
+              className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-xs"
+              style={{ backgroundColor: user.color || '#6366f1' }}
+            >
+              {user.name?.charAt(0)}
+            </div>
+            <div className="truncate flex-1">
+              <p className="text-xs font-semibold truncate leading-tight">{user.name}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+            </div>
+          </div>
+        )}
+
         <Button
           variant="ghost"
           size="sm"
           onClick={handleLogout}
           className={cn(
-            'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-white',
+            'w-full text-xs font-medium text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-xl transition-colors',
             showFull ? 'justify-start gap-2 px-3' : 'justify-center px-0'
           )}
           title="Đăng xuất"
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut className="h-4 w-4 shrink-0" />
           {showFull && <span>Đăng xuất</span>}
         </Button>
-        {!isMobile && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleSidebar}
-            className="w-full justify-center"
-            title={showFull ? 'Thu gọn thanh bên' : 'Mở rộng thanh bên'}
-          >
-            {showFull ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </Button>
-        )}
-        {showFull && <p className="text-xs text-center text-muted-foreground">Quản lý tài khoản và yêu cầu duyệt</p>}
       </div>
     </aside>
   );
