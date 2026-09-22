@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import * as React from 'react';
 import type { Task } from '@/types';
@@ -66,7 +66,8 @@ export function TaskTableView({ tasks }: TaskTableViewProps) {
 
   return (
     <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-md overflow-hidden shadow-xs">
-      <Table>
+      <div className="overflow-x-auto">
+        <Table>
         <TableHeader className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
           <TableRow>
             <TableHead className="w-[30%]">Tên công việc</TableHead>
@@ -137,6 +138,7 @@ export function TaskTableView({ tasks }: TaskTableViewProps) {
           ))}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }

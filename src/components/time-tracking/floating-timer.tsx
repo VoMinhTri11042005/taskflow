@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import * as React from 'react';
 import { useAppStore } from '@/stores/app-store';
@@ -88,7 +88,7 @@ export function FloatingTimer() {
   };
 
   return (
-    <aside aria-label="Bộ đếm giờ làm việc" className="fixed bottom-5 right-5 z-40 animate-in slide-in-from-bottom-5 duration-300">
+    <aside aria-label="Bộ đếm giờ làm việc" className="fixed bottom-20 md:bottom-5 right-3 md:right-5 z-40 animate-in slide-in-from-bottom-5 duration-300">
       <div className="flex items-center gap-2 p-2 px-3 rounded-2xl bg-card/95 text-card-foreground border border-emerald-500/40 shadow-xl backdrop-blur-xl transition-all">
         {/* Pulse Green Indicator */}
         <div className="relative flex h-3 w-3">

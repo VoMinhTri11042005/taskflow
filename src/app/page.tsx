@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
@@ -95,6 +95,17 @@ export default function HomePage() {
   useEffect(() => {
     activeUserRef.current = user;
   }, [user]);
+
+  useEffect(() => {
+    const handleOpen = () => setMobileMenuOpen(true);
+    const handleClose = () => setMobileMenuOpen(false);
+    window.addEventListener('open-mobile-menu', handleOpen);
+    window.addEventListener('close-mobile-menu', handleClose);
+    return () => {
+      window.removeEventListener('open-mobile-menu', handleOpen);
+      window.removeEventListener('close-mobile-menu', handleClose);
+    };
+  }, []);
 
   const clearWorkspaceState = useCallback(() => {
     setTasks([]);
@@ -384,12 +395,12 @@ export default function HomePage() {
           {/* Global Header */}
           <GlobalHeader />
 
-          <main className="flex-1 overflow-y-auto overscroll-contain bg-muted/10">
-            <div className={currentView === 'board' || currentView === 'my-tasks' ? 'p-3 md:p-5 h-full' : 'p-4 md:p-6'}>
+          <main className="flex-1 overflow-y-auto overscroll-contain bg-muted/10 pb-20 md:pb-0">
+            <div className={currentView === 'board' || currentView === 'my-tasks' ? 'p-3 md:p-5 h-full' : 'p-3 sm:p-4 md:p-6'}>
               {renderView()}
             </div>
 
-            <footer className="border-t border-border/40 bg-background/50 py-3 px-4 md:px-6 mt-auto">
+            <footer className="border-t border-border/40 bg-background/50 py-3 px-4 md:px-6 mt-auto hidden md:block">
               <div className="flex flex-col gap-1 text-[11px] text-muted-foreground md:flex-row md:items-center md:justify-between">
                 <span>TaskFlow Enterprise v2.0 • {isAdmin ? 'Quản trị' : isLeader ? 'Leader' : 'Thành viên'}</span>
                 <span>Tích hợp Google Docs, Sheets, Slides, Forms & Chấm công</span>

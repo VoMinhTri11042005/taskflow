@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  Menu,
 } from 'lucide-react';
 import {
   Popover,
@@ -108,7 +109,18 @@ export function GlobalHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/50 bg-background/80 px-4 md:px-6 backdrop-blur-xl transition-all">
       {/* Left section: Collapse button & Dynamic Breadcrumbs */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 md:gap-3">
+        {/* Mobile Hamburger Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => window.dispatchEvent(new CustomEvent('open-mobile-menu'))}
+          className="flex md:hidden h-8 w-8 -ml-1.5 text-muted-foreground hover:text-foreground"
+          title="Mở menu"
+        >
+          <Menu className="h-4 w-4" />
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"
@@ -125,10 +137,10 @@ export function GlobalHeader() {
             <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
             TaskFlow
           </span>
-          <ChevronRight className="h-3.5 w-3.5 mx-1.5 opacity-40 shrink-0" />
+          <ChevronRight className="h-3.5 w-3.5 mx-1 md:mx-1.5 opacity-40 shrink-0" />
           <span className="hidden sm:inline font-medium text-muted-foreground/80">{breadcrumbInfo.category}</span>
           <ChevronRight className="hidden sm:inline h-3.5 w-3.5 mx-1.5 opacity-40 shrink-0" />
-          <span className="font-semibold text-foreground truncate max-w-[150px] md:max-w-none">{breadcrumbInfo.title}</span>
+          <span className="font-semibold text-foreground truncate max-w-[120px] sm:max-w-[180px] md:max-w-none">{breadcrumbInfo.title}</span>
         </div>
       </div>
 

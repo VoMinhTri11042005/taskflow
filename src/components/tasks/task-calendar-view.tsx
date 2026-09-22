@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useMemo } from 'react';
 import type { Task } from '@/types';
@@ -135,17 +135,20 @@ export function TaskCalendarView({ tasks, onTaskClick, onDateClick }: TaskCalend
         </div>
       </div>
 
-      {/* Week Day Header */}
-      <div className="grid grid-cols-7 border-b border-border/60 bg-muted/40 text-center text-xs font-semibold text-muted-foreground py-2.5">
-        {weekDayHeaders.map((day, idx) => (
-          <div key={idx} className={cn(idx >= 5 && 'text-rose-500/80')}>
-            {day}
+      {/* Scrollable Container on Mobile */}
+      <div className="overflow-x-auto flex-1 flex flex-col">
+        <div className="min-w-[550px] md:min-w-full flex-1 flex flex-col">
+          {/* Week Day Header */}
+          <div className="grid grid-cols-7 border-b border-border/60 bg-muted/40 text-center text-xs font-semibold text-muted-foreground py-2.5">
+            {weekDayHeaders.map((day, idx) => (
+              <div key={idx} className={cn(idx >= 5 && 'text-rose-500/80')}>
+                {day}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* Calendar Grid */}
-      <div className="grid grid-cols-7 flex-1 auto-rows-fr divide-x divide-y divide-border/40 min-h-[550px] overflow-y-auto">
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 flex-1 auto-rows-fr divide-x divide-y divide-border/40 min-h-[500px] overflow-y-auto">
         {days.map((day, dayIdx) => {
           const dateKey = format(day, 'yyyy-MM-dd');
           const dayTasks = tasksByDate.get(dateKey) || [];
@@ -200,7 +203,6 @@ export function TaskCalendarView({ tasks, onTaskClick, onDateClick }: TaskCalend
                         priorityClass,
                         task.status === 'done' && 'opacity-60 line-through'
                       )}
-                      title={`${task.title} (${statusInfo.label})`}
                     >
                       <div className="flex items-center gap-1.5 truncate">
                         <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', statusInfo.dot)} />
@@ -213,6 +215,8 @@ export function TaskCalendarView({ tasks, onTaskClick, onDateClick }: TaskCalend
             </div>
           );
         })}
+          </div>
+        </div>
       </div>
     </div>
   );
