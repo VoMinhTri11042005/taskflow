@@ -115,11 +115,11 @@ export function MemberInvitesPanel() {
   }
 
   return (
-    <Card className="border-amber-200 bg-gradient-to-br from-amber-50/80 via-background to-background">
+    <Card className="border-blue-200 bg-gradient-to-br from-blue-50/80 via-background to-background dark:border-blue-500/20 dark:from-blue-500/5">
       <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <CardTitle className="flex items-center gap-2 text-lg">
-            <UserPlus className="h-5 w-5 text-amber-700" />
+            <UserPlus className="h-5 w-5 text-blue-700 dark:text-blue-300" />
             Mời thành viên vào nhóm
           </CardTitle>
           <CardDescription>

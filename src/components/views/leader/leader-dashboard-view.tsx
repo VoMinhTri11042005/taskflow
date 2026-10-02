@@ -198,7 +198,7 @@ export function LeaderDashboardView() {
   const showLoadingState = isInitialLoad && !hasWorkspaceData;
   const todayLabel = format(new Date(), "EEEE, dd 'tháng' MM", { locale: vi });
   const metrics = [
-    { label: 'Dự án hoạt động', value: activeProjects.length, note: 'Dự án đang điều phối', icon: FolderKanban, accent: 'amber' },
+    { label: 'Dự án hoạt động', value: activeProjects.length, note: 'Dự án đang điều phối', icon: FolderKanban, accent: 'blue' },
     { label: 'Việc chưa hoàn tất', value: openTasks.length, note: `${doneTasks.length} việc đã hoàn tất`, icon: ListChecks, accent: 'sky' },
     { label: 'Chờ phản hồi', value: reviewTasks.length, note: reviewTasks.length ? 'Cần Leader xem xét' : 'Hàng chờ đang trống', icon: Send, accent: 'violet' },
     { label: 'Mốc cần lưu ý', value: attentionTasks.length, note: overdueTasks.length ? `${overdueTasks.length} việc đã quá hạn` : 'Không có việc quá hạn', icon: Clock3, accent: 'rose' },
@@ -210,11 +210,11 @@ export function LeaderDashboardView() {
     <div className="space-y-5 pb-2 sm:space-y-6">
       <section
         aria-labelledby="leader-dashboard-title"
-        className="relative isolate overflow-hidden rounded-3xl border border-amber-500/20 bg-gradient-to-br from-amber-600 via-orange-600 to-orange-700 px-5 py-6 text-white shadow-lg shadow-orange-500/15 sm:px-7 sm:py-7"
+        className="relative isolate overflow-hidden rounded-3xl border border-blue-500/25 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 px-5 py-6 text-white shadow-lg shadow-blue-600/20 sm:px-7 sm:py-7"
       >
         <div className="pointer-events-none absolute inset-0 opacity-40" aria-hidden="true">
           <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border border-white/25" />
-          <div className="absolute -bottom-24 right-32 h-56 w-56 rounded-full bg-amber-200/30 blur-3xl" />
+          <div className="absolute -bottom-24 right-32 h-56 w-56 rounded-full bg-blue-200/30 blur-3xl" />
           <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_20%,rgba(255,255,255,0.12)_50%,transparent_80%)]" />
         </div>
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
@@ -224,12 +224,12 @@ export function LeaderDashboardView() {
                 <Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />
                 Không gian Leader
               </Badge>
-              <span className="font-medium capitalize text-amber-50/90">{todayLabel}</span>
+              <span className="font-medium capitalize text-blue-50/90">{todayLabel}</span>
             </div>
             <h1 id="leader-dashboard-title" className="text-2xl font-bold tracking-tight sm:text-3xl">
               Chào {user?.name || 'Leader'}, sẵn sàng điều phối hôm nay?
             </h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-amber-50/90">
+            <p className="mt-2 max-w-xl text-sm leading-6 text-blue-50/90">
               Nắm tiến độ, xử lý yêu cầu chờ duyệt và giữ các mốc quan trọng của nhóm luôn trong tầm kiểm soát.
             </p>
           </div>
@@ -241,12 +241,12 @@ export function LeaderDashboardView() {
                 <AvatarFallback className="bg-white/20 text-xs font-bold text-white">{getInitials(user?.name)}</AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                <p className="text-[11px] font-medium text-amber-100">Nhóm của bạn</p>
+                <p className="text-[11px] font-medium text-blue-100">Nhóm của bạn</p>
                 <p className="text-sm font-bold">{members.length} thành viên</p>
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setCurrentView('projects')} className="h-9 bg-white px-3 text-xs font-semibold text-orange-700 shadow-sm hover:bg-orange-50">
+              <Button variant="secondary" size="sm" onClick={() => setCurrentView('projects')} className="h-9 bg-white px-3 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50">
                 <Layers className="h-3.5 w-3.5" aria-hidden="true" />
                 Dự án
               </Button>
@@ -263,7 +263,7 @@ export function LeaderDashboardView() {
         {metrics.map((metric) => {
           const Icon = metric.icon;
           const tone = {
-            amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-300',
+            blue: 'bg-blue-500/10 text-blue-600 dark:text-blue-300',
             sky: 'bg-sky-500/10 text-sky-600 dark:text-sky-300',
             violet: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
             rose: 'bg-rose-500/10 text-rose-600 dark:text-rose-300',

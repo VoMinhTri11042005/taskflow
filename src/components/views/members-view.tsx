@@ -38,6 +38,7 @@ import {
 import { Plus, Pencil, Trash2, Users, Mail, Shield, Key, KeyRound, Loader2, Check, X, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
+import { cn } from '@/lib/utils';
 import { MemberInvitesPanel } from '@/components/views/leader/member-invites-panel';
 
 const roleLabels: Record<string, string> = {
@@ -45,6 +46,12 @@ const roleLabels: Record<string, string> = {
 leader: 'Leader',
 manager: 'Quản lý',
 member: 'Thành viên',
+};
+
+const roleBadgeClasses: Record<string, string> = {
+  admin: 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300',
+  leader: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300',
+  member: 'border-zinc-300 bg-zinc-100 text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100',
 };
 
 const memberColors = [
@@ -609,7 +616,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                 {roleFilter === 'leader' ? (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="outline" className="border-blue-200 bg-blue-50 text-xs text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">
                         <Shield className="mr-1 h-3 w-3" />
                         Leader
                       </Badge>
@@ -634,7 +641,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                   </div>
                 ) : (
                   <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="outline" className={cn('text-xs', roleBadgeClasses[member.role] || 'border-border bg-muted text-muted-foreground')}>
                       <Shield className="mr-1 h-3 w-3" />
                       {roleLabels[member.role] || member.role}
                     </Badge>

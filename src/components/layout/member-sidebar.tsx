@@ -90,13 +90,13 @@ export function MemberSidebar() {
       {/* Brand Header */}
       <div className="flex h-14 items-center justify-between px-4 border-b border-border/40">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-indigo-500/20 shrink-0">
+          <div className="h-8 w-8 rounded-xl bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950 flex items-center justify-center font-black text-sm shadow-md shadow-zinc-950/20 shrink-0">
             TF
           </div>
           {showFull && (
             <div className="flex flex-col truncate">
               <span className="font-extrabold text-sm tracking-tight leading-tight">TaskFlow</span>
-              <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Thành viên</span>
+              <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Thành viên</span>
             </div>
           )}
         </div>
@@ -126,7 +126,7 @@ export function MemberSidebar() {
               className={cn(
                 'group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold transition-all',
                 isActive
-                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm shadow-indigo-500/25'
+                  ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25'
                   : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
               )}
             >
@@ -140,9 +140,9 @@ export function MemberSidebar() {
                       className={cn(
                         'text-[10px] font-bold px-1.5 py-0.2 rounded-full',
                         isActive
-                          ? 'bg-white/20 text-white'
+                          ? 'bg-primary-foreground/20 text-primary-foreground'
                           : typeof badge === 'string'
-                          ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+                          ? 'bg-primary/10 text-primary border border-primary/20'
                           : 'bg-muted text-muted-foreground border border-border/50'
                       )}
                     >
@@ -164,8 +164,8 @@ export function MemberSidebar() {
           <div className="flex items-center gap-2.5 p-2 rounded-xl bg-muted/40 border border-border/40">
             <div className="relative">
               <div
-                className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-xs"
-                style={{ backgroundColor: user.color || '#6366f1' }}
+                className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-xs ring-2 ring-primary/20"
+                style={{ backgroundColor: user.color || '#18181b' }}
               >
                 {user.name?.charAt(0)}
               </div>

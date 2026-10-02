@@ -93,6 +93,16 @@ function AccountStatusBadge({ status }: { status: string }) {
   return <Badge className={`shrink-0 font-medium ${statusConfig.className}`}>{statusConfig.label}</Badge>;
 }
 
+function RoleBadge({ role }: { role: string }) {
+  const config = role === 'admin'
+    ? { label: 'Quản trị viên', className: 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300' }
+    : role === 'leader'
+      ? { label: 'Leader', className: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300' }
+      : { label: 'Thành viên', className: 'border-zinc-300 bg-zinc-100 text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100' };
+
+  return <Badge variant="outline" className={`shrink-0 font-medium ${config.className}`}>{config.label}</Badge>;
+}
+
 function InitialAvatar({ name, color }: { name: string; color?: string }) {
   return (
     <span
@@ -251,32 +261,32 @@ export function AdminOverviewView() {
       value: summary.leaderCount + summary.memberCount,
       description: 'Leader và thành viên đã có hồ sơ',
       icon: UsersRound,
-      className: 'border-slate-200 bg-slate-50',
-      iconClassName: 'bg-slate-900 text-white',
+      className: 'border-red-200 bg-red-50/70',
+      iconClassName: 'bg-red-600 text-white',
     },
     {
       label: 'Leader',
       value: summary.leaderCount,
       description: 'Tài khoản điều phối nhóm',
       icon: UserRound,
-      className: 'border-amber-200 bg-amber-50',
-      iconClassName: 'bg-amber-100 text-amber-700',
+      className: 'border-blue-200 bg-blue-50/70',
+      iconClassName: 'bg-blue-100 text-blue-700',
     },
     {
       label: 'Thành viên',
       value: summary.memberCount,
       description: 'Tài khoản thực hiện công việc',
       icon: Users,
-      className: 'border-emerald-200 bg-emerald-50',
-      iconClassName: 'bg-emerald-100 text-emerald-700',
+      className: 'border-zinc-200 bg-zinc-50',
+      iconClassName: 'bg-zinc-900 text-white',
     },
     {
       label: 'Chờ duyệt',
       value: summary.pendingCount,
       description: 'Yêu cầu đăng ký cần xử lý',
       icon: Clock3,
-      className: 'border-violet-200 bg-violet-50',
-      iconClassName: 'bg-violet-100 text-violet-700',
+      className: 'border-red-200 bg-red-50/70',
+      iconClassName: 'bg-red-100 text-red-700',
     },
   ];
 
@@ -343,7 +353,7 @@ export function AdminOverviewView() {
           <CardHeader className="gap-4">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
-                <UsersRound className="h-4 w-4 text-amber-600" />
+                <UsersRound className="h-4 w-4 text-blue-600" />
                 Phân bổ thành viên theo Leader
               </CardTitle>
               <CardDescription className="mt-1">
@@ -380,6 +390,7 @@ export function AdminOverviewView() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="truncate font-semibold">{leader.name}</p>
+                            <RoleBadge role="leader" />
                             <AccountStatusBadge status={leader.status} />
                           </div>
                           <p className="truncate text-sm text-muted-foreground">{leader.email}</p>
@@ -469,6 +480,7 @@ export function AdminOverviewView() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="truncate font-semibold">{member.name}</p>
+                            <RoleBadge role="member" />
                             <AccountStatusBadge status={member.status} />
                           </div>
                           <p className="truncate text-sm text-muted-foreground">{member.email}</p>
@@ -513,7 +525,7 @@ export function AdminOverviewView() {
                   <p className="truncate text-sm font-medium">{account.name}</p>
                   <p className="truncate text-xs text-muted-foreground">{account.email}</p>
                 </div>
-                <Badge variant="outline">{account.role === 'leader' ? 'Leader' : 'Thành viên'}</Badge>
+                <RoleBadge role={account.role} />
               </div>
             ))}
           </CardContent>

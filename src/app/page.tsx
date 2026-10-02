@@ -98,6 +98,21 @@ export default function HomePage() {
   }, [user]);
 
   useEffect(() => {
+    const root = document.documentElement;
+    if (!user) {
+      delete root.dataset.role;
+      return;
+    }
+
+    root.dataset.role = user.role;
+    return () => {
+      if (root.dataset.role === user.role) {
+        delete root.dataset.role;
+      }
+    };
+  }, [user?.role]);
+
+  useEffect(() => {
     const handleOpen = () => setMobileMenuOpen(true);
     const handleClose = () => setMobileMenuOpen(false);
     window.addEventListener('open-mobile-menu', handleOpen);
@@ -413,7 +428,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background">
+    <div data-role={user.role} className="flex h-dvh flex-col overflow-hidden bg-background">
       {/* Global Command Palette (Cmd+K) */}
       <CommandPalette />
 

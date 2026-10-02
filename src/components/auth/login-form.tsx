@@ -214,6 +214,14 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
     { icon: Timer, label: 'Chấm công & Time Tracking tích hợp' },
     { icon: CheckCircle2, label: 'Tích hợp Google Docs, Sheets, Slides' },
   ];
+  const loginActionClass = loginRole === 'admin'
+    ? 'bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 shadow-red-500/20'
+    : loginRole === 'leader'
+      ? 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-blue-500/20'
+      : 'bg-gradient-to-r from-zinc-950 to-zinc-700 hover:from-zinc-800 hover:to-zinc-600 shadow-zinc-950/20';
+  const registerActionClass = role === 'leader'
+    ? 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-blue-500/20'
+    : 'bg-gradient-to-r from-zinc-950 to-zinc-700 hover:from-zinc-800 hover:to-zinc-600 shadow-zinc-950/20';
 
   return (
     <div className="min-h-screen flex bg-background relative overflow-hidden">
@@ -366,9 +374,9 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
                     <Label className="text-xs font-semibold">Đăng nhập với vai trò</Label>
                     <div className="grid grid-cols-3 gap-2">
                       {([
-                        { key: 'admin' as const, label: 'Quản trị', icon: ShieldCheck, gradient: 'from-amber-500 to-orange-500', ring: 'ring-amber-500/30' },
-                        { key: 'leader' as const, label: 'Leader', icon: BriefcaseBusiness, gradient: 'from-indigo-500 to-blue-500', ring: 'ring-indigo-500/30' },
-                        { key: 'member' as const, label: 'Thành viên', icon: UserRound, gradient: 'from-emerald-500 to-teal-500', ring: 'ring-emerald-500/30' },
+                        { key: 'admin' as const, label: 'Quản trị', icon: ShieldCheck, gradient: 'from-red-600 to-rose-500', ring: 'ring-red-500/30' },
+                        { key: 'leader' as const, label: 'Leader', icon: BriefcaseBusiness, gradient: 'from-blue-600 to-cyan-500', ring: 'ring-blue-500/30' },
+                        { key: 'member' as const, label: 'Thành viên', icon: UserRound, gradient: 'from-zinc-950 to-zinc-700', ring: 'ring-zinc-950/25' },
                       ] as const).map(({ key, label, icon: Icon, gradient, ring }) => (
                         <button
                           key={key}
@@ -433,7 +441,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
                       </Button>
                     </div>
                   </div>
-                  <Button type="submit" className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl h-10 shadow-md shadow-indigo-500/20 font-semibold" disabled={loading}>
+                  <Button type="submit" className={`w-full ${loginActionClass} text-white rounded-xl h-10 shadow-md font-semibold`} disabled={loading}>
                     {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
                     Đăng nhập
                   </Button>
@@ -506,7 +514,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
                           onClick={() => setRole('member')}
                           className={`h-12 flex items-center justify-center gap-2 rounded-xl border-2 text-xs font-medium transition-all duration-200 ${
                             role === 'member'
-                              ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white border-transparent shadow-md'
+                              ? 'bg-gradient-to-br from-zinc-950 to-zinc-700 text-white border-transparent shadow-md shadow-zinc-950/20'
                               : 'border-border/60 text-muted-foreground hover:border-primary/30'
                           }`}
                         >
@@ -518,7 +526,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
                           onClick={() => setRole('leader')}
                           className={`h-12 flex items-center justify-center gap-2 rounded-xl border-2 text-xs font-medium transition-all duration-200 ${
                             role === 'leader'
-                              ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white border-transparent shadow-md'
+                              ? 'bg-gradient-to-br from-blue-600 to-cyan-500 text-white border-transparent shadow-md shadow-blue-500/20'
                               : 'border-border/60 text-muted-foreground hover:border-primary/30'
                           }`}
                         >
@@ -563,7 +571,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
                       className="rounded-xl h-10"
                     />
                   </div>
-                  <Button type="submit" className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl h-10 shadow-md shadow-indigo-500/20 font-semibold" disabled={loading}>
+                  <Button type="submit" className={`w-full ${registerActionClass} text-white rounded-xl h-10 shadow-md font-semibold`} disabled={loading}>
                     {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
                     Đăng ký
                   </Button>

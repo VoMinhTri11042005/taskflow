@@ -69,7 +69,7 @@ export function LeaderSidebar() {
   return (
     <aside
       className={cn(
-        'sticky top-0 flex h-dvh shrink-0 flex-col border-r border-amber-200/70 bg-gradient-to-b from-amber-50/80 via-background to-background transition-all duration-300',
+        'sticky top-0 flex h-dvh shrink-0 flex-col border-r border-primary/20 bg-gradient-to-b from-primary/8 via-background to-background transition-all duration-300',
         isMobile ? 'w-[min(20rem,calc(100vw-1rem))]' : showFull ? 'w-72' : 'w-16'
       )}
       aria-label="Điều hướng Leader"
@@ -79,7 +79,7 @@ export function LeaderSidebar() {
         {showFull && (
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold">TaskFlow Leader</p>
-            <p className="truncate text-xs text-amber-700">Không gian điều phối nhóm</p>
+            <p className="truncate text-xs text-primary">Không gian điều phối nhóm</p>
           </div>
         )}
         {isMobile && (
@@ -91,16 +91,16 @@ export function LeaderSidebar() {
 
       {showFull && user && (
         <div className="px-3 pb-4">
-          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-white/80 p-3 shadow-sm">
+          <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-background/80 p-3 shadow-sm">
             <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-              style={{ backgroundColor: user.color || '#f59e0b' }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ring-2 ring-primary/20"
+              style={{ backgroundColor: user.color || '#2563eb' }}
             >
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{user.name}</p>
-              <Badge className="mt-1 bg-amber-100 text-[10px] text-amber-800 hover:bg-amber-100">Leader</Badge>
+              <Badge className="mt-1 bg-primary/10 text-[10px] text-primary hover:bg-primary/15">Leader</Badge>
             </div>
           </div>
         </div>
@@ -118,17 +118,17 @@ export function LeaderSidebar() {
             }}
             aria-current={currentView === id ? 'page' : undefined}
             className={cn(
-              'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2',
+              'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
               currentView === id
-                ? 'bg-amber-500 text-white shadow-sm'
-                : 'text-muted-foreground hover:bg-amber-100/80 hover:text-amber-950'
+                ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25'
+                : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
             )}
             title={!showFull ? label : undefined}
           >
             <Icon className="h-5 w-5 shrink-0" />
             {showFull && <span className="flex-1 truncate text-left">{label}</span>}
             {showBadge && unreadCount > 0 && (
-              <Badge className="h-5 min-w-5 bg-amber-600 px-1.5 text-[10px] text-white hover:bg-amber-600">
+              <Badge className="h-5 min-w-5 bg-primary px-1.5 text-[10px] text-primary-foreground hover:bg-primary">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </Badge>
             )}

@@ -83,7 +83,7 @@ export function AdminSidebar() {
       {/* Brand & Logo Header */}
       <div className="flex h-14 items-center justify-between px-4 border-b border-border/40">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-600 flex items-center justify-center text-primary-foreground font-black text-sm shadow-md shrink-0">
+          <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-primary to-red-700 flex items-center justify-center text-primary-foreground font-black text-sm shadow-md shadow-primary/25 shrink-0">
             TF
           </div>
           {showFull && (
@@ -154,8 +154,8 @@ export function AdminSidebar() {
         {showFull && user && (
           <div className="flex items-center gap-2.5 p-2 rounded-xl bg-muted/40 border border-border/40">
             <div
-              className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-xs"
-              style={{ backgroundColor: user.color || '#6366f1' }}
+              className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-xs ring-2 ring-primary/20"
+              style={{ backgroundColor: user.color || '#dc2626' }}
             >
               {user.name?.charAt(0)}
             </div>

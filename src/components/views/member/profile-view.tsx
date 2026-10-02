@@ -321,7 +321,7 @@ export function ProfileView() {
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Badge variant="secondary" className="w-fit">Thành viên</Badge>
+                  <Badge variant="outline" className="w-fit border-zinc-300 bg-zinc-950 text-white dark:border-zinc-700 dark:bg-zinc-100 dark:text-zinc-950">Thành viên</Badge>
                 </div>
               )}
               {user?.email && (

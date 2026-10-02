@@ -50,19 +50,20 @@ export function GlobalHeader() {
 
   const isAdmin = user?.role === 'admin';
   const isLeader = user?.role === 'leader';
+  const roleAvatarColor = isAdmin ? '#dc2626' : isLeader ? '#2563eb' : '#18181b';
   const roleBadge = isAdmin
     ? {
         label: 'Quản trị viên (Admin)',
-        className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+        className: 'border border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300',
       }
     : isLeader
       ? {
           label: 'Leader',
-          className: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+          className: 'border border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300',
         }
       : {
           label: 'Thành viên (Member)',
-          className: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+          className: 'border border-zinc-300 bg-zinc-950 text-white dark:border-zinc-700 dark:bg-zinc-100 dark:text-zinc-950',
         };
 
   // Get Breadcrumb text based on currentView
@@ -257,7 +258,7 @@ export function GlobalHeader() {
               >
                 <div
                   className="h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-xs"
-                  style={{ backgroundColor: user.color || '#6366f1' }}
+                  style={{ backgroundColor: user.color || roleAvatarColor }}
                 >
                   {user.name?.charAt(0) || 'U'}
                 </div>
