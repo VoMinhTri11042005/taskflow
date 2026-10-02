@@ -5,10 +5,11 @@ const prismaCommand = isWindows ? 'node_modules\\.bin\\prisma.cmd' : './node_mod
 const npmCommand = isWindows ? 'npm.cmd' : 'npm';
 const migrationAttempts = 3;
 
-function run(command, args) {
+function run(command, args, environment = process.env) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: environment,
     });
     let output = '';
     let settled = false;
@@ -46,9 +47,17 @@ async function applyMigrations() {
     return true;
   }
 
+  const migrationEnvironment = process.env.DIRECT_URL
+    ? { ...process.env, DATABASE_URL: process.env.DIRECT_URL }
+    : process.env;
+
+  if (process.env.DIRECT_URL) {
+    console.log('[database] Using DIRECT_URL for Prisma migrations.');
+  }
+
   for (let attempt = 1; attempt <= migrationAttempts; attempt += 1) {
     console.log(`[database] Applying Prisma migrations (attempt ${attempt}/${migrationAttempts})...`);
-    const result = await run(prismaCommand, ['migrate', 'deploy']);
+    const result = await run(prismaCommand, ['migrate', 'deploy'], migrationEnvironment);
 
     if (result.code === 0) {
       return true;
