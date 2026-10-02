@@ -10,13 +10,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   ChevronRight,
-  UserCheck,
-  Shield,
   LogOut,
-  Sparkles,
-  CheckCircle2,
-  Clock,
-  ExternalLink,
   Menu,
 } from 'lucide-react';
 import {
@@ -34,6 +28,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { toast } from 'sonner';
+import { ensureApiSuccess } from '@/lib/client-api';
+import { notifyAuthSessionChange } from '@/lib/auth-session-client';
 
 export function GlobalHeader() {
   const {
@@ -52,6 +49,21 @@ export function GlobalHeader() {
   } = useAppStore();
 
   const isAdmin = user?.role === 'admin';
+  const isLeader = user?.role === 'leader';
+  const roleBadge = isAdmin
+    ? {
+        label: 'Quản trị viên (Admin)',
+        className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+      }
+    : isLeader
+      ? {
+          label: 'Leader',
+          className: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+        }
+      : {
+          label: 'Thành viên (Member)',
+          className: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+        };
 
   // Get Breadcrumb text based on currentView
   const breadcrumbInfo = React.useMemo(() => {
@@ -88,22 +100,31 @@ export function GlobalHeader() {
   }, [currentView, isAdmin]);
 
   const handleMarkAllRead = async () => {
+    if (!user) return;
     try {
-      await fetch('/api/notifications', {
+      const response = await fetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id, markAll: true }),
+        body: JSON.stringify({ userId: user.id, markAll: true }),
       });
+      await ensureApiSuccess(response, 'Không thể đánh dấu thông báo đã đọc');
       setNotifications(notifications.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
-    } catch {}
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể đánh dấu thông báo đã đọc');
+    }
   };
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } catch {}
-    setUser(null);
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      await ensureApiSuccess(response, 'Không thể đăng xuất. Vui lòng thử lại.');
+      setUser(null);
+      notifyAuthSessionChange();
+      toast.success('Đã đăng xuất thành công');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể đăng xuất. Vui lòng thử lại.');
+    }
   };
 
   return (
@@ -127,6 +148,7 @@ export function GlobalHeader() {
           onClick={toggleSidebarCollapsed}
           className="hidden md:flex h-8 w-8 text-muted-foreground hover:text-foreground"
           title={sidebarCollapsed ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên'}
+          aria-label={sidebarCollapsed ? 'Mở rộng thanh bên' : 'Thu gọn thanh bên'}
         >
           {sidebarCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </Button>
@@ -152,6 +174,7 @@ export function GlobalHeader() {
           size="sm"
           onClick={() => setCommandPaletteOpen(true)}
           className="h-8 md:h-9 px-2.5 md:px-3 text-xs text-muted-foreground hover:text-foreground bg-muted/40 border-border/60 hover:bg-muted/70 gap-2 rounded-lg font-normal shadow-xs"
+          aria-label="Mở tìm kiếm nhanh"
         >
           <Search className="h-3.5 w-3.5" />
           <span className="hidden md:inline">Tìm kiếm nhanh...</span>
@@ -167,6 +190,7 @@ export function GlobalHeader() {
               variant="ghost"
               size="icon"
               className="relative h-9 w-9 rounded-lg border border-border/40 hover:bg-muted/60 transition-colors"
+              aria-label={unreadCount > 0 ? `Mở thông báo, có ${unreadCount} chưa đọc` : 'Mở thông báo'}
             >
               <Bell className="h-4 w-4 text-muted-foreground" />
               {unreadCount > 0 && (
@@ -226,7 +250,11 @@ export function GlobalHeader() {
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-9 px-2 gap-2 rounded-lg border border-border/40 hover:bg-muted/60 transition-colors">
+              <Button
+                variant="ghost"
+                className="h-9 px-2 gap-2 rounded-lg border border-border/40 hover:bg-muted/60 transition-colors"
+                aria-label="Mở menu tài khoản"
+              >
                 <div
                   className="h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-xs"
                   style={{ backgroundColor: user.color || '#6366f1' }}
@@ -242,10 +270,8 @@ export function GlobalHeader() {
                   <p className="text-xs font-bold leading-none">{user.name}</p>
                   <p className="text-[11px] leading-none text-muted-foreground">{user.email}</p>
                   <div className="mt-1 flex items-center gap-1">
-                    <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                      isAdmin ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                    }`}>
-                      {isAdmin ? 'Quản trị viên (Admin)' : 'Thành viên (Member)'}
+                    <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full ${roleBadge.className}`}>
+                      {roleBadge.label}
                     </span>
                   </div>
                 </div>

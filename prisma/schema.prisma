@@ -25,6 +25,8 @@ model User {
   pollsCreated  Poll[]
   votes         PollVote[]
   timeLogs      TimeLog[]
+  taskComments  TaskComment[]
+  taskActivities TaskActivity[]
   ledProjects   Project[] @relation("ProjectLeader")
   projectMemberships ProjectMember[]
   leaderId      String?  @map("leader_id")
@@ -125,7 +127,10 @@ model Task {
   description String?
   status      String    @default("todo")
   priority    String    @default("medium")
+  storyPoints Int       @default(1) @map("story_points")
   dueDate     DateTime?  @map("due_date")
+  reviewNotes String?   @map("review_notes")
+  reviewStatus String?  @map("review_status")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -134,8 +139,13 @@ model Task {
   assigneeId String?              @map("assignee_id")
   assignee   TeamMember? @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
 
-  links TaskLink[]
+  links      TaskLink[]
+  comments   TaskComment[]
+  checklist  TaskChecklistItem[]
+  activities TaskActivity[]
 
+  @@index([projectId])
+  @@index([assigneeId, status])
   @@map("tasks")
 }
 
@@ -149,6 +159,50 @@ model TaskLink {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("task_links")
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  taskId    String   @map("task_id")
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@map("task_comments")
+}
+
+model TaskChecklistItem {
+  id          String   @id @default(cuid())
+  title       String
+  isCompleted Boolean  @default(false) @map("is_completed")
+  position    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  taskId      String   @map("task_id")
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, position])
+  @@map("task_checklist_items")
+}
+
+model TaskActivity {
+  id        String   @id @default(cuid())
+  action    String
+  details   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  taskId    String   @map("task_id")
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@map("task_activities")
 }
 
 model Notification {

@@ -15,8 +15,23 @@ export function isManager(session: SessionData) {
   return isLeader(session);
 }
 
-export async function canManageProject(session: SessionData, projectId: string) {
+/**
+ * Cookies are intentionally short-lived, but role or account-status changes
+ * must take effect immediately.  Sensitive Leader operations therefore also
+ * verify the current account state in the database.
+ */
+export async function isActiveLeader(session: SessionData) {
   if (!isLeader(session)) return false;
+
+  const leader = await db.user.findFirst({
+    where: { id: session.id, role: 'leader', status: 'approved' },
+    select: { id: true },
+  });
+  return Boolean(leader);
+}
+
+export async function canManageProject(session: SessionData, projectId: string) {
+  if (!(await isActiveLeader(session))) return false;
 
   const project = await db.project.findFirst({ where: { id: projectId, leaderId: session.id }, select: { id: true } });
   return Boolean(project);
@@ -55,7 +70,7 @@ export async function canManageTask(session: SessionData, taskId: string) {
 
 /** Verify that an assignee belongs to the exact project, not merely the Leader's roster. */
 export async function canAssignProjectMember(session: SessionData, projectId: string, teamMemberId: string) {
-  if (!isLeader(session)) return false;
+  if (!(await canManageProject(session, projectId))) return false;
 
   const assignee = await db.teamMember.findUnique({
     where: { id: teamMemberId },

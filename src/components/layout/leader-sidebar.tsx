@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { toast } from 'sonner';
 import { notifyAuthSessionChange } from '@/lib/auth-session-client';
+import { ensureApiSuccess } from '@/lib/client-api';
 
 const navItems: { id: LeaderViewType; label: string; icon: React.ElementType; showBadge?: boolean }[] = [
   { id: 'leader-dashboard', label: 'Không gian nhóm', icon: LayoutDashboard },
@@ -38,15 +39,15 @@ export function LeaderSidebar() {
   const {
     currentView,
     setCurrentView,
-    sidebarOpen,
-    toggleSidebar,
+    sidebarCollapsed,
+    toggleSidebarCollapsed,
     tasks,
     user,
     setUser,
     unreadCount,
   } = useAppStore();
   const isMobile = useIsMobile();
-  const showFull = isMobile || sidebarOpen;
+  const showFull = isMobile || !sidebarCollapsed;
   const activeTasks = tasks.filter((task) => task.status !== 'done').length;
 
   function closeMobileMenu() {
@@ -55,12 +56,13 @@ export function LeaderSidebar() {
 
   async function handleLogout() {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      await ensureApiSuccess(response, 'Không thể đăng xuất. Vui lòng thử lại.');
       setUser(null);
       notifyAuthSessionChange();
       toast.success('Đã đăng xuất thành công');
-    } catch {
-      toast.error('Không thể đăng xuất. Vui lòng thử lại.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể đăng xuất. Vui lòng thử lại.');
     }
   }
 
@@ -70,6 +72,7 @@ export function LeaderSidebar() {
         'sticky top-0 flex h-dvh shrink-0 flex-col border-r border-amber-200/70 bg-gradient-to-b from-amber-50/80 via-background to-background transition-all duration-300',
         isMobile ? 'w-[min(20rem,calc(100vw-1rem))]' : showFull ? 'w-72' : 'w-16'
       )}
+      aria-label="Điều hướng Leader"
     >
       <div className="flex min-h-[72px] items-center gap-3 px-4">
         <BrandMark size={36} />
@@ -104,16 +107,18 @@ export function LeaderSidebar() {
       )}
 
       <Separator />
-      <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-3">
+      <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-3" aria-label="Menu Leader">
         {navItems.map(({ id, label, icon: Icon, showBadge }) => (
           <button
             key={id}
+            type="button"
             onClick={() => {
               setCurrentView(id);
               closeMobileMenu();
             }}
+            aria-current={currentView === id ? 'page' : undefined}
             className={cn(
-              'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+              'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2',
               currentView === id
                 ? 'bg-amber-500 text-white shadow-sm'
                 : 'text-muted-foreground hover:bg-amber-100/80 hover:text-amber-950'
@@ -136,6 +141,7 @@ export function LeaderSidebar() {
         <Button
           variant="ghost"
           size="sm"
+          type="button"
           onClick={handleLogout}
           className={cn(
             'w-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-white',
@@ -150,9 +156,11 @@ export function LeaderSidebar() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={toggleSidebar}
+            type="button"
+            onClick={toggleSidebarCollapsed}
             className="w-full justify-center"
             title={showFull ? 'Thu gọn thanh bên' : 'Mở rộng thanh bên'}
+            aria-label={showFull ? 'Thu gọn thanh bên' : 'Mở rộng thanh bên'}
           >
             {showFull ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </Button>

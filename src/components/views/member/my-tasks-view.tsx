@@ -21,10 +21,6 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
-  FileText,
-  Table2,
-  Presentation,
-  FileQuestion,
   Link as LinkIcon,
   Calendar,
   Send,
@@ -32,7 +28,6 @@ import {
   Table as TableIcon,
   CalendarDays,
   Search,
-  CheckCircle2,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -69,6 +64,8 @@ export function MyTasksView() {
   const [movingId, setMovingId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const teamMemberId = user?.teamMemberId ?? null;
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
 
   const fetchTasks = useCallback(async () => {
     const params = new URLSearchParams();
@@ -170,18 +167,17 @@ export function MyTasksView() {
   const myTasks = useMemo(() => {
     return tasks.filter((t) => {
       // If user has teamMemberId, filter by it, otherwise show all assigned to member
-      if (user?.teamMemberId && t.assigneeId !== user.teamMemberId) return false;
+      if (teamMemberId && t.assigneeId !== teamMemberId) return false;
       if (selectedProjectId && t.projectId !== selectedProjectId) return false;
       if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTitle = t.title.toLowerCase().includes(q);
-        const matchDesc = t.description ? t.description.toLowerCase().includes(q) : false;
+      if (normalizedSearchQuery) {
+        const matchTitle = t.title.toLocaleLowerCase().includes(normalizedSearchQuery);
+        const matchDesc = t.description ? t.description.toLocaleLowerCase().includes(normalizedSearchQuery) : false;
         if (!matchTitle && !matchDesc) return false;
       }
       return true;
     });
-  }, [tasks, user?.teamMemberId, selectedProjectId, filterPriority, searchQuery]);
+  }, [tasks, teamMemberId, selectedProjectId, filterPriority, normalizedSearchQuery]);
 
   const currentProject = projects.find((p) => p.id === selectedProjectId);
 

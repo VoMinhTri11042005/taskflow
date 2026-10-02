@@ -35,7 +35,10 @@ export interface Task {
   description?: string | null;
   status: 'todo' | 'in_progress' | 'review' | 'done';
   priority: 'low' | 'medium' | 'high' | 'urgent';
+  storyPoints?: number;
   dueDate?: string | null;
+  reviewNotes?: string | null;
+  reviewStatus?: 'pending' | 'approved' | 'changes_requested' | null;
   createdAt: string;
   updatedAt: string;
   projectId: string;
@@ -43,6 +46,9 @@ export interface Task {
   assignee?: TeamMember | null;
   project?: Project | null;
   links?: TaskLink[];
+  checklist?: TaskChecklistItem[];
+  comments?: TaskComment[];
+  activities?: TaskActivity[];
 }
 
 export interface TaskLink {
@@ -52,6 +58,35 @@ export interface TaskLink {
   type: 'google_doc' | 'google_sheet' | 'google_slide' | 'google_form' | 'other';
   taskId: string;
   createdAt: string;
+}
+
+export interface TaskChecklistItem {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  position: number;
+  createdAt: string;
+  taskId: string;
+}
+
+export interface TaskComment {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  taskId: string;
+  userId: string;
+  user?: Pick<User, 'id' | 'name' | 'color' | 'avatar'>;
+}
+
+export interface TaskActivity {
+  id: string;
+  action: string;
+  details?: string | null;
+  createdAt: string;
+  taskId: string;
+  userId: string;
+  user?: Pick<User, 'id' | 'name' | 'color' | 'avatar'>;
 }
 
 export interface DashboardStats {

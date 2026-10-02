@@ -25,6 +25,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { ensureApiSuccess } from '@/lib/client-api';
+import { notifyAuthSessionChange } from '@/lib/auth-session-client';
 
 const adminNavItems: { id: AdminViewType; label: string; icon: React.ElementType; badge?: string }[] = [
   { id: 'admin-overview', label: 'Tổng quan hệ thống', icon: LayoutDashboard },
@@ -52,11 +54,13 @@ export function AdminSidebar() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      await ensureApiSuccess(response, 'Không thể đăng xuất. Vui lòng thử lại.');
       setUser(null);
+      notifyAuthSessionChange();
       toast.success('Đã đăng xuất thành công');
-    } catch {
-      toast.error('Có lỗi xảy ra');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Không thể đăng xuất. Vui lòng thử lại.');
     }
   };
 

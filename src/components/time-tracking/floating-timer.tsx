@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { Button } from '@/components/ui/button';
-import { Timer, Square, ChevronUp, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { Square } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function FloatingTimer() {
@@ -30,26 +30,38 @@ export function FloatingTimer() {
   }, [user, setActiveTimeLog]);
 
   React.useEffect(() => {
-    checkActiveSession();
+    void checkActiveSession();
   }, [checkActiveSession]);
 
   // Live timer interval
   React.useEffect(() => {
-    if (!activeTimeLog || !activeTimeLog.checkIn) {
-      setElapsedSeconds(0);
-      return;
+    const checkIn = activeTimeLog?.checkIn;
+    let animationFrameId: number | null = null;
+    let intervalId: number | null = null;
+
+    if (!checkIn) {
+      // Defer the reset until after the effect commits. This keeps the effect
+      // asynchronous while ensuring a newly started session never reuses an
+      // elapsed value from the previous one.
+      animationFrameId = window.requestAnimationFrame(() => setElapsedSeconds(0));
+      return () => {
+        if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
+      };
     }
 
-    const startTime = new Date(activeTimeLog.checkIn).getTime();
+    const startTime = new Date(checkIn).getTime();
     const updateElapsed = () => {
       const diff = Math.floor((Date.now() - startTime) / 1000);
       setElapsedSeconds(diff > 0 ? diff : 0);
     };
 
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [activeTimeLog]);
+    animationFrameId = window.requestAnimationFrame(updateElapsed);
+    intervalId = window.setInterval(updateElapsed, 1000);
+    return () => {
+      if (animationFrameId !== null) window.cancelAnimationFrame(animationFrameId);
+      if (intervalId !== null) window.clearInterval(intervalId);
+    };
+  }, [activeTimeLog?.checkIn]);
 
   if (!user || !activeTimeLog) return null;
 

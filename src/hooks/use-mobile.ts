@@ -3,15 +3,15 @@ import * as React from "react"
 const MOBILE_BREAKPOINT = 768
 
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean>(() => {
-    if (typeof window === "undefined") return false
-    return window.innerWidth < MOBILE_BREAKPOINT
-  })
+  // Keep the first client render identical to SSR.  Reading window during
+  // state initialization creates a mobile-only hydration mismatch because
+  // server rendering always has no viewport.
+  const [isMobile, setIsMobile] = React.useState(false)
 
   React.useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
     const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+      setIsMobile(mql.matches)
     }
     mql.addEventListener("change", onChange)
     onChange()

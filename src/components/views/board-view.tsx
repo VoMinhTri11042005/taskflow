@@ -100,7 +100,8 @@ export function BoardView() {
   const [formAssigneeId, setFormAssigneeId] = useState('');
   const [formDueDate, setFormDueDate] = useState('');
   const [projectAssignees, setProjectAssignees] = useState<ProjectAssignee[]>([]);
-  const [loadingProjectAssignees, setLoadingProjectAssignees] = useState(false);
+  const [assigneesProjectId, setAssigneesProjectId] = useState<string | null>(null);
+  const loadingProjectAssignees = Boolean(formProjectId && assigneesProjectId !== formProjectId);
 
   // Drag & drop state
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -124,29 +125,49 @@ export function BoardView() {
     });
   }, [fetchTasks, setProjects]);
 
-  const fetchProjectAssignees = useCallback(async (projectId: string) => {
-    if (!projectId) return;
-    setLoadingProjectAssignees(true);
-    try {
-      const response = await fetch(`/api/projects/${projectId}/members`, { cache: 'no-store' });
-      const data = await readApiJson<{
-        members: Array<{ member: ProjectAssignee }>;
-      }>(response, 'Không thể tải thành viên dự án');
-      setProjectAssignees(data.members.map((item) => item.member));
-    } catch {
-      setProjectAssignees([]);
-    } finally {
-      setLoadingProjectAssignees(false);
-    }
-  }, []);
-
   useEffect(() => {
-    if (formProjectId) {
-      void fetchProjectAssignees(formProjectId);
-    } else {
-      setProjectAssignees([]);
-    }
-  }, [formProjectId, fetchProjectAssignees]);
+    if (!formProjectId) return;
+
+    let active = true;
+    const projectId = formProjectId;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/projects/${projectId}/members`, { cache: 'no-store' });
+        const data = await readApiJson<{
+          members: Array<{
+            status: string;
+            user: {
+              name: string;
+              email: string;
+              color: string;
+              teamMemberId: string | null;
+            };
+          }>;
+        }>(response, 'Không thể tải thành viên dự án');
+        if (!active) return;
+        // The task table stores TeamMember IDs, while the project endpoint
+        // returns the account plus its matching TeamMember ID.  Only expose
+        // approved members that can actually be assigned a task.
+        setProjectAssignees(
+          data.members
+            .filter((item) => item.status === 'approved' && item.user.teamMemberId)
+            .map((item) => ({
+              id: item.user.teamMemberId as string,
+              name: item.user.name,
+              email: item.user.email,
+              color: item.user.color,
+            }))
+        );
+        setAssigneesProjectId(projectId);
+      } catch {
+        if (!active) return;
+        setProjectAssignees([]);
+        setAssigneesProjectId(projectId);
+      }
+    })();
+
+    return () => { active = false; };
+  }, [formProjectId]);
 
   function openCreateDialog(status: Task['status'] = 'todo') {
     setEditingTask(null);
@@ -158,6 +179,7 @@ export function BoardView() {
     setFormAssigneeId('');
     setFormDueDate('');
     setProjectAssignees([]);
+    setAssigneesProjectId(null);
     setDialogOpen(true);
   }
 
@@ -171,6 +193,7 @@ export function BoardView() {
     setFormAssigneeId(task.assigneeId || '');
     setFormDueDate(task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '');
     setProjectAssignees([]);
+    setAssigneesProjectId(null);
     setDialogOpen(true);
   }
 
@@ -643,6 +666,7 @@ export function BoardView() {
                     setFormProjectId(projectId);
                     setFormAssigneeId('');
                     setProjectAssignees([]);
+                    setAssigneesProjectId(null);
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Chọn dự án" /></SelectTrigger>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { Poll, PollOption, PollVote } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,21 +22,22 @@ export function MemberPollsView() {
   const [votingPollId, setVotingPollId] = useState<string | null>(null);
   const [draftSelections, setDraftSelections] = useState<Record<string, string[]>>({});
 
-  const fetchPolls = useCallback(async () => {
-    try {
-      const response = await fetch('/api/polls', { cache: 'no-store' });
-      const data = await readApiJson<Poll[]>(response, 'Không thể tải danh sách bình chọn');
-      setPolls(data);
-    } catch {
-      toast.error('Không thể tải danh sách bình chọn');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    void fetchPolls();
-  }, [fetchPolls]);
+    let active = true;
+    void fetch('/api/polls', { cache: 'no-store' })
+      .then((response) => readApiJson<Poll[]>(response, 'Không thể tải danh sách bình chọn'))
+      .then((data) => {
+        if (active) setPolls(data);
+      })
+      .catch(() => {
+        if (active) toast.error('Không thể tải danh sách bình chọn');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => { active = false; };
+  }, []);
 
   /** The API deliberately returns only this viewer's votes, never other voters. */
   function getSavedSelections(poll: Poll) {
@@ -70,7 +71,11 @@ export function MemberPollsView() {
 
     const next = getCurrentSelections(poll);
     if (poll.allowMultipleChoices) {
-      next.has(optionId) ? next.delete(optionId) : next.add(optionId);
+      if (next.has(optionId)) {
+        next.delete(optionId);
+      } else {
+        next.add(optionId);
+      }
     } else if (next.has(optionId)) {
       next.clear();
     } else {

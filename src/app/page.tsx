@@ -60,6 +60,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const handledProjectInvite = useRef<string | null>(null);
   const activeUserRef = useRef<User | null>(null);
+  const mobileDrawerRef = useRef<HTMLDivElement>(null);
 
   const [hasInviteLink] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -106,6 +107,46 @@ export default function HomePage() {
       window.removeEventListener('close-mobile-menu', handleClose);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isMobile || !mobileMenuOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const drawer = mobileDrawerRef.current;
+    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileMenuOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !drawer) return;
+
+      const focusable = Array.from(drawer.querySelectorAll<HTMLElement>(focusableSelector));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    requestAnimationFrame(() => drawer?.focus());
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMobile, mobileMenuOpen]);
 
   const clearWorkspaceState = useCallback(() => {
     setTasks([]);
@@ -187,14 +228,6 @@ export default function HomePage() {
   useEffect(() => {
     if (isMobile) { setSidebarOpen(false); } else { setSidebarOpen(true); }
   }, [isMobile, setSidebarOpen]);
-
-  useEffect(() => {
-    function handleCloseMobile() {
-      setMobileMenuOpen(false);
-    }
-    window.addEventListener('close-mobile-menu', handleCloseMobile);
-    return () => window.removeEventListener('close-mobile-menu', handleCloseMobile);
-  }, [setMobileMenuOpen]);
 
   useEffect(() => {
     if (!user) return;
@@ -317,10 +350,24 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3 animate-pulse text-muted-foreground">
-          <div className="h-10 w-10 rounded-2xl bg-primary/20 flex items-center justify-center font-bold text-primary">TF</div>
-          <span className="text-sm font-medium">Đang tải không gian làm việc...</span>
+      <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
+        {/* Decorative background blobs */}
+        <div className="absolute top-1/4 -left-32 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
+        <div className="absolute bottom-1/4 -right-32 h-64 w-64 rounded-full bg-violet-500/5 blur-3xl" />
+        <div className="flex flex-col items-center gap-4 animate-fade-in-up">
+          <div className="relative">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center font-black text-lg text-white shadow-lg shadow-indigo-500/25 animate-float">
+              TF
+            </div>
+            <div className="absolute inset-0 rounded-2xl animate-pulse-ring" />
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">TaskFlow</span>
+            <span className="text-xs text-muted-foreground">Đang tải không gian làm việc...</span>
+          </div>
+          <div className="w-32 h-1 rounded-full overflow-hidden bg-muted">
+            <div className="h-full w-full rounded-full animate-shimmer" />
+          </div>
         </div>
       </div>
     );
@@ -380,8 +427,20 @@ export default function HomePage() {
         {/* Mobile Drawer */}
         {isMobile && mobileMenuOpen && (
           <>
-            <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200" onClick={() => setMobileMenuOpen(false)} />
-            <div className="fixed inset-y-0 left-0 z-50 animate-in slide-in-from-left duration-200 shadow-2xl">
+            <button
+              type="button"
+              aria-label="Đóng menu"
+              className="fixed inset-0 z-40 border-0 bg-black/60 p-0 backdrop-blur-xs animate-in fade-in duration-200"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <div
+              ref={mobileDrawerRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menu điều hướng"
+              tabIndex={-1}
+              className="fixed inset-y-0 left-0 z-50 animate-in slide-in-from-left duration-200 shadow-2xl"
+            >
               <Sidebar />
             </div>
           </>

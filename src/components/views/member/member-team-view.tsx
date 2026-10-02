@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useReducer } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +54,37 @@ type ProjectTeamOverview = {
   members: ProjectTeamMember[];
 };
 
+type OverviewState = {
+  overview: ProjectTeamOverview | null;
+  loading: boolean;
+  error: string;
+};
+
+type OverviewAction =
+  | { type: 'reset' }
+  | { type: 'loading' }
+  | { type: 'success'; overview: ProjectTeamOverview }
+  | { type: 'error'; message: string };
+
+const initialOverviewState: OverviewState = {
+  overview: null,
+  loading: false,
+  error: '',
+};
+
+function overviewReducer(state: OverviewState, action: OverviewAction): OverviewState {
+  switch (action.type) {
+    case 'reset':
+      return initialOverviewState;
+    case 'loading':
+      return { ...state, loading: true, error: '', overview: null };
+    case 'success':
+      return { overview: action.overview, loading: false, error: '' };
+    case 'error':
+      return { overview: null, loading: false, error: action.message };
+  }
+}
+
 const statusConfig: Record<Task['status'], { label: string; className: string }> = {
   todo: { label: 'Cần làm', className: 'bg-slate-100 text-slate-700' },
   in_progress: { label: 'Đang làm', className: 'bg-amber-100 text-amber-700' },
@@ -70,10 +101,7 @@ function formatDueDate(value: string | null) {
 
 export function MemberTeamView() {
   const { projects, setProjects, selectedProjectId, setSelectedProjectId } = useAppStore();
-  const [projectId, setProjectId] = useState('');
-  const [overview, setOverview] = useState<ProjectTeamOverview | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [overviewState, dispatchOverview] = useReducer(overviewReducer, initialOverviewState);
 
   useEffect(() => {
     fetch('/api/projects', { cache: 'no-store' })
@@ -87,50 +115,43 @@ export function MemberTeamView() {
     [projects]
   );
 
-  useEffect(() => {
-    if (activeProjects.length === 0) {
-      if (projectId) setProjectId('');
-      return;
+  const projectId = useMemo(() => {
+    if (selectedProjectId && activeProjects.some((project) => project.id === selectedProjectId)) {
+      return selectedProjectId;
     }
 
-    const preferredId = selectedProjectId && activeProjects.some((project) => project.id === selectedProjectId)
-      ? selectedProjectId
-      : activeProjects.some((project) => project.id === projectId)
-        ? projectId
-        : activeProjects[0].id;
-
-    if (preferredId !== projectId) setProjectId(preferredId);
-  }, [activeProjects, projectId, selectedProjectId]);
+    return activeProjects[0]?.id || '';
+  }, [activeProjects, selectedProjectId]);
 
   useEffect(() => {
     if (!projectId) {
-      setOverview(null);
+      dispatchOverview({ type: 'reset' });
       return;
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError('');
-    setOverview(null);
+    dispatchOverview({ type: 'loading' });
 
     fetch(`/api/projects/${encodeURIComponent(projectId)}/team-progress`, { cache: 'no-store' })
       .then((response) => readApiJson<ProjectTeamOverview>(response, 'Không thể tải nhóm dự án'))
       .then((data) => {
-        if (!cancelled) setOverview(data);
+        if (!cancelled) dispatchOverview({ type: 'success', overview: data });
       })
       .catch((fetchError: unknown) => {
         if (!cancelled) {
-          setError(fetchError instanceof Error ? fetchError.message : 'Không thể tải nhóm dự án');
+          dispatchOverview({
+            type: 'error',
+            message: fetchError instanceof Error ? fetchError.message : 'Không thể tải nhóm dự án',
+          });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
   }, [projectId]);
+
+  const { overview, loading, error } = overviewState;
 
   const summary = useMemo(() => {
     const members = overview?.members || [];
@@ -145,7 +166,6 @@ export function MemberTeamView() {
   }, [overview]);
 
   function handleProjectChange(id: string) {
-    setProjectId(id);
     setSelectedProjectId(id);
   }
 

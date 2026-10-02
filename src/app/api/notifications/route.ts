@@ -3,9 +3,15 @@ import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 
-const markReadSchema = z.object({
-  notificationId: z.string().min(1, 'ID thông báo là bắt buộc'),
-})
+const markReadSchema = z.union([
+  z.object({
+    notificationId: z.string().min(1, 'ID thông báo là bắt buộc'),
+  }),
+  z.object({
+    markAll: z.literal(true),
+    userId: z.string().cuid().optional(),
+  }),
+])
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,6 +46,19 @@ export async function PUT(request: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const body = await request.json()
     const validated = markReadSchema.parse(body)
+
+    if ('markAll' in validated) {
+      const userId = validated.userId || session.id
+      if (userId !== session.id && session.role !== 'admin') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+
+      const result = await db.notification.updateMany({
+        where: { userId, read: false },
+        data: { read: true },
+      })
+      return NextResponse.json({ success: true, count: result.count })
+    }
 
     const notification = await db.notification.findUnique({ where: { id: validated.notificationId } })
     if (!notification) return NextResponse.json({ error: 'Không tìm thấy thông báo' }, { status: 404 })
