@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/app-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ type LoginFormProps = {
 
 export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
   const { setUser, setCurrentView } = useAppStore();
+  const router = useRouter();
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -168,6 +170,14 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
             : 'my-tasks'
       );
       toast.success(`Chào mừng ${userData.name}!`);
+
+      // /join deliberately renders only the invitation form. Once the
+      // authenticated invitation flow is complete, replace it with the
+      // workspace route; otherwise the user remains on this form despite a
+      // valid session (the issue shown on invited devices).
+      if (window.location.pathname === '/join') {
+        router.replace('/');
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Lỗi kết nối server');
     } finally {
