@@ -62,6 +62,39 @@ public/         # Static assets
 
 Never commit `.env` or production credentials. For production schema changes, use reviewed Prisma migrations rather than `db:push`.
 
+### One server for multiple devices (LAN)
+
+Run Docker Compose on **one** server only. Every other computer must open the
+same browser address; do not run a separate Compose stack on each computer,
+because each stack creates its own PostgreSQL volume and therefore its own
+accounts, approvals, and projects.
+
+Before the first build, add these values to the server's uncommitted `.env`:
+
+```dotenv
+# Generate one with:
+# node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+SESSION_SECRET="replace-with-one-long-random-value"
+
+# The address that other devices can actually reach. Do not use localhost here.
+NEXT_PUBLIC_APP_URL="http://192.168.1.10:3002"
+
+# Only when serving a trusted private LAN over HTTP. Use HTTPS for public use.
+SESSION_COOKIE_SECURE="false"
+```
+
+Then run `docker compose up --build` on the server, allow inbound TCP port
+`3002` through the server firewall, and have everyone browse
+`http://192.168.1.10:3002` (replace the address with the server's LAN IP or
+internal DNS name). `NEXT_PUBLIC_APP_URL` is compiled into invitation QR codes,
+so rebuild the image after changing it. For an internet-facing deployment, put
+the app behind HTTPS and leave `SESSION_COOKIE_SECURE` blank (or set it to
+`true`).
+
+Approving a Member account allows that person to sign in, but does not
+automatically add them to a project. Add the approved Member from the
+project's **Thành viên** screen or use that project's QR/link invite.
+
 ## Project membership and invitations
 
 - A Leader can own many projects. `ProjectMember` records are the source of truth

@@ -2,20 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSessionValue, getSession, type SessionData } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { renewPresence } from '@/lib/presence'
+import {
+  expiredSessionCookieOptions,
+  SESSION_COOKIE_NAME,
+  sessionCookieOptions,
+} from '@/lib/session-cookie'
 
 export const dynamic = 'force-dynamic'
 
-const sessionCookieOptions = {
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-  maxAge: 60 * 60 * 24 * 7,
-}
-
-function clearSession() {
+function clearSession(request: NextRequest) {
   const response = NextResponse.json({ user: null })
-  response.cookies.delete('session')
+  response.cookies.set(SESSION_COOKIE_NAME, '', expiredSessionCookieOptions(request))
   response.headers.set('Cache-Control', 'no-store, max-age=0')
   return response
 }
@@ -47,7 +44,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    if (!account || account.status !== 'approved') return clearSession()
+    if (!account || account.status !== 'approved') return clearSession(request)
 
     // A successful session validation means this account has just opened the
     // app. Renewing here makes presence resilient even if a browser delays the
@@ -77,7 +74,7 @@ export async function GET(request: NextRequest) {
     // Renew the signed snapshot too, so every API route receives current
     // authorization data immediately after this session check.
     const response = NextResponse.json({ user: session })
-    response.cookies.set('session', createSessionValue(session), sessionCookieOptions)
+    response.cookies.set(SESSION_COOKIE_NAME, createSessionValue(session), sessionCookieOptions(request))
     response.headers.set('Cache-Control', 'no-store, max-age=0')
     return response
   } catch (error) {

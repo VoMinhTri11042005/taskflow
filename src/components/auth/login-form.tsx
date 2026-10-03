@@ -10,6 +10,8 @@ import { LogIn, Eye, EyeOff, Loader2, UserPlus, ShieldCheck, UserRound, Briefcas
 import { toast } from 'sonner';
 import { BrandMark } from '@/components/layout/brand-mark';
 import { notifyAuthSessionChange } from '@/lib/auth-session-client';
+import { readApiJson } from '@/lib/client-api';
+import type { User } from '@/types';
 
 type LoginFormProps = {
   initialMode?: 'login' | 'register';
@@ -120,7 +122,22 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
         toast.error(data.error || 'Đăng nhập thất bại');
         return;
       }
-      const userData = data.user || data;
+      // A successful POST is not enough: browsers reject Secure cookies over
+      // plain HTTP. Verify the follow-up session before rendering a workspace
+      // that cannot make any authenticated API request.
+      const sessionResponse = await fetch('/api/auth/session', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      const sessionData = await readApiJson<{ user: User | null }>(
+        sessionResponse,
+        'Không thể xác thực phiên đăng nhập'
+      );
+      if (!sessionData.user) {
+        toast.error('Trình duyệt không thể lưu phiên đăng nhập. Hãy kiểm tra URL HTTPS/LAN và cấu hình cookie của máy chủ.');
+        return;
+      }
+      const userData = sessionData.user;
       if (projectInvite && userData.role === 'member') {
         try {
           const inviteResponse = await fetch('/api/project-invites/accept', {
@@ -151,8 +168,8 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
             : 'my-tasks'
       );
       toast.success(`Chào mừng ${userData.name}!`);
-    } catch {
-      toast.error('Lỗi kết nối server');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Lỗi kết nối server');
     } finally {
       setLoading(false);
     }

@@ -18,7 +18,11 @@
       - postgres_data:/var/lib/postgresql/data
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # NEXT_PUBLIC_* values are compiled into the browser bundle at build time.
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
     image: task-app
     container_name: taskflow_app
     restart: always
@@ -28,6 +32,11 @@
       - DATABASE_URL=postgresql://taskflow_user:taskflow_password_secret@postgres:5432/taskflow_db?schema=public
       - NODE_ENV=production
       - PORT=3000
+      # Use one stable secret on every app instance. Leave the cookie override
+      # blank to infer HTTPS from the incoming request / reverse proxy header.
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

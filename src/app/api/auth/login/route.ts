@@ -4,7 +4,7 @@ import { isDatabaseNotInitializedError } from '@/lib/db'
 import { createSessionValue } from '@/lib/auth'
 import { renewPresence } from '@/lib/presence'
 import { compareSync } from 'bcryptjs'
-import { cookies } from 'next/headers'
+import { SESSION_COOKIE_NAME, sessionCookieOptions } from '@/lib/session-cookie'
 import { z } from 'zod'
 
 const loginSchema = z.object({
@@ -76,16 +76,6 @@ export async function POST(request: NextRequest) {
       teamMemberId: teamMember?.id || null,
     }
 
-    // Set session cookie
-    const cookieStore = await cookies()
-    cookieStore.set('session', createSessionValue(sessionData), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 ngày
-    })
-
     // Do not wait for the client effect: a just authenticated account should
     // be visible to its manager immediately.
     try {
@@ -95,7 +85,13 @@ export async function POST(request: NextRequest) {
       console.error('Error renewing presence during login:', presenceError)
     }
 
-    return NextResponse.json({ user: sessionData })
+    const response = NextResponse.json({ user: sessionData })
+    response.cookies.set(
+      SESSION_COOKIE_NAME,
+      createSessionValue(sessionData),
+      sessionCookieOptions(request)
+    )
+    return response
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

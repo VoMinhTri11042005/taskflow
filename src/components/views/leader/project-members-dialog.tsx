@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import type { Project, TeamMember } from '@/types';
 import { readApiJson } from '@/lib/client-api';
 import { cn } from '@/lib/utils';
+import { createPublicAppUrl, needsPublicAppUrlConfiguration } from '@/lib/public-app-url';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -52,6 +53,7 @@ export function ProjectMembersDialog({ project, onChanged }: { project: Project;
   const [label, setLabel] = useState('');
   const [saving, setSaving] = useState(false);
   const [selectedInvite, setSelectedInvite] = useState<ProjectInvite | null>(null);
+  const [needsPublicUrl, setNeedsPublicUrl] = useState(false);
 
   const availableMembers = useMemo(() => {
     const occupied = new Set(members.filter((member) => member.status !== 'rejected').map((member) => member.user.id));
@@ -60,7 +62,7 @@ export function ProjectMembersDialog({ project, onChanged }: { project: Project;
 
   function buildInviteUrl(token: string) {
     const origin = typeof window === 'undefined' ? '' : window.location.origin;
-    return `${origin}/join?projectInvite=${encodeURIComponent(token)}`;
+    return createPublicAppUrl(`/join?projectInvite=${encodeURIComponent(token)}`, origin);
   }
 
   const selectedInviteUrl = selectedInvite ? buildInviteUrl(selectedInvite.token) : '';
@@ -90,6 +92,13 @@ export function ProjectMembersDialog({ project, onChanged }: { project: Project;
     if (!open) return;
     void Promise.resolve().then(load);
   }, [open, project.id]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setNeedsPublicUrl(needsPublicAppUrlConfiguration(window.location.origin));
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   async function addMember() {
     if (!selectedUserId) return;
@@ -284,6 +293,12 @@ export function ProjectMembersDialog({ project, onChanged }: { project: Project;
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />} Tạo QR/link
               </Button>
             </div>
+
+            {needsPublicUrl && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+                Bạn đang mở bằng localhost. Máy khác sẽ không dùng được QR/link này; hãy dùng địa chỉ LAN của máy chủ hoặc đặt NEXT_PUBLIC_APP_URL rồi build lại.
+              </p>
+            )}
 
             {project.status !== 'active' && (
               <p className="text-xs text-muted-foreground">Dự án đã lưu trữ nên không thể tạo hoặc mở lại link mời.</p>

@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { readApiJson } from '@/lib/client-api';
+import { createPublicAppUrl, needsPublicAppUrlConfiguration } from '@/lib/public-app-url';
 
 type MemberInvite = {
   id: string;
@@ -38,9 +39,17 @@ export function MemberInvitesPanel() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
   const [selectedInvite, setSelectedInvite] = useState<MemberInvite | null>(null);
+  const [needsPublicUrl, setNeedsPublicUrl] = useState(false);
 
   useEffect(() => {
     void loadInvites();
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setNeedsPublicUrl(needsPublicAppUrlConfiguration(window.location.origin));
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const selectedInviteUrl = useMemo(
@@ -50,7 +59,7 @@ export function MemberInvitesPanel() {
 
   function buildInviteUrl(token: string) {
     const origin = typeof window === 'undefined' ? '' : window.location.origin;
-    return `${origin}/join?invite=${encodeURIComponent(token)}`;
+    return createPublicAppUrl(`/join?invite=${encodeURIComponent(token)}`, origin);
   }
 
   async function loadInvites() {
@@ -125,6 +134,11 @@ export function MemberInvitesPanel() {
           <CardDescription>
             Thành viên đăng ký từ link hoặc QR này sẽ tự thuộc nhóm của bạn và chỉ bạn mới duyệt được.
           </CardDescription>
+          {needsPublicUrl && (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Bạn đang mở bằng localhost. Máy khác sẽ không dùng được link này; hãy truy cập bằng địa chỉ LAN hoặc đặt NEXT_PUBLIC_APP_URL rồi build lại.
+            </p>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={() => void loadInvites()} disabled={loading} className="shrink-0">
           <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />

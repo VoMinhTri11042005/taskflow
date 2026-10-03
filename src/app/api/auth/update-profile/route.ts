@@ -2,14 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { createSessionValue, getSession } from '@/lib/auth'
 import { duplicateAccountNameMessage, isAccountNameTaken, normalizeAccountName } from '@/lib/account-names'
-
-const sessionCookieOptions = {
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-  maxAge: 60 * 60 * 24 * 7,
-}
+import { SESSION_COOKIE_NAME, sessionCookieOptions } from '@/lib/session-cookie'
 
 export async function PUT(request: NextRequest) {
   try {
@@ -76,7 +69,7 @@ export async function PUT(request: NextRequest) {
     }
     const response = NextResponse.json({ user: safeUser })
     if (updatedUser.id === session.id) {
-      response.cookies.set('session', createSessionValue(safeUser), sessionCookieOptions)
+      response.cookies.set(SESSION_COOKIE_NAME, createSessionValue(safeUser), sessionCookieOptions(request))
     }
     return response
   } catch (error) {

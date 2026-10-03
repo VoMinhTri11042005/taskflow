@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { expiredSessionCookieOptions, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 
 export async function POST(request: NextRequest) {
   try {
     const session = getSession(request)
-    const cookieStore = await cookies()
-    cookieStore.delete('session')
 
     // Presence itself expires naturally because the same account may still be
     // open in another browser. Record only a real, explicit logout instead of
@@ -20,7 +18,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true })
+    const response = NextResponse.json({ success: true })
+    response.cookies.set(SESSION_COOKIE_NAME, '', expiredSessionCookieOptions(request))
+    return response
   } catch (error) {
     console.error('Error logging out:', error)
     return NextResponse.json(
