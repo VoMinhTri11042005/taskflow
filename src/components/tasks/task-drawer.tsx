@@ -530,10 +530,10 @@ export function TaskDrawer() {
                 {checklist.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-5 text-center text-xs text-muted-foreground">Chưa có mục checklist. Leader có thể tạo các bước cần hoàn thành.</div>
                 ) : checklist.map((item) => (
-                  <div key={item.id} className="group flex items-center gap-3 rounded-xl border border-border/45 bg-card px-3 py-2.5 transition-colors hover:bg-muted/30">
+                  <div key={item.id} className="group hover-actions-card flex items-center gap-3 rounded-xl border border-border/45 bg-card px-3 py-2.5 transition-colors hover:bg-muted/30">
                     <Checkbox checked={item.isCompleted} disabled={!canContribute || checklistBusyId === item.id} onCheckedChange={(checked) => void handleChecklistToggle(item, checked === true)} aria-label={`Hoàn thành: ${item.title}`} />
                     <span className={cn('min-w-0 flex-1 text-sm', item.isCompleted && 'text-muted-foreground line-through')}>{item.title}</span>
-                    {canManage && <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground opacity-100 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100" onClick={() => void handleDeleteChecklist(item)} disabled={checklistBusyId === item.id}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                    {canManage && <Button variant="ghost" size="icon" className="hover-actions h-7 w-7 text-muted-foreground opacity-100 transition-opacity duration-150 hover:text-rose-600" title="Xóa mục checklist" aria-label={`Xóa mục checklist: ${item.title}`} onClick={() => void handleDeleteChecklist(item)} disabled={checklistBusyId === item.id}><Trash2 className="h-3.5 w-3.5" /></Button>}
                   </div>
                 ))}
               </div>
@@ -572,10 +572,10 @@ export function TaskDrawer() {
               <div className="flex items-center gap-2"><Paperclip className="h-4 w-4 text-primary" /><h3 className="text-sm font-bold">Tài liệu dùng chung</h3><span className="text-xs text-muted-foreground">{task.links?.length || 0}</span></div>
               <div className="space-y-2">
                 {(task.links || []).length === 0 ? <p className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-center text-xs text-muted-foreground">Chưa có tài liệu được đính kèm.</p> : (task.links || []).map((link) => (
-                  <div key={link.id} className="group flex items-center gap-3 rounded-xl border border-border/50 bg-card p-3 hover:border-primary/40">
+                  <div key={link.id} className="group hover-actions-card flex items-center gap-3 rounded-xl border border-border/50 bg-card p-3 hover:border-primary/40">
                     <div className="rounded-lg bg-muted p-2">{linkIcon(link.type)}</div>
                     <a href={link.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1"><p className="flex items-center gap-1 truncate text-xs font-semibold hover:text-primary">{link.title}<ExternalLink className="h-3 w-3 shrink-0" /></p><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{link.url}</p></a>
-                    {canManage && <Button variant="ghost" size="icon" onClick={() => void handleDeleteLink(link.id)} className="h-8 w-8 text-muted-foreground hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></Button>}
+                    {canManage && <Button variant="ghost" size="icon" onClick={() => void handleDeleteLink(link.id)} className="hover-actions h-8 w-8 text-muted-foreground opacity-100 transition-opacity duration-150 hover:text-rose-600" title="Xóa tài liệu" aria-label={`Xóa tài liệu: ${link.title}`}><Trash2 className="h-3.5 w-3.5" /></Button>}
                   </div>
                 ))}
               </div>

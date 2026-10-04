@@ -541,7 +541,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               {visiblePendingAccounts.map((account) => (
-                <div key={account.id} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                <div key={account.id} className="hover-actions-card flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
                   <div className="min-w-0">
                     <p className="font-medium truncate">{account.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{account.email} · {roleLabels[account.role] || account.role}</p>
@@ -550,11 +550,11 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                     )}
                   </div>
                   {(user?.role === 'leader' || !account.leaderId) && (
-                    <div className="flex shrink-0 gap-1">
-                      <Button size="icon" variant="outline" className="text-emerald-600" title="Duyệt" onClick={() => handleApproval(account.id, 'approved')}>
+                    <div className="hover-actions flex shrink-0 gap-1 opacity-100 transition-opacity duration-150">
+                      <Button size="icon" variant="outline" className="text-emerald-600" title="Duyệt" aria-label={`Duyệt tài khoản ${account.name}`} onClick={() => handleApproval(account.id, 'approved')}>
                         <Check className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="outline" className="text-destructive" title="Từ chối" onClick={() => handleApproval(account.id, 'rejected')}>
+                      <Button size="icon" variant="outline" className="text-destructive" title="Từ chối" aria-label={`Từ chối tài khoản ${account.name}`} onClick={() => handleApproval(account.id, 'rejected')}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -580,7 +580,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visibleMembers.map((member) => (
-            <Card key={member.id} className="group hover:shadow-md transition-shadow">
+            <Card key={member.id} className="group hover-actions-card hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -621,7 +621,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                       )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                  <div className="hover-actions flex shrink-0 items-center gap-1 opacity-100 transition-opacity duration-150">
                     {user?.role === 'admin' && <>
                       {/* Passwords are never displayed; Admin can view the login email and reset it. */}
                       <Button
@@ -630,6 +630,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                         className="h-8 w-8"
                         onClick={() => openCredDialog(member)}
                         title="Xem thông tin đăng nhập"
+                        aria-label={`Xem thông tin đăng nhập của ${member.name}`}
                       >
                         <Key className="h-4 w-4" />
                       </Button>
@@ -639,6 +640,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                         className="h-8 w-8"
                         onClick={() => openResetDialog(member)}
                         title="Đặt lại mật khẩu"
+                        aria-label={`Đặt lại mật khẩu cho ${member.name}`}
                       >
                         <KeyRound className="h-4 w-4" />
                       </Button>
@@ -650,6 +652,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                       className="h-8 w-8"
                       onClick={() => openEditDialog(member)}
                       title="Chỉnh sửa"
+                      aria-label={`Chỉnh sửa ${member.name}`}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -661,6 +664,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           title="Xóa"
+                          aria-label={`Xóa ${member.name}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

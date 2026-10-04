@@ -254,7 +254,7 @@ export function ProjectMembersDialog({ project, onChanged }: { project: Project;
             ) : (
               <div className="space-y-2">
                 {members.map((member) => (
-                  <div key={member.id} className="flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div key={member.id} className="hover-actions-card flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ backgroundColor: member.user.color }}>
                         {member.user.name.charAt(0).toUpperCase()}
@@ -269,12 +269,14 @@ export function ProjectMembersDialog({ project, onChanged }: { project: Project;
                         {member.status === 'approved' ? 'Đang tham gia' : member.status === 'pending' ? 'Chờ duyệt' : 'Đã từ chối'}
                       </Badge>
                       {member.status === 'pending' ? (
-                        <>
-                          <Button size="icon" variant="outline" className="text-emerald-600" title="Duyệt" disabled={saving} onClick={() => void reviewMember(member.user.id, 'approved')}><Check className="h-4 w-4" /></Button>
-                          <Button size="icon" variant="outline" className="text-destructive" title="Từ chối" disabled={saving} onClick={() => void reviewMember(member.user.id, 'rejected')}><X className="h-4 w-4" /></Button>
-                        </>
+                        <div className="hover-actions flex items-center gap-1 opacity-100 transition-opacity duration-150">
+                          <Button size="icon" variant="outline" className="text-emerald-600" title="Duyệt" aria-label={`Duyệt ${member.user.name}`} disabled={saving} onClick={() => void reviewMember(member.user.id, 'approved')}><Check className="h-4 w-4" /></Button>
+                          <Button size="icon" variant="outline" className="text-destructive" title="Từ chối" aria-label={`Từ chối ${member.user.name}`} disabled={saving} onClick={() => void reviewMember(member.user.id, 'rejected')}><X className="h-4 w-4" /></Button>
+                        </div>
                       ) : member.status === 'approved' ? (
-                        <Button size="icon" variant="outline" className="text-destructive" title="Gỡ khỏi dự án" disabled={saving} onClick={() => void removeMember(member.user.id)}><Trash2 className="h-4 w-4" /></Button>
+                        <div className="hover-actions flex items-center gap-1 opacity-100 transition-opacity duration-150">
+                          <Button size="icon" variant="outline" className="text-destructive" title="Gỡ khỏi dự án" aria-label={`Gỡ ${member.user.name} khỏi dự án`} disabled={saving} onClick={() => void removeMember(member.user.id)}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
                       ) : null}
                     </div>
                   </div>

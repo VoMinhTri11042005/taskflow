@@ -269,7 +269,7 @@ export function ProjectsView() {
             return (
               <Card
                 key={project.id}
-                className="group relative flex flex-col justify-between overflow-hidden border-border/70 bg-card/85 hover:bg-card shadow-2xs hover:shadow-md transition-all rounded-2xl"
+                className="group hover-actions-card relative flex flex-col justify-between overflow-hidden border-border/70 bg-card/85 hover:bg-card shadow-2xs hover:shadow-md transition-all rounded-2xl"
               >
                 {/* Accent colored top strip */}
                 <div
@@ -295,13 +295,14 @@ export function ProjectsView() {
                     </div>
 
                     {/* Quick action buttons */}
-                    <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                    <div className="hover-actions flex shrink-0 items-center gap-1 opacity-100 transition-opacity duration-150">
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
                         onClick={() => openEditDialog(project)}
                         title="Chỉnh sửa dự án"
+                        aria-label={`Chỉnh sửa dự án ${projectName}`}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -313,6 +314,7 @@ export function ProjectsView() {
                             size="icon"
                             className="h-7 w-7 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600"
                             title="Xóa dự án"
+                            aria-label={`Xóa dự án ${projectName}`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
