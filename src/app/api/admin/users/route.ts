@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { hashSync } from 'bcryptjs';
 import { z } from 'zod';
 import { duplicateAccountNameMessage, isAccountNameTaken, normalizeAccountName } from '@/lib/account-names';
+import { isActiveManager } from '@/lib/permissions';
 
 const accountSchema = z.object({
   name: z.string().min(1, 'Tên bắt buộc'),
@@ -15,11 +16,20 @@ const accountSchema = z.object({
   leaderId: z.string().cuid().nullable().optional(),
 });
 
+const updateAccountSchema = z.object({
+  id: z.string().cuid(),
+  status: z.enum(['pending', 'approved', 'rejected']).optional(),
+  role: z.enum(['admin', 'leader', 'member']).optional(),
+  name: z.string().optional(),
+  email: z.string().email('Email không hợp lệ').optional(),
+  password: z.string().min(6, 'Mật khẩu tối thiểu 6 ký tự').optional(),
+  leaderId: z.string().cuid().nullable().optional(),
+});
+
 export async function GET(request: NextRequest) {
   try {
     const session = getSession(request);
-    const isManager = session?.role === 'admin' || session?.role === 'leader';
-    if (!session || !isManager) {
+    if (!session || !(await isActiveManager(session))) {
       return NextResponse.json({ error: 'Bạn không có quyền' }, { status: 403 });
     }
 
@@ -62,8 +72,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = getSession(request);
-    const isManager = session?.role === 'admin' || session?.role === 'leader';
-    if (!session || !isManager) {
+    if (!session || !(await isActiveManager(session))) {
       return NextResponse.json({ error: 'Bạn không có quyền' }, { status: 403 });
     }
 
@@ -150,17 +159,11 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const session = getSession(request);
-    const isManager = session?.role === 'admin' || session?.role === 'leader';
-    if (!session || !isManager) {
+    if (!session || !(await isActiveManager(session))) {
       return NextResponse.json({ error: 'Bạn không có quyền' }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { id, status, role, name, email, password, leaderId } = body;
-
-    if (!id) {
-      return NextResponse.json({ error: 'Thiếu id tài khoản' }, { status: 400 });
-    }
+    const { id, status, role, name, email, password, leaderId } = updateAccountSchema.parse(await request.json());
 
     if (session.role === 'leader' && role === 'admin') {
       return NextResponse.json({ error: 'Leader không được nâng quyền admin' }, { status: 403 });
@@ -354,6 +357,9 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json(user);
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Dữ liệu không hợp lệ', details: error.issues }, { status: 400 });
+    }
     console.error('Error updating user account:', error);
     return NextResponse.json({ error: 'Không thể cập nhật tài khoản' }, { status: 500 });
   }

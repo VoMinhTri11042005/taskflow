@@ -140,6 +140,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
         return;
       }
       const userData = sessionData.user;
+      let shouldOpenProjects = false;
       if (projectInvite && userData.role === 'member') {
         try {
           const inviteResponse = await fetch('/api/project-invites/accept', {
@@ -149,6 +150,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
           });
           const inviteData = await inviteResponse.json();
           if (inviteResponse.ok) {
+            shouldOpenProjects = Boolean(inviteData.projectId);
             toast.success(inviteData.message || 'Đã gửi yêu cầu tham gia dự án.');
             const url = new URL(window.location.href);
             url.searchParams.delete('projectInvite');
@@ -167,7 +169,9 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
           ? 'admin-overview'
           : userData.role === 'leader'
             ? 'leader-dashboard'
-            : 'my-tasks'
+            : shouldOpenProjects
+              ? 'projects'
+              : 'my-tasks'
       );
       toast.success(`Chào mừng ${userData.name}!`);
 

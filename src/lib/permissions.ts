@@ -15,6 +15,17 @@ export function isManager(session: SessionData) {
   return isLeader(session);
 }
 
+/** Confirm that an Admin cookie still represents an approved Admin account. */
+export async function isActiveAdmin(session: SessionData) {
+  if (!isAdmin(session)) return false;
+
+  const administrator = await db.user.findFirst({
+    where: { id: session.id, role: 'admin', status: 'approved' },
+    select: { id: true },
+  });
+  return Boolean(administrator);
+}
+
 /**
  * Cookies are intentionally short-lived, but role or account-status changes
  * must take effect immediately.  Sensitive Leader operations therefore also
@@ -28,6 +39,12 @@ export async function isActiveLeader(session: SessionData) {
     select: { id: true },
   });
   return Boolean(leader);
+}
+
+/** Use this for operations that are available to either an Admin or a Leader. */
+export async function isActiveManager(session: SessionData) {
+  if (isAdmin(session)) return isActiveAdmin(session);
+  return isActiveLeader(session);
 }
 
 export async function canManageProject(session: SessionData, projectId: string) {

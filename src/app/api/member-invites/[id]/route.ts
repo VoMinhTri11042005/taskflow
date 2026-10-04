@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { isActiveLeader } from '@/lib/permissions';
 
 const updateInviteSchema = z.object({
   active: z.boolean(),
@@ -17,7 +18,7 @@ export async function PATCH(
 ) {
   try {
     const session = getSession(request);
-    if (!session || session.role !== 'leader') return forbidden();
+    if (!session || !(await isActiveLeader(session))) return forbidden();
     const { id } = await params;
     const body = await request.json();
     const validated = updateInviteSchema.parse(body);

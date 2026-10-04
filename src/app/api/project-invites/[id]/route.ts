@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { isActiveLeader } from '@/lib/permissions';
 
 const updateInviteSchema = z.object({ active: z.boolean() });
 
@@ -11,7 +12,7 @@ export async function PATCH(
 ) {
   try {
     const session = getSession(request);
-    if (!session || session.role !== 'leader') {
+    if (!session || !(await isActiveLeader(session))) {
       return NextResponse.json({ error: 'Chỉ Leader mới có thể thay đổi link mời dự án' }, { status: 403 });
     }
     const { id } = await params;

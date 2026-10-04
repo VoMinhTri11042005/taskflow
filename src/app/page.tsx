@@ -282,9 +282,9 @@ export default function HomePage() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Không thể gửi yêu cầu tham gia dự án');
         toast.success(data.message || 'Đã gửi yêu cầu tham gia dự án.');
-        if (data.status === 'approved' && data.projectId) {
+        if (data.projectId) {
           setSelectedProjectId(data.projectId);
-          setCurrentView('my-tasks');
+          setCurrentView('projects');
         }
       })
       .catch((error) => {

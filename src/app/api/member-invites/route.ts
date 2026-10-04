@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { isActiveLeader } from '@/lib/permissions';
 
 const createInviteSchema = z.object({
   label: z.string().trim().min(1, 'Tên lời mời không được để trống').max(80, 'Tên lời mời tối đa 80 ký tự').optional(),
@@ -15,7 +16,7 @@ function forbidden() {
 export async function GET(request: NextRequest) {
   try {
     const session = getSession(request);
-    if (!session || session.role !== 'leader') return forbidden();
+    if (!session || !(await isActiveLeader(session))) return forbidden();
 
     const invites = await db.memberInvite.findMany({
       where: { leaderId: session.id },
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = getSession(request);
-    if (!session || session.role !== 'leader') return forbidden();
+    if (!session || !(await isActiveLeader(session))) return forbidden();
 
     const body = await request.json();
     const validated = createInviteSchema.parse(body);
