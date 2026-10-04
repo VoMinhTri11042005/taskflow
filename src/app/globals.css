@@ -375,22 +375,6 @@
     0 4px 16px oklch(0 0 0 / 15%);
 }
 
-/* Keep destructive/administrative card actions out of the way until a
-   mouse-capable device hovers the matching card. Touch users retain visible
-   controls, and keyboard focus reveals the same controls accessibly. */
-@media (hover: hover) {
-  .hover-actions-card .hover-actions {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .hover-actions-card:hover .hover-actions,
-  .hover-actions-card:focus-within .hover-actions {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
 /* ── Smooth Scrollbar ── */
 * {
   scrollbar-width: thin;

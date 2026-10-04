@@ -269,7 +269,7 @@ export function ProjectsView() {
             return (
               <Card
                 key={project.id}
-                className="group hover-actions-card relative flex flex-col justify-between overflow-hidden border-border/70 bg-card/85 hover:bg-card shadow-2xs hover:shadow-md transition-all rounded-2xl"
+                className="group relative flex flex-col justify-between overflow-hidden border-border/70 bg-card/85 hover:bg-card shadow-2xs hover:shadow-md transition-all rounded-2xl"
               >
                 {/* Accent colored top strip */}
                 <div
@@ -295,7 +295,7 @@ export function ProjectsView() {
                     </div>
 
                     {/* Quick action buttons */}
-                    <div className="hover-actions flex shrink-0 items-center gap-1 opacity-100 transition-opacity duration-150">
+                    <div className="flex shrink-0 items-center gap-1">
                       <Button
                         variant="ghost"
                         size="icon"

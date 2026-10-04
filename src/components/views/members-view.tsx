@@ -541,7 +541,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               {visiblePendingAccounts.map((account) => (
-                <div key={account.id} className="hover-actions-card flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                <div key={account.id} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
                   <div className="min-w-0">
                     <p className="font-medium truncate">{account.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{account.email} · {roleLabels[account.role] || account.role}</p>
@@ -550,7 +550,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                     )}
                   </div>
                   {(user?.role === 'leader' || !account.leaderId) && (
-                    <div className="hover-actions flex shrink-0 gap-1 opacity-100 transition-opacity duration-150">
+                    <div className="flex shrink-0 gap-1">
                       <Button size="icon" variant="outline" className="text-emerald-600" title="Duyệt" aria-label={`Duyệt tài khoản ${account.name}`} onClick={() => handleApproval(account.id, 'approved')}>
                         <Check className="h-4 w-4" />
                       </Button>
@@ -580,7 +580,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visibleMembers.map((member) => (
-            <Card key={member.id} className="group hover-actions-card hover:shadow-md transition-shadow">
+            <Card key={member.id} className="group hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -621,7 +621,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                       )}
                     </div>
                   </div>
-                  <div className="hover-actions flex shrink-0 items-center gap-1 opacity-100 transition-opacity duration-150">
+                  <div className="flex shrink-0 items-center gap-1">
                     {user?.role === 'admin' && <>
                       {/* Passwords are never displayed; Admin can view the login email and reset it. */}
                       <Button
