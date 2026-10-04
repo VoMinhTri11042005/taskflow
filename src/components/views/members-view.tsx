@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -61,6 +62,23 @@ const memberColors = [
 ];
 
 type ManagedRole = 'leader' | 'member';
+type LeaderRosterStatus = 'all' | 'approved' | 'pending';
+
+type LeaderRosterMember = {
+  id: string;
+  name: string;
+  email: string;
+  status: 'approved' | 'pending';
+  color: string;
+  avatar?: string | null;
+  createdAt: string;
+};
+
+const leaderRosterStatusLabels: Record<LeaderRosterStatus, string> = {
+  all: 'Tất cả Member',
+  approved: 'Đang hoạt động',
+  pending: 'Chờ duyệt',
+};
 
 interface MembersViewProps {
   /** Admin uses this to keep Leader and Member accounts on separate screens. */
@@ -99,6 +117,13 @@ export function MembersView({ roleFilter }: MembersViewProps) {
   const [resetName, setResetName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+
+  // Admin-only Leader roster dialog, opened from the three summary counters.
+  const [leaderRosterOpen, setLeaderRosterOpen] = useState(false);
+  const [selectedLeader, setSelectedLeader] = useState<TeamMember | null>(null);
+  const [leaderRosterStatus, setLeaderRosterStatus] = useState<LeaderRosterStatus>('all');
+  const [leaderRoster, setLeaderRoster] = useState<LeaderRosterMember[]>([]);
+  const [leaderRosterLoading, setLeaderRosterLoading] = useState(false);
 
   // Online status tracking
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({});
@@ -158,6 +183,40 @@ export function MembersView({ roleFilter }: MembersViewProps) {
   }, [fetchMembers, fetchPendingAccounts]);
 
   useEffect(() => {
+    if (!leaderRosterOpen || !selectedLeader?.userId) return;
+
+    const controller = new AbortController();
+    const loadLeaderRoster = async () => {
+      setLeaderRosterLoading(true);
+      try {
+        const params = new URLSearchParams({
+          leaderId: selectedLeader.userId!,
+          status: leaderRosterStatus,
+        });
+        const response = await fetch(`/api/admin/leader-members?${params.toString()}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const data = await readApiJson<{ members: LeaderRosterMember[] }>(
+          response,
+          'Không thể tải danh sách Member'
+        );
+        if (!controller.signal.aborted) setLeaderRoster(Array.isArray(data.members) ? data.members : []);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setLeaderRoster([]);
+          toast.error(error instanceof Error ? error.message : 'Không thể tải danh sách Member');
+        }
+      } finally {
+        if (!controller.signal.aborted) setLeaderRosterLoading(false);
+      }
+    };
+
+    void loadLeaderRoster();
+    return () => controller.abort();
+  }, [leaderRosterOpen, leaderRosterStatus, selectedLeader?.userId]);
+
+  useEffect(() => {
     if (!user) return;
     const controller = new AbortController();
     const refresh = () => void refreshOnlineStatus(controller.signal);
@@ -193,6 +252,17 @@ export function MembersView({ roleFilter }: MembersViewProps) {
     setFormColor(member.color);
     setFormPassword('');
     setDialogOpen(true);
+  }
+
+  function openLeaderRoster(member: TeamMember, status: LeaderRosterStatus) {
+    if (!member.userId) {
+      toast.error('Không tìm thấy tài khoản Leader tương ứng');
+      return;
+    }
+    setSelectedLeader(member);
+    setLeaderRosterStatus(status);
+    setLeaderRoster([]);
+    setLeaderRosterOpen(true);
   }
 
   async function handleSave() {
@@ -512,8 +582,8 @@ export function MembersView({ roleFilter }: MembersViewProps) {
           {visibleMembers.map((member) => (
             <Card key={member.id} className="group hover:shadow-md transition-shadow">
               <CardContent className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
                     <div className="relative">
                       <div
                         className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
@@ -529,29 +599,29 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                         title={onlineStatus[member.id] ? 'Đang online' : 'Ngoại tuyến'}
                       />
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold truncate">{member.name}</h3>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h3 className="min-w-0 flex-1 truncate font-semibold" title={member.name}>{member.name}</h3>
                         <span
-                          className={`text-[10px] font-medium ${
+                          className={`hidden shrink-0 whitespace-nowrap text-[10px] font-medium sm:inline ${
                             onlineStatus[member.id] ? 'text-emerald-600' : 'text-muted-foreground'
                           }`}
                         >
                           {onlineStatus[member.id] ? 'Đang online' : 'Ngoại tuyến'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Mail className="h-3 w-3" />
-                        <span className="truncate">{member.email}</span>
+                      <div className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+                        <Mail className="h-3 w-3 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate" title={member.email}>{member.email}</span>
                       </div>
                       {user?.role === 'admin' && member.role === 'member' && (
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-1 truncate text-xs text-muted-foreground" title={member.leaderName || undefined}>
                           {member.leaderName ? `Leader: ${member.leaderName}` : 'Chưa phân Leader'}
                         </p>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                  <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                     {user?.role === 'admin' && <>
                       {/* Passwords are never displayed; Admin can view the login email and reset it. */}
                       <Button
@@ -579,6 +649,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => openEditDialog(member)}
+                      title="Chỉnh sửa"
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -589,6 +660,7 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
+                          title="Xóa"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -625,18 +697,36 @@ export function MembersView({ roleFilter }: MembersViewProps) {
                       </span>
                     </div>
                     <div className="grid grid-cols-3 overflow-hidden rounded-lg border bg-muted/30 text-center">
-                      <div className="border-r px-2 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => openLeaderRoster(member, 'all')}
+                        disabled={!member.userId}
+                        title="Xem tất cả Member do Leader này quản lý"
+                        className="min-w-0 border-r px-2 py-2.5 transition-colors hover:bg-primary/5 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
                         <p className="text-base font-bold">{member.managedMemberCount || 0}</p>
-                        <p className="text-[10px] text-muted-foreground">Tổng Member</p>
-                      </div>
-                      <div className="border-r px-2 py-2.5">
+                        <p className="truncate text-[10px] text-muted-foreground">Tổng Member</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openLeaderRoster(member, 'approved')}
+                        disabled={!member.userId}
+                        title="Xem Member đang hoạt động"
+                        className="min-w-0 border-r px-2 py-2.5 transition-colors hover:bg-emerald-500/10 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
                         <p className="text-base font-bold text-emerald-700">{member.managedMemberApprovedCount || 0}</p>
-                        <p className="text-[10px] text-emerald-700">Hoạt động</p>
-                      </div>
-                      <div className="px-2 py-2.5">
+                        <p className="truncate text-[10px] text-emerald-700">Hoạt động</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openLeaderRoster(member, 'pending')}
+                        disabled={!member.userId}
+                        title="Xem Member đang chờ duyệt"
+                        className="min-w-0 px-2 py-2.5 transition-colors hover:bg-amber-500/10 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
                         <p className="text-base font-bold text-amber-700">{member.managedMemberPendingCount || 0}</p>
-                        <p className="text-[10px] text-amber-700">Chờ duyệt</p>
-                      </div>
+                        <p className="truncate text-[10px] text-amber-700">Chờ duyệt</p>
+                      </button>
                     </div>
                   </div>
                 ) : (
@@ -655,6 +745,78 @@ export function MembersView({ roleFilter }: MembersViewProps) {
           ))}
         </div>
       )}
+
+      <Dialog
+        open={leaderRosterOpen}
+        onOpenChange={(open) => {
+          setLeaderRosterOpen(open);
+          if (!open) {
+            setSelectedLeader(null);
+            setLeaderRoster([]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-6">
+              Member do {selectedLeader?.name || 'Leader'} quản lý
+            </DialogTitle>
+            <DialogDescription>
+              Bấm các số liệu trên thẻ Leader để xem danh sách tương ứng. Tài khoản chờ duyệt cũng được hiển thị ở đây.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="Lọc danh sách Member">
+            {(Object.keys(leaderRosterStatusLabels) as LeaderRosterStatus[]).map((status) => (
+              <Button
+                key={status}
+                type="button"
+                size="sm"
+                variant={leaderRosterStatus === status ? 'default' : 'outline'}
+                role="tab"
+                aria-selected={leaderRosterStatus === status}
+                onClick={() => setLeaderRosterStatus(status)}
+                className="min-w-0 px-2 text-xs"
+              >
+                <span className="truncate">{leaderRosterStatusLabels[status]}</span>
+              </Button>
+            ))}
+          </div>
+
+          {leaderRosterLoading ? (
+            <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Đang tải Member...
+            </div>
+          ) : leaderRoster.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-7 text-center text-sm text-muted-foreground">
+              Không có Member {leaderRosterStatus === 'all' ? 'nào' : leaderRosterStatus === 'approved' ? 'đang hoạt động' : 'đang chờ duyệt'}.
+            </div>
+          ) : (
+            <div className="max-h-[min(50dvh,28rem)] space-y-2 overflow-y-auto pr-1">
+              {leaderRoster.map((rosterMember) => {
+                const approved = rosterMember.status === 'approved';
+                return (
+                  <div key={rosterMember.id} className="flex min-w-0 items-center gap-3 rounded-xl border p-3">
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                      style={{ backgroundColor: rosterMember.color }}
+                    >
+                      {rosterMember.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold" title={rosterMember.name}>{rosterMember.name}</p>
+                      <p className="truncate text-xs text-muted-foreground" title={rosterMember.email}>{rosterMember.email}</p>
+                    </div>
+                    <Badge variant={approved ? 'secondary' : 'outline'} className={approved ? 'shrink-0 text-emerald-700' : 'shrink-0 border-amber-300 text-amber-700'}>
+                      {approved ? 'Hoạt động' : 'Chờ duyệt'}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* View Credentials Dialog */}
       <Dialog open={credOpen} onOpenChange={setCredOpen}>
