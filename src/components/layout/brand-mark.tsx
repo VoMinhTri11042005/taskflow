@@ -5,16 +5,17 @@ import { cn } from '@/lib/utils';
 interface BrandMarkProps {
   className?: string;
   size?: number;
+  decorative?: boolean;
 }
 
-export function BrandMark({ className, size = 36 }: BrandMarkProps) {
+export function BrandMark({ className, size = 36, decorative = false }: BrandMarkProps) {
   return (
     <Image
       src="/taskflow-avatar.png"
-      alt="TaskFlow"
+      alt={decorative ? '' : 'TaskFlow'}
       width={size}
       height={size}
-      priority
+      preload
       className={cn('shrink-0 rounded-[22%] shadow-sm', className)}
     />
   );

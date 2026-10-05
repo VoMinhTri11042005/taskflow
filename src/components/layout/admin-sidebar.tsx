@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { BrandMark } from '@/components/layout/brand-mark';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ensureApiSuccess } from '@/lib/client-api';
@@ -83,13 +84,11 @@ export function AdminSidebar() {
       {/* Brand & Logo Header */}
       <div className="flex h-14 items-center justify-between px-4 border-b border-border/40">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-primary to-red-700 flex items-center justify-center text-primary-foreground font-black text-sm shadow-md shadow-primary/25 shrink-0">
-            TF
-          </div>
+          <BrandMark size={36} decorative />
           {showFull && (
-            <div className="flex flex-col truncate">
-              <span className="font-extrabold text-sm tracking-tight leading-tight">TaskFlow</span>
-              <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Quản trị viên</span>
+            <div className="min-w-0 flex flex-col">
+              <span className="truncate font-extrabold text-sm leading-tight tracking-tight">TaskFlow</span>
+              <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-primary">Quản trị viên</span>
             </div>
           )}
         </div>

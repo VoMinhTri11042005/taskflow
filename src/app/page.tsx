@@ -371,10 +371,8 @@ export default function HomePage() {
         <div className="absolute bottom-1/4 -right-32 h-64 w-64 rounded-full bg-violet-500/5 blur-3xl" />
         <div className="flex flex-col items-center gap-4 animate-fade-in-up">
           <div className="relative">
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center font-black text-lg text-white shadow-lg shadow-indigo-500/25 animate-float">
-              TF
-            </div>
-            <div className="absolute inset-0 rounded-2xl animate-pulse-ring" />
+            <BrandMark size={56} decorative className="rounded-2xl shadow-lg shadow-primary/25 animate-float" />
+            <div className="absolute inset-0 rounded-2xl animate-pulse-ring" aria-hidden="true" />
           </div>
           <div className="flex flex-col items-center gap-2">
             <span className="text-sm font-semibold text-foreground">TaskFlow</span>

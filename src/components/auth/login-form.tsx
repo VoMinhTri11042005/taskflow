@@ -271,9 +271,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
           {/* Brand */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white font-black text-lg shadow-lg shadow-indigo-500/25">
-                TF
-              </div>
+              <BrandMark size={48} decorative className="rounded-2xl shadow-lg shadow-primary/25" />
               <div>
                 <h1 className="text-3xl font-black tracking-tight text-foreground">TaskFlow</h1>
                 <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Enterprise v2.0</p>
@@ -328,9 +326,7 @@ export function LoginForm({ initialMode = 'login' }: LoginFormProps) {
         <div className="w-full max-w-md space-y-6 animate-fade-in-up">
           {/* Mobile brand — only show on smaller screens */}
           <div className="text-center space-y-3 lg:hidden">
-            <div className="inline-flex h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-500/25 mx-auto">
-              TF
-            </div>
+            <BrandMark size={56} decorative className="mx-auto rounded-2xl shadow-lg shadow-primary/25" />
             <div>
               <h1 className="text-2xl font-black tracking-tight">TaskFlow</h1>
               <p className="text-sm text-muted-foreground">Quản lý công việc nhóm hiệu quả</p>

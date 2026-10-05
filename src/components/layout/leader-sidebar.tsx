@@ -75,7 +75,7 @@ export function LeaderSidebar() {
       aria-label="Điều hướng Leader"
     >
       <div className="flex min-h-[72px] items-center gap-3 px-4">
-        <BrandMark size={36} />
+        <BrandMark size={36} decorative />
         {showFull && (
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold">TaskFlow Leader</p>
