@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
-import type { Poll } from '@/types';
+import type { Poll, Project } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,7 @@ import {
   DialogClose,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Plus, X, BarChart3, Lock, Trash2, CheckCircle2, Unlock, Loader2 } from 'lucide-react';
+import { Plus, X, BarChart3, Lock, Trash2, CheckCircle2, Unlock, Loader2, FolderKanban } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -33,10 +34,15 @@ export function AdminPollsView() {
   const [formDesc, setFormDesc] = useState('');
   const [formOptions, setFormOptions] = useState<string[]>(['', '']);
   const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
+  const [formProjectId, setFormProjectId] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Poll | null>(null);
+  const [assignmentTarget, setAssignmentTarget] = useState<{ poll: Poll; project: Project } | null>(null);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [legacyProjectSelections, setLegacyProjectSelections] = useState<Record<string, string>>({});
 
   const fetchPolls = useCallback(async () => {
     try {
@@ -48,15 +54,28 @@ export function AdminPollsView() {
     }
   }, [setPolls]);
 
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await fetch('/api/projects', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Không thể tải dự án');
+      const data = await res.json();
+      setProjects(Array.isArray(data) ? data : []);
+    } catch {
+      toast.error('Không thể tải danh sách dự án');
+    }
+  }, []);
+
   useEffect(() => {
     fetchPolls();
-  }, [fetchPolls]);
+    fetchProjects();
+  }, [fetchPolls, fetchProjects]);
 
   function openCreateDialog() {
     setFormTitle('');
     setFormDesc('');
     setFormOptions(['', '']);
     setAllowMultipleChoices(false);
+    setFormProjectId('');
     setCreateOpen(true);
   }
 
@@ -88,6 +107,10 @@ export function AdminPollsView() {
       toast.error('Vui lòng nhập tiêu đề');
       return;
     }
+    if (!formProjectId) {
+      toast.error('Vui lòng chọn dự án cho bình chọn');
+      return;
+    }
     if (validOptions.length < 2) {
       toast.error('Cần ít nhất 2 lựa chọn không trống');
       return;
@@ -101,6 +124,7 @@ export function AdminPollsView() {
           description: formDesc.trim() || null,
           options: validOptions,
           allowMultipleChoices,
+          projectId: formProjectId,
         }),
       });
       if (!res.ok) {
@@ -165,6 +189,48 @@ export function AdminPollsView() {
     }
   }
 
+  function requestProjectAssignment(poll: Poll, projectId: string) {
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) return;
+    setLegacyProjectSelections((current) => ({ ...current, [poll.id]: projectId }));
+    setAssignmentTarget({ poll, project });
+  }
+
+  function clearLegacyProjectSelection(pollId: string) {
+    setLegacyProjectSelections((current) => {
+      const next = { ...current };
+      delete next[pollId];
+      return next;
+    });
+  }
+
+  async function confirmProjectAssignment() {
+    if (!assignmentTarget) return;
+
+    const { poll, project } = assignmentTarget;
+    setAssigningId(poll.id);
+    try {
+      const res = await fetch(`/api/polls/${poll.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || 'Không thể phân bình chọn cho dự án');
+        return;
+      }
+      toast.success(`Đã gắn bình chọn vào dự án ${project.name}`);
+      clearLegacyProjectSelection(poll.id);
+      setAssignmentTarget(null);
+      fetchPolls();
+    } catch {
+      toast.error('Lỗi kết nối mạng');
+    } finally {
+      setAssigningId(null);
+    }
+  }
+
   function getOptionStats(poll: Poll) {
     if (!poll.options || poll.options.length === 0) return [];
     const totalVotes = poll.options.reduce(
@@ -178,6 +244,8 @@ export function AdminPollsView() {
       percentage: totalVotes > 0 ? Math.round((((opt as any)._count?.votes || 0) / totalVotes) * 100) : 0,
     }));
   }
+
+  const activeProjects = projects.filter((project) => project.status === 'active');
 
   return (
     <div className="space-y-6">
@@ -216,6 +284,28 @@ export function AdminPollsView() {
                   placeholder="Mô tả thêm (không bắt buộc)..."
                   rows={2}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poll-project">Dự án nhận bình chọn *</Label>
+                <Select value={formProjectId} onValueChange={setFormProjectId}>
+                  <SelectTrigger id="poll-project">
+                    <SelectValue placeholder="Chọn dự án nhận bình chọn" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeProjects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        <span className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: project.color }} />
+                          {project.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activeProjects.length === 0 && (
+                  <p className="text-xs text-amber-700">Hãy tạo một dự án đang hoạt động trước khi tạo bình chọn.</p>
+                )}
+                <p className="text-xs text-muted-foreground">Chỉ Thành viên đã được duyệt trong dự án này mới thấy và bình chọn được.</p>
               </div>
               <div className="rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-4">
@@ -280,7 +370,7 @@ export function AdminPollsView() {
               </DialogClose>
               <Button
                 onClick={handleCreate}
-                disabled={!formTitle.trim() || formOptions.filter((o) => o.trim()).length < 2}
+                disabled={!formProjectId || !formTitle.trim() || formOptions.filter((o) => o.trim()).length < 2}
               >
                 Tạo bình chọn
               </Button>
@@ -328,6 +418,36 @@ export function AdminPollsView() {
         </DialogContent>
       </Dialog>
 
+      {/* Legacy polls have no safe automatic project mapping. */}
+      <Dialog open={assignmentTarget !== null} onOpenChange={(open) => {
+        if (!open && !assigningId && assignmentTarget) {
+          clearLegacyProjectSelection(assignmentTarget.poll.id);
+          setAssignmentTarget(null);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Phân bình chọn cho dự án</DialogTitle>
+            <DialogDescription>
+              Chỉ Thành viên đã được duyệt trong dự án &quot;{assignmentTarget?.project.name}&quot; mới có thể xem và bình chọn sau khi xác nhận.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            Kết quả hiện có của bình chọn &quot;{assignmentTarget?.poll.title}&quot; sẽ được giữ nguyên. Hãy chắc chắn đây là đúng dự án.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              if (assignmentTarget) clearLegacyProjectSelection(assignmentTarget.poll.id);
+              setAssignmentTarget(null);
+            }} disabled={assigningId !== null}>Hủy</Button>
+            <Button onClick={confirmProjectAssignment} disabled={assigningId !== null}>
+              {assigningId ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderKanban className="mr-2 h-4 w-4" />}
+              Xác nhận phân dự án
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Poll cards list */}
       {polls.length === 0 ? (
         <Card>
@@ -353,6 +473,17 @@ export function AdminPollsView() {
                     <div className="space-y-1.5 min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <CardTitle className="text-base truncate">{poll.title}</CardTitle>
+                        {poll.project ? (
+                          <Badge variant="outline" className="max-w-full gap-1.5 border-primary/25 bg-primary/5 text-primary" title={poll.project.name}>
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: poll.project.color }} />
+                            <span className="truncate">{poll.project.name}</span>
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="gap-1.5 border-amber-300 bg-amber-50 text-amber-800">
+                            <FolderKanban className="h-3 w-3" />
+                            Chưa phân dự án
+                          </Badge>
+                        )}
                         <Badge
                           variant={isActive ? 'default' : 'secondary'}
                           className={isActive ? 'bg-cyan-600 hover:bg-cyan-700 text-white' : ''}
@@ -369,6 +500,26 @@ export function AdminPollsView() {
                       <p className="text-xs text-muted-foreground">
                         {format(new Date(poll.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
                       </p>
+                      {!poll.projectId && (
+                        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+                          <p className="mb-2 text-xs font-medium text-amber-900">Chọn dự án trước khi công khai bình chọn này cho Thành viên.</p>
+                          <Select value={legacyProjectSelections[poll.id]} onValueChange={(projectId) => requestProjectAssignment(poll, projectId)} disabled={activeProjects.length === 0 || assigningId === poll.id}>
+                            <SelectTrigger className="h-9 bg-background text-sm">
+                              <SelectValue placeholder={activeProjects.length ? 'Chọn dự án để phân bình chọn' : 'Chưa có dự án đang hoạt động'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {activeProjects.map((project) => (
+                                <SelectItem key={project.id} value={project.id}>
+                                  <span className="flex items-center gap-2">
+                                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: project.color }} />
+                                    {project.name}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0 self-end sm:self-start">
                       {isActive ? (

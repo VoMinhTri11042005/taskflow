@@ -169,6 +169,8 @@ export interface Poll {
   description?: string | null;
   status: 'active' | 'closed';
   allowMultipleChoices: boolean;
+  projectId?: string | null;
+  project?: Pick<Project, 'id' | 'name' | 'color' | 'status'> | null;
   createdAt: string;
   updatedAt: string;
   createdByUserId: string;

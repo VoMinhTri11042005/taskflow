@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { canAccessProject } from '@/lib/permissions'
 
 // optionId is retained temporarily so an already-open older client can still
 // submit a single choice while the new app bundle is being deployed.
@@ -14,6 +15,9 @@ const voteSchema = z.object({
 
 function pollIncludeForViewer(userId: string) {
   return {
+    project: {
+      select: { id: true, name: true, color: true, status: true },
+    },
     options: {
       include: {
         _count: { select: { votes: true } },
@@ -38,26 +42,23 @@ export async function POST(
 
     const { id: pollId } = await params
     const { optionIds } = voteSchema.parse(await request.json())
-    const [member, poll] = await Promise.all([
-      db.user.findUnique({
-        where: { id: session.id },
-        select: { leaderId: true, role: true, status: true },
-      }),
-      db.poll.findUnique({
-        where: { id: pollId },
-        select: {
-          createdByUserId: true,
-          status: true,
-          allowMultipleChoices: true,
-          options: { select: { id: true } },
-        },
-      }),
-    ])
+    const poll = await db.poll.findUnique({
+      where: { id: pollId },
+      select: {
+        projectId: true,
+        status: true,
+        allowMultipleChoices: true,
+        options: { select: { id: true } },
+      },
+    })
 
     if (!poll) return NextResponse.json({ error: 'Không tìm thấy bình chọn' }, { status: 404 })
+    if (!poll.projectId) {
+      return NextResponse.json({ error: 'Bình chọn này chưa được gán cho dự án' }, { status: 409 })
+    }
     if (poll.status !== 'active') return NextResponse.json({ error: 'Bình chọn này đã đóng' }, { status: 409 })
-    if (member?.role !== 'member' || member.status !== 'approved' || !member.leaderId || poll.createdByUserId !== member.leaderId) {
-      return NextResponse.json({ error: 'Bạn không có quyền bình chọn trong nhóm này' }, { status: 403 })
+    if (!(await canAccessProject(session, poll.projectId))) {
+      return NextResponse.json({ error: 'Bạn không có quyền bình chọn trong dự án này' }, { status: 403 })
     }
     if (!poll.allowMultipleChoices && optionIds.length > 1) {
       return NextResponse.json({ error: 'Bình chọn này chỉ cho phép chọn một phương án' }, { status: 400 })

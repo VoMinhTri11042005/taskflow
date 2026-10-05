@@ -6,7 +6,7 @@ import type { Poll, PollOption, PollVote } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { BarChart3, Check, Loader2, Lock, Vote } from 'lucide-react';
+import { BarChart3, Check, FolderKanban, Loader2, Lock, Vote } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { readApiJson } from '@/lib/client-api';
@@ -131,7 +131,7 @@ export function MemberPollsView() {
         <p className="text-muted-foreground">
           {polls.length > 0
             ? `${polls.filter((poll) => poll.status === 'active').length} bình chọn đang hoạt động`
-            : 'Tham gia bình chọn của nhóm'}
+            : 'Bình chọn trong các dự án bạn tham gia'}
         </p>
       </div>
 
@@ -160,12 +160,24 @@ export function MemberPollsView() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <CardTitle className="text-base leading-snug">{poll.title}</CardTitle>
+                        {poll.project && (
+                          <Badge variant="outline" className="max-w-full gap-1.5 border-primary/25 bg-primary/5 text-primary" title={poll.project.name}>
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: poll.project.color }} />
+                            <span className="truncate">{poll.project.name}</span>
+                          </Badge>
+                        )}
                         <Badge variant="outline" className="text-xs">
                           {poll.allowMultipleChoices ? 'Chọn nhiều phương án' : 'Chọn một phương án'}
                         </Badge>
                       </div>
                       {poll.description && (
                         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{poll.description}</p>
+                      )}
+                      {poll.project && (
+                        <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                          <FolderKanban className="h-3.5 w-3.5" />
+                          Chỉ Thành viên thuộc dự án này có thể bình chọn.
+                        </p>
                       )}
                     </div>
                     <Badge
