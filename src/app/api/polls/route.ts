@@ -10,7 +10,9 @@ const createPollSchema = z.object({
   description: z.string().trim().max(1000).optional().nullable(),
   options: z.array(z.string().trim().min(1, 'Lựa chọn không được để trống').max(160)).min(2).max(10),
   allowMultipleChoices: z.boolean().optional().default(false),
-  projectId: z.string().cuid('Vui lòng chọn dự án cho bình chọn'),
+  // projectId was added after the first deployed poll form. Keep it optional here
+  // only long enough to map old open browser tabs to their sole active project.
+  projectId: z.string().cuid('Vui lòng chọn dự án cho bình chọn').optional(),
 })
 
 /** Return counts for everyone, but vote identities only for the current viewer. */
@@ -96,12 +98,39 @@ export async function POST(request: NextRequest) {
     }
 
     const validated = createPollSchema.parse(await request.json())
-    if (!(await canManageProject(session, validated.projectId))) {
+    let projectId = validated.projectId
+
+    // An already-open tab can still submit the previous form, which did not
+    // contain projectId. It is safe to preserve that request only if there is
+    // exactly one possible active project; never choose arbitrarily otherwise.
+    if (!projectId) {
+      const activeProjects = await db.project.findMany({
+        where: { leaderId: session.id, status: 'active' },
+        select: { id: true },
+        take: 2,
+      })
+
+      if (activeProjects.length !== 1) {
+        return NextResponse.json(
+          {
+            error:
+              activeProjects.length === 0
+                ? 'Bạn cần có một dự án đang hoạt động trước khi tạo bình chọn'
+                : 'Bình chọn cần được gán cho một dự án. Vui lòng tải lại trang và chọn dự án',
+          },
+          { status: 400 }
+        )
+      }
+
+      projectId = activeProjects[0].id
+    }
+
+    if (!(await canManageProject(session, projectId))) {
       return NextResponse.json({ error: 'Bạn chỉ có thể tạo bình chọn cho dự án do mình quản lý' }, { status: 403 })
     }
 
     const project = await db.project.findUnique({
-      where: { id: validated.projectId },
+      where: { id: projectId },
       select: { status: true },
     })
     if (!project || project.status !== 'active') {
@@ -118,7 +147,7 @@ export async function POST(request: NextRequest) {
         title: validated.title,
         description: validated.description || null,
         allowMultipleChoices: validated.allowMultipleChoices,
-        projectId: validated.projectId,
+        projectId,
         createdByUserId: session.id,
         options: { create: validated.options.map((label) => ({ label })) },
       },
