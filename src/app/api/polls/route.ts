@@ -36,6 +36,44 @@ function pollIncludeForViewer(userId: string) {
 
 const noStoreHeaders = { 'Cache-Control': 'no-store, max-age=0' }
 
+async function notifyProjectMembersAboutNewPoll(input: {
+  projectId: string
+  leaderId: string
+  leaderName: string
+  projectName: string
+  pollTitle: string
+}) {
+  try {
+    const recipients = await db.projectMember.findMany({
+      where: {
+        projectId: input.projectId,
+        status: 'approved',
+        user: {
+          role: 'member',
+          status: 'approved',
+          leaderId: input.leaderId,
+        },
+      },
+      select: { userId: true },
+    })
+
+    if (recipients.length === 0) return
+
+    await db.notification.createMany({
+      data: recipients.map(({ userId }) => ({
+        userId,
+        title: 'Bình chọn mới từ Leader',
+        message: `${input.leaderName} mời bạn bình chọn “${input.pollTitle}” trong dự án “${input.projectName}”.`,
+        type: 'poll_created',
+      })),
+    })
+  } catch (error) {
+    // The poll has already been created. Do not return a false error that
+    // makes the Leader retry and accidentally create a duplicate poll.
+    console.error('Error notifying project members about new poll:', error)
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = getSession(request)
@@ -131,7 +169,7 @@ export async function POST(request: NextRequest) {
 
     const project = await db.project.findUnique({
       where: { id: projectId },
-      select: { status: true },
+      select: { status: true, name: true },
     })
     if (!project || project.status !== 'active') {
       return NextResponse.json({ error: 'Chỉ có thể tạo bình chọn cho dự án đang hoạt động' }, { status: 400 })
@@ -152,6 +190,14 @@ export async function POST(request: NextRequest) {
         options: { create: validated.options.map((label) => ({ label })) },
       },
       include: pollIncludeForViewer(session.id),
+    })
+
+    await notifyProjectMembersAboutNewPoll({
+      projectId,
+      leaderId: session.id,
+      leaderName: session.name,
+      projectName: project.name,
+      pollTitle: poll.title,
     })
 
     return NextResponse.json(poll, { status: 201 })

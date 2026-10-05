@@ -12,6 +12,7 @@ import {
   ChevronRight,
   LogOut,
   Menu,
+  Sparkles,
 } from 'lucide-react';
 import {
   Popover,
@@ -31,6 +32,8 @@ import { vi } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { ensureApiSuccess } from '@/lib/client-api';
 import { notifyAuthSessionChange } from '@/lib/auth-session-client';
+import { cn } from '@/lib/utils';
+import { isUnreadImportantNotification } from '@/lib/notification-priority';
 
 export function GlobalHeader() {
   const {
@@ -43,6 +46,7 @@ export function GlobalHeader() {
     unreadCount,
     setNotifications,
     setUnreadCount,
+    setCurrentView,
     setCommandPaletteOpen,
     projects,
     selectedProjectId,
@@ -50,6 +54,22 @@ export function GlobalHeader() {
 
   const isAdmin = user?.role === 'admin';
   const isLeader = user?.role === 'leader';
+  const isMember = user?.role === 'member';
+  const importantUnreadCount = React.useMemo(
+    () => notifications.filter(isUnreadImportantNotification).length,
+    [notifications]
+  );
+  const hasImportantUnread = isMember && importantUnreadCount > 0;
+  const notificationPreview = React.useMemo(
+    () => [...notifications]
+      .sort((left, right) => {
+        const priorityDifference = Number(isUnreadImportantNotification(right)) - Number(isUnreadImportantNotification(left));
+        if (priorityDifference !== 0) return priorityDifference;
+        return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      })
+      .slice(0, 8),
+    [notifications]
+  );
   const roleAvatarColor = isAdmin ? '#dc2626' : isLeader ? '#2563eb' : '#18181b';
   const roleBadge = isAdmin
     ? {
@@ -190,13 +210,31 @@ export function GlobalHeader() {
             <Button
               variant="ghost"
               size="icon"
-              className="relative h-9 w-9 rounded-lg border border-border/40 hover:bg-muted/60 transition-colors"
-              aria-label={unreadCount > 0 ? `Mở thông báo, có ${unreadCount} chưa đọc` : 'Mở thông báo'}
+              className={cn(
+                'relative h-9 w-9 rounded-lg border transition-colors',
+                hasImportantUnread
+                  ? 'border-amber-400/80 bg-amber-50 text-amber-800 shadow-sm shadow-amber-500/20 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20'
+                  : 'border-border/40 hover:bg-muted/60'
+              )}
+              aria-label={hasImportantUnread
+                ? `Mở thông báo, có ${importantUnreadCount} thông báo quan trọng chưa đọc`
+                : unreadCount > 0
+                  ? `Mở thông báo, có ${unreadCount} chưa đọc`
+                  : 'Mở thông báo'}
             >
-              <Bell className="h-4 w-4 text-muted-foreground" />
+              {hasImportantUnread && (
+                <span className="pointer-events-none absolute inset-0 rounded-lg border-2 border-amber-400/70 animate-important-notification-ring" aria-hidden="true" />
+              )}
+              <Bell className={cn(
+                'h-4 w-4',
+                hasImportantUnread ? 'text-amber-700 dark:text-amber-200 animate-important-notification-bell' : 'text-muted-foreground'
+              )} />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-xs animate-in zoom-in">
-                  {unreadCount > 9 ? '9+' : unreadCount}
+                <span className={cn(
+                  'absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white shadow-xs animate-in zoom-in',
+                  hasImportantUnread ? 'bg-amber-600 animate-important-notification-badge' : 'bg-rose-500'
+                )}>
+                  {hasImportantUnread ? '!' : unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </Button>
@@ -208,6 +246,12 @@ export function GlobalHeader() {
                 {unreadCount > 0 && (
                   <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                     {unreadCount} mới
+                  </span>
+                )}
+                {hasImportantUnread && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900 animate-important-notification-badge dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-200">
+                    <Sparkles className="h-3 w-3" />
+                    {importantUnreadCount} quan trọng
                   </span>
                 )}
               </div>
@@ -225,22 +269,48 @@ export function GlobalHeader() {
                   Bạn chưa có thông báo nào.
                 </div>
               ) : (
-                notifications.slice(0, 8).map((n) => (
+                notificationPreview.map((n) => {
+                  const isImportantUnread = isUnreadImportantNotification(n);
+                  return (
                   <div
                     key={n.id}
-                    className={`p-3 text-xs transition-colors hover:bg-muted/40 ${!n.read ? 'bg-primary/5' : ''}`}
+                    className={cn(
+                      'border-l-4 border-l-transparent p-3 text-xs transition-colors hover:bg-muted/40',
+                      isImportantUnread
+                        ? 'border-l-amber-500 bg-amber-50/80 dark:bg-amber-500/10 animate-important-notification-highlight'
+                        : !n.read
+                          ? 'bg-primary/5'
+                          : ''
+                    )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-semibold text-foreground">{n.title}</span>
+                      <div className="min-w-0">
+                        <span className="font-semibold text-foreground">{n.title}</span>
+                        {isImportantUnread && (
+                          <span className="ml-1.5 inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-900 dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-200">
+                            <Sparkles className="h-2.5 w-2.5" /> Quan trọng
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[10px] text-muted-foreground shrink-0">
                         {n.createdAt ? formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: vi }) : ''}
                       </span>
                     </div>
                     <p className="text-muted-foreground/90 mt-1 line-clamp-2">{n.message}</p>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
+            {notifications.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setCurrentView('notifications')}
+                className="w-full border-t border-border/50 p-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/5"
+              >
+                Xem tất cả thông báo
+              </button>
+            )}
           </PopoverContent>
         </Popover>
 

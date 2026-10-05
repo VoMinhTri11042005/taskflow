@@ -15,6 +15,50 @@ const commentUserSelect = {
   avatar: true,
 } as const
 
+async function notifyAssigneeAboutLeaderComment(input: {
+  projectId: string
+  leaderId: string
+  leaderName: string
+  taskTitle: string
+  assigneeEmail: string
+  comment: string
+}) {
+  try {
+    // The recipient must still be an approved Member of this exact project;
+    // a removed account must never receive a task-related notification.
+    const recipient = await db.user.findFirst({
+      where: {
+        email: input.assigneeEmail,
+        role: 'member',
+        status: 'approved',
+        leaderId: input.leaderId,
+        projectMemberships: {
+          some: { projectId: input.projectId, status: 'approved' },
+        },
+      },
+      select: { id: true },
+    })
+    if (!recipient) return
+
+    const preview = input.comment.length > 180
+      ? `${input.comment.slice(0, 177).trimEnd()}…`
+      : input.comment
+
+    await db.notification.create({
+      data: {
+        userId: recipient.id,
+        title: `Nhận xét mới từ ${input.leaderName}`,
+        message: `${input.leaderName} đã nhận xét về công việc “${input.taskTitle}”: ${preview}`,
+        type: 'leader_comment',
+      },
+    })
+  } catch (error) {
+    // Saving a comment must remain successful even if notification delivery
+    // is temporarily unavailable.
+    console.error('Error notifying assignee about Leader comment:', error)
+  }
+}
+
 /**
  * Comments are deliberately available to every task viewer.  The task-level
  * permission check keeps a member from discovering comments on a task that
@@ -62,6 +106,16 @@ export async function POST(
     }
 
     const { content } = createCommentSchema.parse(await request.json())
+    const task = await db.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        title: true,
+        assignee: { select: { email: true } },
+        project: { select: { id: true, leaderId: true } },
+      },
+    })
+    if (!task) return NextResponse.json({ error: 'Không tìm thấy công việc' }, { status: 404 })
 
     // Keep the visible comment and its audit event atomic.  The activity does
     // not copy arbitrary comment text, so task timelines remain compact and
@@ -83,6 +137,21 @@ export async function POST(
 
       return created
     })
+
+    if (
+      session.role === 'leader' &&
+      task.project.leaderId === session.id &&
+      task.assignee?.email
+    ) {
+      await notifyAssigneeAboutLeaderComment({
+        projectId: task.project.id,
+        leaderId: session.id,
+        leaderName: session.name,
+        taskTitle: task.title,
+        assigneeEmail: task.assignee.email,
+        comment: content,
+      })
+    }
 
     return NextResponse.json(comment, { status: 201 })
   } catch (error) {

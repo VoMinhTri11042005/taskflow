@@ -30,6 +30,7 @@ import { Bell, FolderKanban, KanbanSquare, LayoutDashboard, ListTodo, Menu, User
 import { BrandMark } from '@/components/layout/brand-mark';
 import { readApiJson } from '@/lib/client-api';
 import { AUTH_SESSION_CHANGE_KEY } from '@/lib/auth-session-client';
+import { isUnreadImportantNotification } from '@/lib/notification-priority';
 import type { Notification, Poll, Project, Task, TeamMember, User } from '@/types';
 import { toast } from 'sonner';
 
@@ -53,7 +54,7 @@ export default function HomePage() {
   const {
     currentView, sidebarOpen, setSidebarOpen, setCurrentView,
     setTasks, setProjects, setMembers, setUser, setSelectedProjectId,
-    user, setNotifications, unreadCount, setUnreadCount, setPolls
+    user, notifications, setNotifications, unreadCount, setUnreadCount, setPolls
   } = useAppStore();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -70,6 +71,7 @@ export default function HomePage() {
 
   const isAdmin = user?.role === 'admin';
   const isLeader = user?.role === 'leader';
+  const importantUnreadCount = notifications.filter(isUnreadImportantNotification).length;
 
   const mobileNavItems = isAdmin
     ? [
@@ -353,7 +355,9 @@ export default function HomePage() {
     };
 
     void loadNotifications();
-    const intervalId = window.setInterval(() => void loadNotifications(), 15_000);
+    // Important Leader requests are highlighted until read. A short polling
+    // interval keeps that signal timely without needing a persistent socket.
+    const intervalId = window.setInterval(() => void loadNotifications(), 10_000);
     window.addEventListener('focus', loadNotifications);
 
     return () => {
@@ -489,6 +493,7 @@ export default function HomePage() {
             {mobileNavItems.map(({ view, label, icon: Icon }) => {
               const isActive = currentView === view;
               const hasUnread = view === 'notifications' && unreadCount > 0;
+              const hasImportantNotifications = view === 'notifications' && importantUnreadCount > 0;
               return (
                 <button
                   key={view}
@@ -498,13 +503,20 @@ export default function HomePage() {
                     setMobileMenuOpen(false);
                   }}
                   className={`relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] font-medium transition-colors ${
-                    isActive ? 'bg-primary/10 text-primary font-bold' : 'text-muted-foreground active:bg-muted'
+                    isActive
+                      ? 'bg-primary/10 text-primary font-bold'
+                      : hasImportantNotifications
+                        ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300/70 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/40 animate-important-notification-highlight'
+                        : 'text-muted-foreground active:bg-muted'
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className={hasImportantNotifications ? 'h-4 w-4 animate-important-notification-bell' : 'h-4 w-4'} />
                   <span className="max-w-full truncate">{label}</span>
                   {hasUnread && (
-                    <span className="absolute top-1 right-1/2 ml-3 h-2 w-2 rounded-full bg-rose-500" />
+                    <span className={hasImportantNotifications
+                      ? 'absolute top-1 right-1/2 ml-3 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-amber-200 animate-important-notification-badge dark:ring-amber-500/30'
+                      : 'absolute top-1 right-1/2 ml-3 h-2 w-2 rounded-full bg-rose-500'
+                    } />
                   )}
                 </button>
               );

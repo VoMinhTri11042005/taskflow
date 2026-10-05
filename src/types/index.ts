@@ -119,6 +119,8 @@ export interface Notification {
     | 'warning'
     | 'success'
     | 'task_assigned'
+    | 'poll_created'
+    | 'leader_comment'
     | 'deadline'
     | 'overdue'
     | 'task_completed'

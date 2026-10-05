@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ensureApiSuccess } from '@/lib/client-api';
 import { notifyAuthSessionChange } from '@/lib/auth-session-client';
+import { isUnreadImportantNotification } from '@/lib/notification-priority';
 
 const memberNavItems: { id: MemberViewType; label: string; icon: React.ElementType }[] = [
   { id: 'my-tasks', label: 'Công việc của tôi', icon: CheckSquare },
@@ -42,6 +43,7 @@ export function MemberSidebar() {
     user,
     setUser,
     tasks,
+    notifications,
     unreadCount,
     polls,
     activeTimeLog,
@@ -49,6 +51,7 @@ export function MemberSidebar() {
 
   const isMobile = useIsMobile();
   const showFull = isMobile || !sidebarCollapsed;
+  const importantUnreadCount = notifications.filter(isUnreadImportantNotification).length;
 
   const closeMobileMenu = () => {
     window.dispatchEvent(new CustomEvent('close-mobile-menu'));
@@ -113,6 +116,7 @@ export function MemberSidebar() {
           const Icon = item.icon;
           const isActive = currentView === item.id;
           const badge = getItemBadge(item.id);
+          const hasImportantNotifications = item.id === 'notifications' && importantUnreadCount > 0;
 
           return (
             <button
@@ -126,10 +130,19 @@ export function MemberSidebar() {
                 'group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold transition-all',
                 isActive
                   ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/25'
+                  : hasImportantNotifications
+                    ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-300/70 shadow-sm shadow-amber-500/10 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-100 dark:ring-amber-400/40 dark:hover:bg-amber-500/20 animate-important-notification-highlight'
                   : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
               )}
             >
-              <Icon className={cn('h-4 w-4 shrink-0 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-muted-foreground group-hover:text-foreground')} />
+              <Icon className={cn(
+                'h-4 w-4 shrink-0 transition-transform group-hover:scale-110',
+                isActive
+                  ? 'text-white'
+                  : hasImportantNotifications
+                    ? 'text-amber-700 dark:text-amber-200 animate-important-notification-bell'
+                    : 'text-muted-foreground group-hover:text-foreground'
+              )} />
               
               {showFull && (
                 <div className="flex-1 flex items-center justify-between text-left truncate">
@@ -140,6 +153,8 @@ export function MemberSidebar() {
                         'text-[10px] font-bold px-1.5 py-0.2 rounded-full',
                         isActive
                           ? 'bg-primary-foreground/20 text-primary-foreground'
+                          : hasImportantNotifications
+                            ? 'bg-amber-600 text-white animate-important-notification-badge'
                           : typeof badge === 'string'
                           ? 'bg-primary/10 text-primary border border-primary/20'
                           : 'bg-muted text-muted-foreground border border-border/50'

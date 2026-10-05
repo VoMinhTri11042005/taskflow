@@ -18,15 +18,20 @@ import {
   UserPlus,
   UserX,
   CheckCheck,
+  MessageSquare,
   Trash2,
   Sparkles,
+  Vote,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
+import { isUnreadImportantNotification } from '@/lib/notification-priority';
 
 const typeConfig: Record<string, { icon: React.ElementType; color: string; bgColor: string; label: string }> = {
   task_assigned: { icon: ClipboardList, color: 'text-blue-500', bgColor: 'bg-blue-500/10', label: 'Giao việc' },
+  poll_created: { icon: Vote, color: 'text-violet-600', bgColor: 'bg-violet-500/10', label: 'Bình chọn mới' },
+  leader_comment: { icon: MessageSquare, color: 'text-amber-600', bgColor: 'bg-amber-500/10', label: 'Nhận xét Leader' },
   deadline: { icon: Clock, color: 'text-amber-500', bgColor: 'bg-amber-500/10', label: 'Hạn chót' },
   overdue: { icon: AlertTriangle, color: 'text-rose-500', bgColor: 'bg-rose-500/10', label: 'Quá hạn' },
   task_completed: { icon: CheckCircle2, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10', label: 'Hoàn thành' },
@@ -64,7 +69,7 @@ export function NotificationsView() {
     if (!userId) return;
     async function fetchNotifications() {
       try {
-        const res = await fetch(`/api/notifications?userId=${userId}`);
+        const res = await fetch(`/api/notifications?userId=${userId}`, { cache: 'no-store' });
         const data = await readApiJson<Notification[]>(res, 'Không thể tải thông báo');
         setNotifications(data);
         const unread = data.filter((n: Notification) => !n.read).length;
@@ -114,11 +119,22 @@ export function NotificationsView() {
   }
 
   const displayedNotifications = useMemo(() => {
-    if (filterMode === 'unread') {
-      return notifications.filter((n) => !n.read);
-    }
-    return notifications;
+    const filtered = filterMode === 'unread'
+      ? notifications.filter((notification) => !notification.read)
+      : notifications;
+
+    // Important unread requests remain at the top until the Member reads them.
+    return [...filtered].sort((left, right) => {
+      const priorityDifference = Number(isUnreadImportantNotification(right)) - Number(isUnreadImportantNotification(left));
+      if (priorityDifference !== 0) return priorityDifference;
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    });
   }, [notifications, filterMode]);
+
+  const importantUnreadCount = useMemo(
+    () => notifications.filter(isUnreadImportantNotification).length,
+    [notifications]
+  );
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -132,9 +148,15 @@ export function NotificationsView() {
                 {unreadCount} chưa đọc
               </Badge>
             )}
+            {importantUnreadCount > 0 && (
+              <Badge className="h-5 gap-1 border border-amber-300 bg-amber-100 px-2 text-[10px] font-bold text-amber-900 shadow-sm animate-important-notification-badge dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-200">
+                <Sparkles className="h-3 w-3" />
+                {importantUnreadCount} quan trọng
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Cập nhật tức thì về phân công công việc, phê duyệt và thời hạn
+            Thông báo từ Leader về bình chọn và nhận xét sẽ được làm nổi bật đến khi bạn đọc.
           </p>
         </div>
 
@@ -197,6 +219,7 @@ export function NotificationsView() {
           {displayedNotifications.map((notification) => {
             const config = typeConfig[notification.type] || typeConfig.info;
             const Icon = config.icon;
+            const isImportantUnread = isUnreadImportantNotification(notification);
 
             return (
               <Card
@@ -206,11 +229,18 @@ export function NotificationsView() {
                   'cursor-pointer transition-all border-border/60 rounded-xl overflow-hidden',
                   notification.read
                     ? 'bg-card/50 opacity-75 hover:opacity-100 hover:bg-card/80'
-                    : 'bg-card/95 border-primary/30 shadow-2xs hover:shadow-sm'
+                    : isImportantUnread
+                      ? 'border-l-4 border-l-amber-500 border-amber-300/80 bg-linear-to-r from-amber-50 via-card to-card shadow-md shadow-amber-500/10 ring-1 ring-amber-300/50 hover:shadow-lg dark:border-amber-400/60 dark:bg-linear-to-r dark:from-amber-500/10 dark:via-card dark:to-card animate-important-notification-highlight'
+                      : 'bg-card/95 border-primary/30 shadow-2xs hover:shadow-sm'
                 )}
               >
                 <CardContent className="p-3.5 flex items-start gap-3">
-                  <div className={cn('p-2 rounded-lg shrink-0 mt-0.5', config.bgColor, config.color)}>
+                  <div className={cn(
+                    'p-2 rounded-lg shrink-0 mt-0.5',
+                    config.bgColor,
+                    config.color,
+                    isImportantUnread && 'ring-2 ring-amber-300/60 animate-important-notification-icon'
+                  )}>
                     <Icon className="h-4 w-4" />
                   </div>
 
@@ -222,6 +252,12 @@ export function NotificationsView() {
                         </h4>
                         {!notification.read && (
                           <span className="h-2 w-2 rounded-full bg-primary shrink-0 animate-pulse" />
+                        )}
+                        {isImportantUnread && (
+                          <Badge className="h-5 shrink-0 gap-1 border border-amber-300 bg-amber-100 px-1.5 text-[9px] font-bold text-amber-900 animate-important-notification-badge dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-200">
+                            <Sparkles className="h-2.5 w-2.5" />
+                            Quan trọng
+                          </Badge>
                         )}
                       </div>
                       <span className="text-[10px] text-muted-foreground shrink-0 font-mono">

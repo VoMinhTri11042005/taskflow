@@ -307,6 +307,59 @@
   }
 }
 
+/* Important Leader requests use a calm, low-frequency signal. The motion
+   stops as soon as the Member reads the notification. */
+@keyframes important-notification-ring {
+  0%, 55%, 100% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  18% {
+    opacity: 0.75;
+    transform: scale(1.12);
+  }
+  35% {
+    opacity: 0;
+    transform: scale(1.38);
+  }
+}
+
+@keyframes important-notification-bell {
+  0%, 68%, 100% {
+    transform: rotate(0deg);
+  }
+  74% {
+    transform: rotate(-12deg);
+  }
+  80% {
+    transform: rotate(10deg);
+  }
+  86% {
+    transform: rotate(-6deg);
+  }
+  92% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes important-notification-highlight {
+  0%, 100% {
+    box-shadow: 0 0 0 0 oklch(0.77 0.16 83 / 0%);
+  }
+  50% {
+    box-shadow: 0 0 0 4px oklch(0.77 0.16 83 / 22%);
+  }
+}
+
+@keyframes important-notification-icon {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
 .animate-fade-in-up {
   animation: fade-in-up 0.5s ease-out both;
 }
@@ -336,6 +389,37 @@
 
 .animate-count-up {
   animation: count-up 0.6s ease-out both;
+}
+
+.animate-important-notification-ring {
+  animation: important-notification-ring 2.8s ease-out infinite;
+}
+
+.animate-important-notification-bell {
+  transform-origin: top center;
+  animation: important-notification-bell 3.2s ease-in-out infinite;
+}
+
+.animate-important-notification-highlight {
+  animation: important-notification-highlight 2.6s ease-in-out infinite;
+}
+
+.animate-important-notification-icon {
+  animation: important-notification-icon 1.8s ease-in-out infinite;
+}
+
+.animate-important-notification-badge {
+  animation: important-notification-icon 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-important-notification-ring,
+  .animate-important-notification-bell,
+  .animate-important-notification-highlight,
+  .animate-important-notification-icon,
+  .animate-important-notification-badge {
+    animation: none;
+  }
 }
 
 /* Staggered animation delays */

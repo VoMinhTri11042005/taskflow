@@ -13,6 +13,8 @@ const markReadSchema = z.union([
   }),
 ])
 
+const noStoreHeaders = { 'Cache-Control': 'no-store, max-age=0' }
+
 export async function GET(request: NextRequest) {
   try {
     const session = getSession(request)
@@ -30,7 +32,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json(notifications)
+    return NextResponse.json(notifications, { headers: noStoreHeaders })
   } catch (error) {
     console.error('Error fetching notifications:', error)
     return NextResponse.json(
