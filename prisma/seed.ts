@@ -55,7 +55,11 @@ async function main() {
   ];
 
   const tasks: Array<{ id: string }> = [];
-  for (const t of taskData) tasks.push(await prisma.task.create({ data: t }));
+  for (const t of taskData) {
+    const task = await prisma.task.create({ data: t });
+    tasks.push(task);
+    if (t.assigneeId) await prisma.taskAssignee.create({ data: { taskId: task.id, memberId: t.assigneeId } });
+  }
 
   await prisma.taskLink.createMany({
     data: [

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { canAccessProject, canManageProject } from '@/lib/permissions';
+import { removeTaskAssignee } from '@/lib/remove-task-assignee';
 
 const membershipSchema = z.object({
   userId: z.string().cuid(),
@@ -221,7 +222,7 @@ export async function DELETE(
       const activeTask = await db.task.findFirst({
         where: {
           projectId: id,
-          assigneeId: teamMember.id,
+          OR: [{ assigneeId: teamMember.id }, { assignments: { some: { memberId: teamMember.id } } }],
           status: { not: 'done' },
         },
         select: { id: true },
@@ -233,10 +234,7 @@ export async function DELETE(
 
     await db.$transaction(async (tx) => {
       if (teamMember) {
-        await tx.task.updateMany({
-          where: { projectId: id, assigneeId: teamMember.id },
-          data: { assigneeId: null },
-        });
+        await removeTaskAssignee(tx, teamMember.id, [id]);
       }
       await tx.projectMember.delete({ where: { projectId_userId: { projectId: id, userId } } });
     });

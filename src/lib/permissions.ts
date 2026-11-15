@@ -121,7 +121,10 @@ export async function canAccessTask(session: SessionData, taskId: string) {
   const task = await db.task.findFirst({
     where: {
       id: taskId,
-      assigneeId: session.teamMemberId,
+      OR: [
+        { assigneeId: session.teamMemberId },
+        { assignments: { some: { memberId: session.teamMemberId } } },
+      ],
     },
     select: { projectId: true },
   });

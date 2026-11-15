@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { isAdmin, isLeader } from '@/lib/permissions'
 import { duplicateAccountNameMessage, isAccountNameTaken, normalizeAccountName } from '@/lib/account-names'
+import { removeTaskAssignee } from '@/lib/remove-task-assignee'
 
 const updateMemberSchema = z.object({
   name: z.string().min(1).optional(),
@@ -25,7 +26,7 @@ export async function GET(
       where: { id },
       include: {
         _count: {
-          select: { tasks: true },
+          select: { tasks: true, taskAssignments: true },
         },
       },
     })
@@ -46,6 +47,7 @@ export async function GET(
     }
     return NextResponse.json({
       ...member,
+      _count: { tasks: member._count.taskAssignments },
       userId: account?.id || null,
       accountStatus: account?.status || 'approved',
       leaderId: account?.leaderId || null,
@@ -114,7 +116,7 @@ export async function PUT(
       const account = await tx.user.findUnique({ where: { email: current.email } })
       if (account) {
         if (account.role === 'member' && validated.role && validated.role !== 'member') {
-          await tx.task.updateMany({ where: { assigneeId: id }, data: { assigneeId: null } })
+          await removeTaskAssignee(tx, id)
           await tx.projectMember.deleteMany({ where: { userId: account.id } })
         }
         await tx.user.update({ where: { id: account.id, }, data: {
@@ -177,6 +179,7 @@ export async function DELETE(
       }
     }
     await db.$transaction(async (tx) => {
+      await removeTaskAssignee(tx, id)
       if (account) await tx.user.delete({ where: { id: account.id } })
       await tx.teamMember.delete({ where: { id } })
     })

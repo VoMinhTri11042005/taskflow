@@ -15,42 +15,42 @@ const commentUserSelect = {
   avatar: true,
 } as const
 
-async function notifyAssigneeAboutLeaderComment(input: {
+async function notifyTaskParticipants(input: {
   projectId: string
   leaderId: string
-  leaderName: string
+  authorId: string
+  authorName: string
   taskTitle: string
-  assigneeEmail: string
+  assigneeEmails: string[]
   comment: string
 }) {
   try {
-    // The recipient must still be an approved Member of this exact project;
-    // a removed account must never receive a task-related notification.
-    const recipient = await db.user.findFirst({
+    // Notify only currently approved participants, never the author.
+    const recipients = await db.user.findMany({
       where: {
-        email: input.assigneeEmail,
-        role: 'member',
+        id: { not: input.authorId },
         status: 'approved',
-        leaderId: input.leaderId,
-        projectMemberships: {
-          some: { projectId: input.projectId, status: 'approved' },
-        },
+        OR: [
+          { id: input.leaderId, role: 'leader' },
+          { email: { in: input.assigneeEmails }, role: 'member', leaderId: input.leaderId,
+            projectMemberships: { some: { projectId: input.projectId, status: 'approved' } } },
+        ],
       },
       select: { id: true },
     })
-    if (!recipient) return
+    if (!recipients.length) return
 
     const preview = input.comment.length > 180
       ? `${input.comment.slice(0, 177).trimEnd()}…`
       : input.comment
 
-    await db.notification.create({
-      data: {
+    await db.notification.createMany({
+      data: recipients.map((recipient) => ({
         userId: recipient.id,
-        title: `Nhận xét mới từ ${input.leaderName}`,
-        message: `${input.leaderName} đã nhận xét về công việc “${input.taskTitle}”: ${preview}`,
-        type: 'leader_comment',
-      },
+        title: `Nhận xét mới từ ${input.authorName}`,
+        message: `${input.authorName} đã nhận xét về công việc “${input.taskTitle}”: ${preview}`,
+        type: input.authorId === input.leaderId ? 'leader_comment' : 'info',
+      })),
     })
   } catch (error) {
     // Saving a comment must remain successful even if notification delivery
@@ -112,6 +112,7 @@ export async function POST(
         id: true,
         title: true,
         assignee: { select: { email: true } },
+        assignments: { select: { member: { select: { email: true } } } },
         project: { select: { id: true, leaderId: true } },
       },
     })
@@ -138,17 +139,14 @@ export async function POST(
       return created
     })
 
-    if (
-      session.role === 'leader' &&
-      task.project.leaderId === session.id &&
-      task.assignee?.email
-    ) {
-      await notifyAssigneeAboutLeaderComment({
+    if (task.project.leaderId) {
+      await notifyTaskParticipants({
         projectId: task.project.id,
-        leaderId: session.id,
-        leaderName: session.name,
+        leaderId: task.project.leaderId,
+        authorId: session.id,
+        authorName: session.name,
         taskTitle: task.title,
-        assigneeEmail: task.assignee.email,
+        assigneeEmails: [...new Set([...task.assignments.map(({ member }) => member.email), ...(task.assignee ? [task.assignee.email] : [])])],
         comment: content,
       })
     }

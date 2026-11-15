@@ -17,11 +17,13 @@ const updateTaskSchema = z.object({
   dueDate: z.string().datetime().optional().nullable(),
   projectId: z.string().min(1).optional(),
   assigneeId: z.string().optional().nullable(),
+  assigneeIds: z.array(z.string().min(1)).max(100).optional(),
   reviewNotes: z.string().trim().max(5_000).optional().nullable(),
 })
 
 const detailInclude = {
   assignee: true,
+  assignments: { include: { member: true } },
   project: true,
   links: true,
   checklist: { orderBy: { position: 'asc' as const } },
@@ -43,8 +45,10 @@ const statusLabels: Record<string, string> = {
   done: 'Hoàn thành',
 }
 
-function serializeTask<T extends { project: { name: string } }>(task: T): T {
-  return { ...task, project: withNormalizedProjectName(task.project) }
+function serializeTask<T extends { project: { name: string }, assignee: { id: string } | null, assignments: { member: { id: string } }[] }>(task: T) {
+  const assignees = task.assignments.map((assignment) => assignment.member)
+  if (task.assignee && !assignees.some((member) => member.id === task.assignee?.id)) assignees.unshift(task.assignee)
+  return { ...task, project: withNormalizedProjectName(task.project), assignees, assigneeIds: assignees.map((member) => member.id) }
 }
 
 async function recordTaskActivity(input: {
@@ -119,6 +123,7 @@ export async function PUT(
         reviewStatus: true,
         assigneeId: true,
         assignee: { select: { email: true } },
+        assignments: { select: { memberId: true, member: { select: { email: true } } } },
       },
     })
     if (!currentTask) return NextResponse.json({ error: 'Không tìm thấy công việc' }, { status: 404 })
@@ -128,7 +133,7 @@ export async function PUT(
         return NextResponse.json({ error: 'Bạn không có quyền cập nhật công việc này' }, { status: 403 })
       }
       const attemptedManagerFields = [
-        'title', 'description', 'priority', 'storyPoints', 'dueDate', 'projectId', 'assigneeId',
+        'title', 'description', 'priority', 'storyPoints', 'dueDate', 'projectId', 'assigneeId', 'assigneeIds',
       ].some((field) => Object.prototype.hasOwnProperty.call(validated, field))
       if (attemptedManagerFields || validated.status === 'done') {
         return NextResponse.json({
@@ -139,26 +144,30 @@ export async function PUT(
       if (validated.projectId && !(await canManageProject(session, validated.projectId))) {
         return NextResponse.json({ error: 'Bạn không có quyền chuyển công việc sang dự án này' }, { status: 403 })
       }
-      if (validated.assigneeId) {
-        const destinationProjectId = validated.projectId || currentTask.projectId
-        if (!(await canAssignProjectMember(session, destinationProjectId, validated.assigneeId))) {
-          return NextResponse.json({ error: 'Chỉ có thể giao việc cho Member đã thuộc dự án đích' }, { status: 403 })
+      const changingAssignees = validated.assigneeIds !== undefined || validated.assigneeId !== undefined
+      const requested = validated.assigneeIds ?? (validated.assigneeId ? [validated.assigneeId] : [])
+      const existing = currentTask.assignments.map((item) => item.memberId)
+      if (currentTask.assigneeId && !existing.includes(currentTask.assigneeId)) existing.push(currentTask.assigneeId)
+      const memberIds = changingAssignees ? [...new Set(requested)] : existing
+      if (changingAssignees || (validated.projectId && validated.projectId !== currentTask.projectId)) {
+        for (const memberId of memberIds) {
+          if (!(await canAssignProjectMember(session, validated.projectId || currentTask.projectId, memberId))) {
+            return NextResponse.json({ error: 'Chỉ có thể giao việc cho Member đã thuộc dự án đích' }, { status: 403 })
+          }
         }
-      }
-      if (
-        validated.projectId &&
-        validated.projectId !== currentTask.projectId &&
-        validated.assigneeId === undefined &&
-        currentTask.assigneeId &&
-        !(await canAssignProjectMember(session, validated.projectId, currentTask.assigneeId))
-      ) {
-        return NextResponse.json({
-          error: 'Hãy bỏ giao hoặc chọn Member thuộc dự án đích trước khi chuyển công việc',
-        }, { status: 409 })
       }
     }
 
     const data: Record<string, unknown> = { ...validated }
+    delete data.assigneeIds
+    const changingAssignees = validated.assigneeIds !== undefined || validated.assigneeId !== undefined
+    const nextAssigneeIds = changingAssignees
+      ? [...new Set(validated.assigneeIds ?? (validated.assigneeId ? [validated.assigneeId] : []))]
+      : undefined
+    if (nextAssigneeIds) {
+      data.assigneeId = nextAssigneeIds[0] || null
+      data.assignments = { deleteMany: {}, create: nextAssigneeIds.map((memberId) => ({ memberId })) }
+    }
     if (validated.dueDate !== undefined) {
       data.dueDate = validated.dueDate ? new Date(validated.dueDate) : null
     }
@@ -188,14 +197,12 @@ export async function PUT(
       await recordTaskActivity({ taskId: id, userId: session.id, action: 'updated', details: 'Đã cập nhật thông tin công việc' })
     }
 
-    if (
-      canManage &&
-      validated.assigneeId &&
-      validated.assigneeId !== currentTask.assigneeId &&
-      task.assignee?.email
-    ) {
+    const oldAssigneeIds = new Set(currentTask.assignments.map((assignment) => assignment.memberId))
+    if (currentTask.assigneeId) oldAssigneeIds.add(currentTask.assigneeId)
+    for (const { memberId, member } of task.assignments) {
+      if (!canManage || !changingAssignees || oldAssigneeIds.has(memberId)) continue
       const assigneeUser = await db.user.findUnique({
-        where: { email: task.assignee.email },
+        where: { email: member.email },
         select: { id: true, status: true },
       })
       if (assigneeUser?.status === 'approved') {
@@ -217,9 +224,10 @@ export async function PUT(
       })
     }
 
-    if (canManage && currentTask.reviewStatus === 'pending' && validated.status !== undefined && currentTask.assignee?.email) {
+    if (canManage && currentTask.reviewStatus === 'pending' && validated.status !== undefined) {
+      for (const { member } of task.assignments) {
       const assigneeUser = await db.user.findUnique({
-        where: { email: currentTask.assignee.email },
+        where: { email: member.email },
         select: { id: true, status: true },
       })
       if (assigneeUser?.status === 'approved') {
@@ -232,13 +240,15 @@ export async function PUT(
             : `${session.name} đã gửi lại công việc “${task.title}”. Vui lòng xem ghi chú và cập nhật.`,
           type: approved ? 'task_completed' : 'task_assigned',
         })
-        await recordTaskActivity({
-          taskId: id,
-          userId: session.id,
-          action: approved ? 'review_approved' : 'review_changes_requested',
-          details: approved ? 'Đã duyệt hoàn thành' : 'Đã yêu cầu cập nhật thêm',
-        })
       }
+      }
+      const approved = validated.status === 'done'
+      await recordTaskActivity({
+        taskId: id,
+        userId: session.id,
+        action: approved ? 'review_approved' : 'review_changes_requested',
+        details: approved ? 'Đã duyệt hoàn thành' : 'Đã yêu cầu cập nhật thêm',
+      })
     }
 
     return NextResponse.json(serializeTask(task))

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { removeTaskAssignee } from '@/lib/remove-task-assignee';
 import { getSession } from '@/lib/auth';
 import { hashSync } from 'bcryptjs';
 import { z } from 'zod';
@@ -322,10 +323,7 @@ export async function PATCH(request: NextRequest) {
           select: { projectId: true },
         });
         if (teamMember && memberships.length > 0) {
-          await tx.task.updateMany({
-            where: { assigneeId: teamMember.id, projectId: { in: memberships.map((membership) => membership.projectId) } },
-            data: { assigneeId: null },
-          });
+          await removeTaskAssignee(tx, teamMember.id, memberships.map((membership) => membership.projectId));
         }
         await tx.projectMember.deleteMany({ where: { userId: targetUser.id } });
       }

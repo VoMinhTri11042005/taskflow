@@ -44,6 +44,8 @@ export interface Task {
   projectId: string;
   assigneeId?: string | null;
   assignee?: TeamMember | null;
+  assigneeIds?: string[];
+  assignees?: TeamMember[];
   project?: Project | null;
   links?: TaskLink[];
   checklist?: TaskChecklistItem[];

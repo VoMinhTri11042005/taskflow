@@ -50,7 +50,10 @@ export function ProfileView() {
   const [loadingActivity, setLoadingActivity] = useState(true);
 
   /* Stats calculated from assigned tasks */
-  const myTasks = tasks.filter((t) => t.assigneeId === user?.teamMemberId);
+  const teamMemberId = user?.teamMemberId;
+  const myTasks = teamMemberId
+    ? tasks.filter((t) => t.assigneeIds?.includes(teamMemberId) ?? t.assignees?.some((member) => member.id === teamMemberId) ?? t.assigneeId === teamMemberId)
+    : [];
   const totalAssigned = myTasks.length;
   const completedTasks = myTasks.filter((t) => t.status === 'done').length;
   const inProgressTasks = myTasks.filter((t) => t.status === 'in_progress').length;

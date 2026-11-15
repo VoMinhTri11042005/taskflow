@@ -43,6 +43,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { DocumentLink } from '@/components/tasks/document-link';
+import { AssigneePicker, getTaskAssigneeIds, getTaskAssignees } from '@/components/tasks/assignee-picker';
 import {
   Select,
   SelectContent,
@@ -135,7 +136,7 @@ export function TaskDrawer() {
   const [status, setStatus] = React.useState<Task['status']>('todo');
   const [priority, setPriority] = React.useState<Task['priority']>('medium');
   const [storyPoints, setStoryPoints] = React.useState('1');
-  const [assigneeId, setAssigneeId] = React.useState<string | null>(null);
+  const [assigneeIds, setAssigneeIds] = React.useState<string[]>([]);
   const [dueDate, setDueDate] = React.useState('');
   const [reviewNotes, setReviewNotes] = React.useState('');
 
@@ -152,7 +153,7 @@ export function TaskDrawer() {
     setStatus(nextTask.status || 'todo');
     setPriority(nextTask.priority || 'medium');
     setStoryPoints(String(nextTask.storyPoints || 1));
-    setAssigneeId(nextTask.assigneeId || null);
+    setAssigneeIds(getTaskAssigneeIds(nextTask));
     setDueDate(nextTask.dueDate ? format(new Date(nextTask.dueDate), 'yyyy-MM-dd') : '');
     setReviewNotes(nextTask.reviewNotes || '');
   }, []);
@@ -275,7 +276,7 @@ export function TaskDrawer() {
       payload.description = description.trim() || null;
       payload.priority = priority;
       payload.storyPoints = Number(storyPoints) || 1;
-      payload.assigneeId = assigneeId || null;
+      payload.assigneeIds = assigneeIds;
       payload.dueDate = dueDate ? new Date(dueDate).toISOString() : null;
     }
 
@@ -428,12 +429,14 @@ export function TaskDrawer() {
                 {detailLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
               </SheetDescription>
             </div>
-            {task.assignee && (
-              <div className="flex shrink-0 items-center gap-2 rounded-xl border border-border/50 bg-background/70 px-2.5 py-1.5">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: task.assignee.color }}>
-                  {task.assignee.name.charAt(0).toUpperCase()}
-                </div>
-                <span className="max-w-28 truncate text-xs font-medium">{task.assignee.name}</span>
+            {getTaskAssignees(task).length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5" aria-label="Người thực hiện">
+                {getTaskAssignees(task).map((member) => (
+                  <div key={member.id} className="flex items-center gap-1.5 rounded-xl border border-border/50 bg-background/70 px-2 py-1">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: member.color }}>{member.name.charAt(0).toUpperCase()}</span>
+                    <span className="max-w-28 truncate text-xs font-medium">{member.name}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -500,13 +503,11 @@ export function TaskDrawer() {
               </div>
               <div className="rounded-xl bg-background/75 p-3">
                 <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"><UserRound className="h-3.5 w-3.5 text-blue-500" /> Người thực hiện</label>
-                <Select value={assigneeId || '__unassigned__'} onValueChange={(value) => setAssigneeId(value === '__unassigned__' ? null : value)} disabled={!canManage}>
-                  <SelectTrigger className="h-9 border-border/60 bg-background text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__unassigned__">Chưa phân công</SelectItem>
-                    {visibleProjectAssignees.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {canManage ? (
+                  <AssigneePicker members={visibleProjectAssignees} selectedIds={assigneeIds} onChange={setAssigneeIds} loading={assigneesProjectId !== task.projectId} />
+                ) : (
+                  <p className="text-xs">{getTaskAssignees(task).map((member) => member.name).join(', ') || 'Chưa phân công'}</p>
+                )}
               </div>
               <div className="rounded-xl bg-background/75 p-3">
                 <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"><Calendar className="h-3.5 w-3.5 text-amber-500" /> Hạn hoàn thành</label>

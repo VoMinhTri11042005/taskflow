@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TaskTableView } from '@/components/tasks/task-table-view';
 import { TaskCalendarView } from '@/components/tasks/task-calendar-view';
+import { AssigneePicker, getTaskAssigneeIds, getTaskAssignees } from '@/components/tasks/assignee-picker';
 import {
   Dialog,
   DialogContent,
@@ -97,7 +98,7 @@ export function BoardView() {
   const [formStatus, setFormStatus] = useState<Task['status']>('todo');
   const [formPriority, setFormPriority] = useState<Task['priority']>('medium');
   const [formProjectId, setFormProjectId] = useState('');
-  const [formAssigneeId, setFormAssigneeId] = useState('');
+  const [formAssigneeIds, setFormAssigneeIds] = useState<string[]>([]);
   const [formDueDate, setFormDueDate] = useState('');
   const [projectAssignees, setProjectAssignees] = useState<ProjectAssignee[]>([]);
   const [assigneesProjectId, setAssigneesProjectId] = useState<string | null>(null);
@@ -176,7 +177,7 @@ export function BoardView() {
     setFormStatus(status);
     setFormPriority('medium');
     setFormProjectId(selectedProjectId || (projects[0]?.id ?? ''));
-    setFormAssigneeId('');
+    setFormAssigneeIds([]);
     setFormDueDate('');
     setProjectAssignees([]);
     setAssigneesProjectId(null);
@@ -190,7 +191,7 @@ export function BoardView() {
     setFormStatus(task.status);
     setFormPriority(task.priority);
     setFormProjectId(task.projectId);
-    setFormAssigneeId(task.assigneeId || '');
+    setFormAssigneeIds(getTaskAssigneeIds(task));
     setFormDueDate(task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '');
     setProjectAssignees([]);
     setAssigneesProjectId(null);
@@ -206,7 +207,7 @@ export function BoardView() {
         status: formStatus,
         priority: formPriority,
         projectId: formProjectId,
-        assigneeId: formAssigneeId || null,
+        assigneeIds: formAssigneeIds,
         dueDate: formDueDate ? new Date(formDueDate).toISOString() : null,
       };
 
@@ -273,8 +274,9 @@ export function BoardView() {
       if (selectedProjectId && t.projectId !== selectedProjectId) return false;
       if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
       if (filterAssignee !== 'all') {
-        if (filterAssignee === 'unassigned' && t.assigneeId) return false;
-        if (filterAssignee !== 'unassigned' && t.assigneeId !== filterAssignee) return false;
+        const ids = getTaskAssigneeIds(t);
+        if (filterAssignee === 'unassigned' && ids.length) return false;
+        if (filterAssignee !== 'unassigned' && !ids.includes(filterAssignee)) return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -292,9 +294,7 @@ export function BoardView() {
   const allAssignees = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
     tasks.forEach((t) => {
-      if (t.assignee) {
-        map.set(t.assignee.id, { id: t.assignee.id, name: t.assignee.name });
-      }
+      getTaskAssignees(t).forEach((member) => map.set(member.id, { id: member.id, name: member.name }));
     });
     return Array.from(map.values());
   }, [tasks]);
@@ -517,7 +517,7 @@ export function BoardView() {
                       <ScrollArea className="flex-1">
                         <div className="space-y-2.5 pr-1 pb-2">
                           {columnTasks.map((task) => {
-                            const assignee = task.assignee;
+                            const assignees = getTaskAssignees(task);
                             const project = task.project;
                             const priority = priorityConfig[task.priority];
                             const dueInfo = task.dueDate ? getDueDateInfo(task.dueDate) : null;
@@ -575,13 +575,14 @@ export function BoardView() {
                                       )}
                                     </div>
 
-                                    {assignee && (
-                                      <div
-                                        className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-2xs"
-                                        style={{ backgroundColor: assignee.color }}
-                                        title={assignee.name}
-                                      >
-                                        {assignee.name.charAt(0).toUpperCase()}
+                                    {assignees.length > 0 && (
+                                      <div className="flex items-center -space-x-1" aria-label={`Người thực hiện: ${assignees.map((member) => member.name).join(', ')}`}>
+                                        {assignees.slice(0, 4).map((member) => (
+                                          <div key={member.id} className="h-6 w-6 rounded-full border border-background flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-2xs" style={{ backgroundColor: member.color }} title={member.name}>
+                                            {member.name.charAt(0).toUpperCase()}
+                                          </div>
+                                        ))}
+                                        {assignees.length > 4 && <span className="rounded-full bg-muted px-1 text-[10px]">+{assignees.length - 4}</span>}
                                       </div>
                                     )}
                                   </div>
@@ -664,7 +665,7 @@ export function BoardView() {
                   value={formProjectId}
                   onValueChange={(projectId) => {
                     setFormProjectId(projectId);
-                    setFormAssigneeId('');
+                    setFormAssigneeIds([]);
                     setProjectAssignees([]);
                     setAssigneesProjectId(null);
                   }}
@@ -681,19 +682,7 @@ export function BoardView() {
               </div>
               <div className="space-y-2">
                 <Label>Người thực hiện</Label>
-                <Select
-                  value={formAssigneeId || '__unassigned__'}
-                  onValueChange={(value) => setFormAssigneeId(value === '__unassigned__' ? '' : value)}
-                  disabled={!formProjectId || loadingProjectAssignees}
-                >
-                  <SelectTrigger><SelectValue placeholder="Chưa gán" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__unassigned__">Chưa gán</SelectItem>
-                    {projectAssignees.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <AssigneePicker members={projectAssignees} selectedIds={formAssigneeIds} onChange={setFormAssigneeIds} disabled={!formProjectId || loadingProjectAssignees} loading={loadingProjectAssignees} />
               </div>
             </div>
             <div className="space-y-2">

@@ -17,10 +17,13 @@ const createTaskSchema = z.object({
   dueDate: z.string().datetime().optional().nullable(),
   projectId: z.string().min(1, 'Project ID is required'),
   assigneeId: z.string().optional().nullable(),
+  assigneeIds: z.array(z.string().min(1)).max(100).optional(),
 })
 
-function serializeTask<T extends { project: { name: string } }>(task: T): T {
-  return { ...task, project: withNormalizedProjectName(task.project) }
+function serializeTask<T extends { project: { name: string }, assignee: { id: string } | null, assignments: { member: { id: string } }[] }>(task: T) {
+  const assignees = task.assignments.map((assignment) => assignment.member)
+  if (task.assignee && !assignees.some((member) => member.id === task.assignee?.id)) assignees.unshift(task.assignee)
+  return { ...task, project: withNormalizedProjectName(task.project), assignees, assigneeIds: assignees.map((member) => member.id) }
 }
 
 async function recordTaskActivity(input: {
@@ -72,7 +75,10 @@ export async function GET(request: NextRequest) {
       })
       if (memberAccount?.role === 'member' && memberAccount.status === 'approved' && memberAccount.leaderId) {
         where = {
-          assigneeId: session.teamMemberId,
+          OR: [
+            { assigneeId: session.teamMemberId },
+            { assignments: { some: { memberId: session.teamMemberId } } },
+          ],
           project: {
             leaderId: memberAccount.leaderId,
             members: { some: { userId: session.id, status: 'approved' } },
@@ -85,12 +91,15 @@ export async function GET(request: NextRequest) {
     if (status) where.status = status
     // A Member must always stay scoped to their own TeamMember record.  An
     // arbitrary `assigneeId` query parameter must never widen that scope.
-    if (session.role === 'leader' && assigneeId) where.assigneeId = assigneeId
+    if (session.role === 'leader' && assigneeId) where.OR = [
+      { assigneeId }, { assignments: { some: { memberId: assigneeId } } },
+    ]
 
     const tasks = await db.task.findMany({
       where,
       include: {
         assignee: true,
+        assignments: { include: { member: true } },
         project: true,
         links: true,
         checklist: { orderBy: { position: 'asc' } },
@@ -119,8 +128,11 @@ export async function POST(request: NextRequest) {
     if (!(await canManageProject(session, validated.projectId))) {
       return NextResponse.json({ error: 'Bạn không có quyền tạo công việc trong dự án này' }, { status: 403 })
     }
-    if (validated.assigneeId && !(await canAssignProjectMember(session, validated.projectId, validated.assigneeId))) {
-      return NextResponse.json({ error: 'Chỉ có thể giao việc cho Member đã thuộc dự án này' }, { status: 403 })
+    const assigneeIds = [...new Set(validated.assigneeIds ?? (validated.assigneeId ? [validated.assigneeId] : []))]
+    for (const memberId of assigneeIds) {
+      if (!(await canAssignProjectMember(session, validated.projectId, memberId))) {
+        return NextResponse.json({ error: 'Chỉ có thể giao việc cho Member đã thuộc dự án này' }, { status: 403 })
+      }
     }
 
     const task = await db.task.create({
@@ -132,10 +144,12 @@ export async function POST(request: NextRequest) {
         storyPoints: validated.storyPoints,
         dueDate: validated.dueDate ? new Date(validated.dueDate) : null,
         projectId: validated.projectId,
-        assigneeId: validated.assigneeId || null,
+        assigneeId: assigneeIds[0] || null,
+        assignments: { create: assigneeIds.map((memberId) => ({ memberId })) },
       },
       include: {
         assignee: true,
+        assignments: { include: { member: true } },
         project: true,
         links: true,
         checklist: true,
@@ -149,9 +163,9 @@ export async function POST(request: NextRequest) {
       details: `Đã tạo công việc “${task.title}”`,
     })
 
-    if (task.assignee?.email) {
+    for (const { member } of task.assignments) {
       const assigneeUser = await db.user.findUnique({
-        where: { email: task.assignee.email },
+        where: { email: member.email },
         select: { id: true, status: true },
       })
       if (assigneeUser?.status === 'approved') {

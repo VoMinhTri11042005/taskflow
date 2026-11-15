@@ -70,7 +70,7 @@ export function AdminReportsView() {
 
   const memberPerformance = useMemo(() => {
     return members.map((member) => {
-      const assigned = tasks.filter((t) => t.assigneeId === member.id);
+      const assigned = tasks.filter((t) => t.assigneeIds?.includes(member.id) ?? t.assignees?.some((assignee) => assignee.id === member.id) ?? t.assigneeId === member.id);
       const completed = assigned.filter((t) => t.status === 'done').length;
       const total = assigned.length;
       const rate = total > 0 ? Math.round((completed / total) * 100) : 0;

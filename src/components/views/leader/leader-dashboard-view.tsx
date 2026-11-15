@@ -124,8 +124,8 @@ function TaskRow({
         <p className="truncate text-sm font-semibold text-foreground transition-colors group-hover:text-primary">{task.title}</p>
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
           {isReview
-            ? `${task.project?.name || 'Chưa gán dự án'} · ${task.assignee?.name || 'Thành viên'}`
-            : `${task.assignee?.name || 'Chưa gán người thực hiện'} · ${task.project?.name || 'Chưa gán dự án'}`}
+            ? `${task.project?.name || 'Chưa gán dự án'} · ${task.assignees?.map((member) => member.name).join(', ') || task.assignee?.name || 'Thành viên'}`
+            : `${task.assignees?.map((member) => member.name).join(', ') || task.assignee?.name || 'Chưa gán người thực hiện'} · ${task.project?.name || 'Chưa gán dự án'}`}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">

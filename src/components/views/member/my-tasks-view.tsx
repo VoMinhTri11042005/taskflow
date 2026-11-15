@@ -167,7 +167,7 @@ export function MyTasksView() {
   const myTasks = useMemo(() => {
     return tasks.filter((t) => {
       // If user has teamMemberId, filter by it, otherwise show all assigned to member
-      if (teamMemberId && t.assigneeId !== teamMemberId) return false;
+      if (teamMemberId && !(t.assigneeIds?.includes(teamMemberId) ?? t.assignees?.some((member) => member.id === teamMemberId) ?? t.assigneeId === teamMemberId)) return false;
       if (selectedProjectId && t.projectId !== selectedProjectId) return false;
       if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
       if (normalizedSearchQuery) {

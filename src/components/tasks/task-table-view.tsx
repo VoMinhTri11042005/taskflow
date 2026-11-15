@@ -3,6 +3,7 @@
 import * as React from 'react';
 import type { Task } from '@/types';
 import { useAppStore } from '@/stores/app-store';
+import { getTaskAssignees } from '@/components/tasks/assignee-picker';
 import {
   Table,
   TableBody,
@@ -106,15 +107,14 @@ export function TaskTableView({ tasks }: TaskTableViewProps) {
               <TableCell>{getPriorityBadge(task.priority)}</TableCell>
 
               <TableCell>
-                {task.assignee ? (
-                  <div className="flex items-center gap-1.5">
-                    <div
-                      className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-xs"
-                      style={{ backgroundColor: task.assignee.color || '#6366f1' }}
-                    >
-                      {task.assignee.name.charAt(0)}
-                    </div>
-                    <span className="font-medium text-foreground truncate max-w-[100px]">{task.assignee.name}</span>
+                {getTaskAssignees(task).length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {getTaskAssignees(task).map((member) => (
+                      <span key={member.id} className="flex items-center gap-1.5">
+                        <span className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-xs" style={{ backgroundColor: member.color || '#6366f1' }}>{member.name.charAt(0)}</span>
+                        <span className="font-medium text-foreground truncate max-w-[100px]">{member.name}</span>
+                      </span>
+                    ))}
                   </div>
                 ) : (
                   <span className="text-muted-foreground italic">Chưa gán</span>

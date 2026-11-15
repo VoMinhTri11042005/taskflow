@@ -72,18 +72,21 @@ export async function GET(
 
     const tasks = assigneeIds.length > 0
       ? await db.task.findMany({
-          where: { projectId: id, assigneeId: { in: assigneeIds } },
-          select: { id: true, title: true, status: true, priority: true, dueDate: true, assigneeId: true },
+          where: { projectId: id, OR: [{ assigneeId: { in: assigneeIds } }, { assignments: { some: { memberId: { in: assigneeIds } } } }] },
+          select: { id: true, title: true, status: true, priority: true, dueDate: true, assigneeId: true, assignments: { select: { memberId: true } } },
           orderBy: [{ status: 'asc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
         })
       : []
 
     const tasksByAssignee = new Map<string, typeof tasks>()
     for (const task of tasks) {
-      if (!task.assigneeId) continue
-      const assignedTasks = tasksByAssignee.get(task.assigneeId) || []
-      assignedTasks.push(task)
-      tasksByAssignee.set(task.assigneeId, assignedTasks)
+      const ids = new Set(task.assignments.map((assignment) => assignment.memberId))
+      if (task.assigneeId) ids.add(task.assigneeId)
+      for (const memberId of ids) {
+        const assignedTasks = tasksByAssignee.get(memberId) || []
+        assignedTasks.push(task)
+        tasksByAssignee.set(memberId, assignedTasks)
+      }
     }
 
     return NextResponse.json({
@@ -101,7 +104,7 @@ export async function GET(
           avatar: membership.user.avatar,
           isCurrentUser: membership.user.id === session.id,
           taskSummary: getTaskSummary(assignedTasks),
-          assignedTasks: assignedTasks.map(({ assigneeId: _assigneeId, ...task }) => task),
+          assignedTasks: assignedTasks.map(({ assigneeId: _assigneeId, assignments: _assignments, ...task }) => task),
         }
       }),
     }, {

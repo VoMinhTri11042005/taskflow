@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const members = await db.teamMember.findMany({
       include: {
         _count: {
-          select: { tasks: true },
+          select: { tasks: true, taskAssignments: true },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -86,6 +86,7 @@ export async function GET(request: NextRequest) {
         : null
       return {
         ...member,
+        _count: { tasks: member._count.taskAssignments },
         userId: account?.id || null,
         accountStatus: account?.status || 'approved',
         leaderId: account?.leaderId || null,
