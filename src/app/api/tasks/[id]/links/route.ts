@@ -3,10 +3,11 @@ import { db } from '@/lib/db'
 import { z } from 'zod'
 import { getSession } from '@/lib/auth'
 import { canAccessTask, canManageTask } from '@/lib/permissions'
+import { getSafeExternalUrl } from '@/lib/google-embed'
 
 const createLinkSchema = z.object({
   title: z.string().min(1, 'Title is required'),
-  url: z.string().url('Invalid URL'),
+  url: z.string().trim().refine((value) => getSafeExternalUrl(value) !== null, 'Liên kết phải là URL HTTP hoặc HTTPS hợp lệ'),
   type: z.string().optional().default('other'),
 })
 

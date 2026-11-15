@@ -10,7 +10,6 @@ import {
   ChevronRight,
   CircleDashed,
   Clock3,
-  ExternalLink,
   FileQuestion,
   FileSpreadsheet,
   FileText,
@@ -43,6 +42,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { DocumentLink } from '@/components/tasks/document-link';
 import {
   Select,
   SelectContent,
@@ -574,7 +574,7 @@ export function TaskDrawer() {
                 {(task.links || []).length === 0 ? <p className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-4 text-center text-xs text-muted-foreground">Chưa có tài liệu được đính kèm.</p> : (task.links || []).map((link) => (
                   <div key={link.id} className="group flex items-center gap-3 rounded-xl border border-border/50 bg-card p-3 hover:border-primary/40">
                     <div className="rounded-lg bg-muted p-2">{linkIcon(link.type)}</div>
-                    <a href={link.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1"><p className="flex items-center gap-1 truncate text-xs font-semibold hover:text-primary">{link.title}<ExternalLink className="h-3 w-3 shrink-0" /></p><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{link.url}</p></a>
+                    <DocumentLink link={link} />
                     {canManage && <Button variant="ghost" size="icon" onClick={() => void handleDeleteLink(link.id)} className="h-8 w-8 text-muted-foreground hover:text-rose-600" title="Xóa tài liệu" aria-label={`Xóa tài liệu: ${link.title}`}><Trash2 className="h-3.5 w-3.5" /></Button>}
                   </div>
                 ))}
