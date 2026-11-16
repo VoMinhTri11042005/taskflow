@@ -71,6 +71,7 @@ export function NotificationsView() {
       try {
         const res = await fetch(`/api/notifications?userId=${userId}`, { cache: 'no-store' });
         const data = await readApiJson<Notification[]>(res, 'Không thể tải thông báo');
+        if (useAppStore.getState().user?.id !== userId) return;
         setNotifications(data);
         const unread = data.filter((n: Notification) => !n.read).length;
         setUnreadCount(unread);
@@ -105,11 +106,12 @@ export function NotificationsView() {
     const unreadNotifications = notifications.filter((n) => !n.read);
     if (unreadNotifications.length === 0) return;
     try {
-      await fetch('/api/notifications', {
+      const response = await fetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user?.id, markAll: true }),
       });
+      await ensureApiSuccess(response, 'Không thể đánh dấu tất cả đã đọc');
       setNotifications(notifications.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
       toast.success('Đã đánh dấu tất cả là đã đọc');

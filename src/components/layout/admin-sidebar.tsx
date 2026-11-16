@@ -20,6 +20,7 @@ import {
   X,
   Sparkles,
   Layers,
+  Bell,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -33,6 +34,7 @@ const adminNavItems: { id: AdminViewType; label: string; icon: React.ElementType
   { id: 'admin-overview', label: 'Tổng quan hệ thống', icon: LayoutDashboard },
   { id: 'leaders', label: 'Danh sách Leader', icon: UserRound },
   { id: 'members', label: 'Danh sách Thành viên', icon: Users },
+  { id: 'notifications', label: 'Thông báo', icon: Bell },
 ];
 
 export function AdminSidebar() {
@@ -44,6 +46,7 @@ export function AdminSidebar() {
     user,
     setUser,
     members,
+    unreadCount,
   } = useAppStore();
 
   const isMobile = useIsMobile();
@@ -69,6 +72,8 @@ export function AdminSidebar() {
     switch (id) {
       case 'members':
         return members.length;
+      case 'notifications':
+        return unreadCount;
       default:
         return 0;
     }

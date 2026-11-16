@@ -47,6 +47,7 @@ export function AdminPollsView() {
   const fetchPolls = useCallback(async () => {
     try {
       const res = await fetch('/api/polls');
+      if (!res.ok) throw new Error('Không thể tải bình chọn');
       const data = await res.json();
       setPolls(data);
     } catch {
@@ -66,8 +67,13 @@ export function AdminPollsView() {
   }, []);
 
   useEffect(() => {
-    fetchPolls();
-    fetchProjects();
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      void fetchPolls();
+      void fetchProjects();
+    });
+    return () => { active = false; };
   }, [fetchPolls, fetchProjects]);
 
   function openCreateDialog() {

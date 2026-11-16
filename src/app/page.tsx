@@ -78,6 +78,7 @@ export default function HomePage() {
         { view: 'admin-overview' as const, label: 'Tổng quan', icon: LayoutDashboard },
         { view: 'leaders' as const, label: 'Leader', icon: UserRound },
         { view: 'members' as const, label: 'Thành viên', icon: Users },
+        { view: 'notifications' as const, label: 'Thông báo', icon: Bell },
       ]
     : isLeader
       ? [
@@ -91,7 +92,7 @@ export default function HomePage() {
           { view: 'notifications' as const, label: 'Thông báo', icon: Bell },
         ];
 
-  const adminViews = ['admin-overview', 'leaders', 'members'] as const;
+  const adminViews = ['admin-overview', 'leaders', 'members', 'notifications'] as const;
   const leaderViews = ['leader-dashboard', 'projects', 'board', 'members', 'polls', 'leader-time', 'notifications'] as const;
   const memberViews = ['my-tasks', 'time-tracking', 'projects', 'polls', 'team', 'notifications', 'profile'] as const;
 
@@ -306,30 +307,38 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!user) return;
+    const abortController = new AbortController();
+    const requestUserId = user.id;
+    const requestRole = user.role;
+    const stillCurrent = () => {
+      const current = useAppStore.getState().user;
+      return !abortController.signal.aborted && current?.id === requestUserId && current.role === requestRole;
+    };
     if (user.role === 'admin') {
       setMembers([]);
       setTasks([]);
       setProjects([]);
       setPolls([]);
     } else {
-      fetch('/api/members')
+      fetch('/api/members', { signal: abortController.signal })
         .then((response) => readApiJson<TeamMember[]>(response, 'Không thể tải danh sách thành viên'))
-        .then(setMembers)
+        .then((data) => { if (stillCurrent()) setMembers(data); })
         .catch(() => {});
-      fetch('/api/tasks')
+      fetch('/api/tasks', { signal: abortController.signal })
         .then((response) => readApiJson<Task[]>(response, 'Không thể tải danh sách công việc'))
-        .then(setTasks)
+        .then((data) => { if (stillCurrent()) setTasks(data); })
         .catch(() => {});
-      fetch('/api/projects')
+      fetch('/api/projects', { signal: abortController.signal })
         .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
-        .then(setProjects)
+        .then((data) => { if (stillCurrent()) setProjects(data); })
         .catch(() => {});
-      fetch('/api/polls')
+      fetch('/api/polls', { signal: abortController.signal })
         .then((response) => readApiJson<Poll[]>(response, 'Không thể tải danh sách bình chọn'))
-        .then(setPolls)
+        .then((data) => { if (stillCurrent()) setPolls(data); })
         .catch(() => {});
     }
     trackActivity('login');
+    return () => abortController.abort();
   }, [setTasks, setProjects, setMembers, setPolls, user, trackActivity]);
 
   useEffect(() => {
@@ -347,7 +356,7 @@ export default function HomePage() {
           cache: 'no-store',
         });
         const data = await readApiJson<Notification[]>(response, 'Không thể tải thông báo');
-        if (active && Array.isArray(data)) {
+        if (active && useAppStore.getState().user?.id === userId && Array.isArray(data)) {
           setNotifications(data);
           setUnreadCount(data.filter((notification) => !notification.read).length);
         }
@@ -401,6 +410,7 @@ export default function HomePage() {
       switch (currentView) {
         case 'leaders': return <MembersView roleFilter="leader" />;
         case 'members': return <MembersView roleFilter="member" />;
+        case 'notifications': return <NotificationsView />;
         case 'admin-overview': return <AdminOverviewView />;
         default: return <AdminOverviewView />;
       }

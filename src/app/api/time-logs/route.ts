@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
+import { getMondayWeekStart } from '@/lib/time-period'
 
 /* GET /api/time-logs?mode=admin-summary or ?userId=xxx */
 export async function GET(req: NextRequest) {
@@ -9,6 +10,12 @@ export async function GET(req: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const activeUser = await db.user.findFirst({
+      where: { id: session.id, role: session.role, status: 'approved' },
+      select: { id: true },
+    })
+    if (!activeUser) return NextResponse.json({ error: 'Phiên đăng nhập không còn hợp lệ' }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
     const mode = searchParams.get('mode')
@@ -27,8 +34,7 @@ export async function GET(req: NextRequest) {
       const todayStart = new Date(now)
       todayStart.setHours(0, 0, 0, 0)
 
-      const weekStart = new Date(todayStart)
-      weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1) // Monday
+      const weekStart = getMondayWeekStart(now)
 
       const summary = await Promise.all(
         users.map(async (u) => {
@@ -128,53 +134,45 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { action, note } = body
 
-    if (action === 'check-in') {
-      const openSession = await db.timeLog.findFirst({
-        where: { userId: session.id, checkOut: null },
-      })
-      if (openSession) {
-        return NextResponse.json({ error: 'Bạn đã đang trong phiên làm việc. Vui lòng check-out trước.' }, { status: 400 })
-      }
-
-      const timeLog = await db.timeLog.create({
-        data: {
-          userId: session.id,
-          checkIn: new Date(),
-          note: note || null,
-        },
-      })
-
-      return NextResponse.json({ message: 'Check-in thành công!', timeLog })
+    if (action !== 'check-in' && action !== 'check-out') {
+      return NextResponse.json({ error: 'Invalid action. Use check-in or check-out.' }, { status: 400 })
     }
 
-    if (action === 'check-out') {
-      const openSession = await db.timeLog.findFirst({
+    // Serialize check-in/out for each user within a transaction so two tabs
+    // cannot both observe an empty session and create duplicate open logs.
+    const result = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${session.id} FOR UPDATE`
+      const activeUser = await tx.user.findFirst({
+        where: { id: session.id, role: session.role, status: 'approved' },
+        select: { id: true },
+      })
+      if (!activeUser) return { error: 'Phiên đăng nhập không còn hợp lệ', status: 401 } as const
+
+      const openSession = await tx.timeLog.findFirst({
         where: { userId: session.id, checkOut: null },
         orderBy: { checkIn: 'desc' },
       })
-
-      if (!openSession) {
-        return NextResponse.json({ error: 'Không tìm thấy phiên làm việc đang mở.' }, { status: 400 })
+      if (action === 'check-in') {
+        if (openSession) return { error: 'Bạn đã đang trong phiên làm việc. Vui lòng check-out trước.', status: 400 } as const
+        const timeLog = await tx.timeLog.create({
+          data: { userId: session.id, checkIn: new Date(), note: note || null },
+        })
+        return { message: 'Check-in thành công!', timeLog }
       }
-
-      const updated = await db.timeLog.update({
+      if (!openSession) return { error: 'Không tìm thấy phiên làm việc đang mở.', status: 400 } as const
+      const timeLog = await tx.timeLog.update({
         where: { id: openSession.id },
-        data: {
-          checkOut: new Date(),
-          ...(note ? { note } : {}),
-        },
+        data: { checkOut: new Date(), ...(note ? { note } : {}) },
       })
-
-      const duration = (new Date(updated.checkOut!).getTime() - new Date(updated.checkIn).getTime()) / 60000
-
-      return NextResponse.json({
+      const duration = (timeLog.checkOut!.getTime() - timeLog.checkIn.getTime()) / 60000
+      return {
         message: `Check-out thành công! Thời gian làm việc: ${Math.floor(duration / 60)} giờ ${Math.round(duration % 60)} phút`,
-        timeLog: updated,
+        timeLog,
         durationMinutes: Math.round(duration),
-      })
-    }
-
-    return NextResponse.json({ error: 'Invalid action. Use check-in or check-out.' }, { status: 400 })
+      }
+    })
+    if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status })
+    return NextResponse.json(result)
   } catch (error) {
     console.error('TimeLog POST error:', error)
     return NextResponse.json({ error: 'Failed to process time log' }, { status: 500 })

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getMondayWeekStart } from '@/lib/time-period';
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -104,8 +105,7 @@ export function TimeTrackingView() {
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
 
-  const weekStart = new Date(todayStart);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+  const weekStart = getMondayWeekStart(now);
 
   const todayLogs = timeLogs.filter((l) => new Date(l.checkIn) >= todayStart);
   const weekLogs = timeLogs.filter((l) => new Date(l.checkIn) >= weekStart);

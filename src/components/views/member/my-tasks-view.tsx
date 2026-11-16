@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { Project, Task, TaskLink } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -64,15 +64,19 @@ export function MyTasksView() {
   const [movingId, setMovingId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const taskFetchSequence = useRef(0);
   const teamMemberId = user?.teamMemberId ?? null;
   const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
 
   const fetchTasks = useCallback(async () => {
+    const requestSequence = ++taskFetchSequence.current;
     const params = new URLSearchParams();
     if (selectedProjectId) params.set('projectId', selectedProjectId);
-    const res = await fetch(`/api/tasks?${params.toString()}`);
+    const currentUserId = useAppStore.getState().user?.id;
+    const res = await fetch(`/api/tasks?${params.toString()}`, { cache: 'no-store' });
     const data = await readApiJson<Task[]>(res, 'Không thể tải danh sách công việc');
-    setTasks(data);
+    const currentState = useAppStore.getState();
+    if (requestSequence === taskFetchSequence.current && currentUserId && currentState.user?.id === currentUserId && currentState.selectedProjectId === selectedProjectId && !currentState.taskDrawerOpen) setTasks(data);
   }, [selectedProjectId, setTasks]);
 
   useEffect(() => {
@@ -86,6 +90,19 @@ export function MyTasksView() {
     });
   }, [fetchTasks, setProjects]);
 
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || movingId || reviewingId || useAppStore.getState().taskDrawerOpen) return;
+      void fetchTasks().catch(() => {});
+    };
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [fetchTasks, movingId, reviewingId]);
+
   function getColumnIndex(status: Task['status']): number {
     return columns.findIndex((c) => c.id === status);
   }
@@ -96,6 +113,7 @@ export function MyTasksView() {
     if (newIdx < 0 || newIdx >= columns.length) return;
 
     const newStatus = columns[newIdx].id;
+    taskFetchSequence.current++;
     setMovingId(task.id);
     try {
       const response = await fetch(`/api/tasks/${task.id}`, {
@@ -145,6 +163,7 @@ export function MyTasksView() {
 
   /* Request review */
   async function handleRequestReview(task: Task) {
+    taskFetchSequence.current++;
     setReviewingId(task.id);
     try {
       const updateResponse = await fetch(`/api/tasks/${task.id}`, {

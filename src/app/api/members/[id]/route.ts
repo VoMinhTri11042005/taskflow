@@ -22,6 +22,10 @@ export async function GET(
     const { id } = await params
     const session = getSession(_request)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (session.role !== 'admin' && session.role !== 'leader' &&
+        (session.role !== 'member' || session.teamMemberId !== id)) {
+      return NextResponse.json({ error: 'Bạn chỉ được xem hồ sơ thành viên của mình' }, { status: 403 })
+    }
     const member = await db.teamMember.findUnique({
       where: { id },
       include: {

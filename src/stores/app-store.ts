@@ -109,7 +109,17 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Auth
   user: null,
-  setUser: (user) => set({ user }),
+  setUser: (user) => set((state) => {
+    const identityChanged = state.user?.id !== user?.id || state.user?.role !== user?.role;
+    if (!identityChanged) return { user };
+    return {
+      user,
+      tasks: [], projects: [], members: [], polls: [], notifications: [], unreadCount: 0,
+      selectedTask: null, taskDrawerOpen: false, activeTimeLog: null, stats: null, activityLogs: [],
+      selectedProjectId: null, selectedMemberId: null, selectedPriority: null, searchQuery: '',
+      commandPaletteOpen: false,
+    };
+  }),
 
   // Notifications
   notifications: [],

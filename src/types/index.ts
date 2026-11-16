@@ -198,7 +198,7 @@ export interface PollVote {
   pollId: string;
 }
 
-export type AdminViewType = 'admin-overview' | 'leaders' | 'members';
+export type AdminViewType = 'admin-overview' | 'leaders' | 'members' | 'notifications';
 export type LeaderViewType = 'leader-dashboard' | 'projects' | 'board' | 'members' | 'polls' | 'leader-time' | 'notifications';
 export type MemberViewType = 'my-tasks' | 'projects' | 'team' | 'polls' | 'notifications' | 'profile' | 'time-tracking';
 export type ViewType = AdminViewType | LeaderViewType | MemberViewType;
