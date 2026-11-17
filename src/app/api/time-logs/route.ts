@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { summarizeWorkTime } from '@/lib/work-time'
+import { decodeHistoryCursor, encodeHistoryCursor } from '@/lib/time-log-history'
+
+const historyDateSchema = z.union([z.iso.date(), z.iso.datetime({ offset: true })])
 
 /* GET /api/time-logs?mode=admin-summary or ?userId=xxx */
 export async function GET(req: NextRequest) {
@@ -77,6 +81,47 @@ export async function GET(req: NextRequest) {
     if (mode === 'summary') {
       const logs = await db.timeLog.findMany({ where: { userId }, orderBy: { checkIn: 'desc' } })
       return NextResponse.json(summarizeWorkTime(logs), { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+    }
+
+    if (mode === 'history') {
+      const limitValue = searchParams.get('limit')
+      if (limitValue !== null && !/^[1-9]\d{0,2}$/.test(limitValue)) {
+        return NextResponse.json({ error: 'Số phiên mỗi trang không hợp lệ' }, { status: 400 })
+      }
+      const limit = limitValue === null ? 50 : Number(limitValue)
+      if (limit > 100) return NextResponse.json({ error: 'Mỗi trang có tối đa 100 phiên' }, { status: 400 })
+
+      const fromDate = dateFrom ? new Date(dateFrom) : null
+      const toDate = dateTo ? new Date(dateTo) : null
+      if ((dateFrom !== null && (!historyDateSchema.safeParse(dateFrom).success || !fromDate || !Number.isFinite(fromDate.getTime()))) ||
+          (dateTo !== null && (!historyDateSchema.safeParse(dateTo).success || !toDate || !Number.isFinite(toDate.getTime()))) ||
+          (fromDate && toDate && fromDate > toDate)) {
+        return NextResponse.json({ error: 'Khoảng thời gian không hợp lệ' }, { status: 400 })
+      }
+      const scope = { userId, from: fromDate?.toISOString() ?? null, to: toDate?.toISOString() ?? null }
+      const cursorValue = searchParams.get('cursor')
+      const cursor = cursorValue === null ? null : decodeHistoryCursor(cursorValue, scope)
+      if (cursorValue !== null && !cursor) return NextResponse.json({ error: 'Mốc lịch sử không hợp lệ' }, { status: 400 })
+
+      const rows = await db.timeLog.findMany({
+        where: {
+          userId,
+          ...(fromDate || toDate ? { checkIn: { ...(fromDate && { gte: fromDate }), ...(toDate && { lte: toDate }) } } : {}),
+          ...(cursor ? { OR: [
+            { checkIn: { lt: new Date(cursor.checkIn) } },
+            { checkIn: new Date(cursor.checkIn), id: { lt: cursor.id } },
+          ] } : {}),
+        },
+        include: { user: { select: { id: true, name: true, color: true, email: true } } },
+        orderBy: [{ checkIn: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+      })
+      const logs = rows.slice(0, limit)
+      const last = logs.at(-1)
+      const nextCursor = rows.length > limit && last
+        ? encodeHistoryCursor({ v: 1, ...scope, id: last.id, checkIn: last.checkIn.toISOString() })
+        : null
+      return NextResponse.json({ logs, nextCursor }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
     }
 
     const where: Record<string, unknown> = { userId }

@@ -36,6 +36,22 @@ type WorkTimeSummary = {
   activeTimeLog: TimeLog | null;
 };
 
+type HistoryPage = { logs: TimeLog[]; nextCursor: string | null };
+type HistoryState = HistoryPage & { userId: string };
+
+export function mergeHistoryLogs(first: TimeLog[], second: TimeLog[]): TimeLog[] {
+  const seen = new Set<string>();
+  return [...first, ...second].filter((log) => {
+    if (seen.has(log.id)) return false;
+    seen.add(log.id);
+    return true;
+  }).sort((left, right) => {
+    const byCheckIn = new Date(right.checkIn).getTime() - new Date(left.checkIn).getTime();
+    if (byCheckIn) return byCheckIn;
+    return left.id === right.id ? 0 : left.id > right.id ? -1 : 1;
+  });
+}
+
 const WORK_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 const vietnamDatePartsFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: WORK_TIME_ZONE, year: 'numeric', month: 'numeric', day: 'numeric',
@@ -76,15 +92,19 @@ export function TimeTrackingView() {
   const { user, setActiveTimeLog } = useAppStore();
   const userId = user?.id;
 
-  const [history, setHistory] = useState<{ userId: string; logs: TimeLog[] } | null>(null);
+  const [history, setHistory] = useState<HistoryState | null>(null);
   const [summaryState, setSummaryState] = useState<{ userId: string; value: WorkTimeSummary } | null>(null);
   const [historyError, setHistoryError] = useState(false);
   const [summaryError, setSummaryError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [noteInput, setNoteInput] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const requestSequence = useRef(0);
+  const historyEpoch = useRef(0);
+  const loadMoreInProgress = useRef(false);
   const actionInProgress = useRef(false);
   const timeLogs = history && userId && history.userId === userId ? history.logs : [];
   const summary = summaryState && userId && summaryState.userId === userId ? summaryState.value : null;
@@ -97,7 +117,7 @@ export function TimeTrackingView() {
     const sequence = ++requestSequence.current;
     const [summaryResult, historyResult] = await Promise.allSettled([
       fetch('/api/time-logs?mode=summary', { cache: 'no-store' }).then((res) => readApiJson<WorkTimeSummary>(res, 'Không thể tải thống kê chấm công')),
-      fetch(`/api/time-logs?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' }).then((res) => readApiJson<TimeLog[]>(res, 'Không thể tải lịch sử chấm công')),
+      fetch('/api/time-logs?mode=history&limit=50', { cache: 'no-store' }).then((res) => readApiJson<HistoryPage>(res, 'Không thể tải lịch sử chấm công')),
     ]);
     if (sequence !== requestSequence.current || useAppStore.getState().user?.id !== userId) return;
     if (summaryResult.status === 'fulfilled') {
@@ -108,8 +128,20 @@ export function TimeTrackingView() {
       setSummaryState(null);
       setSummaryError(true);
     }
-    if (historyResult.status === 'fulfilled' && Array.isArray(historyResult.value)) {
-      setHistory({ userId, logs: historyResult.value });
+    if (historyResult.status === 'fulfilled' && historyResult.value && Array.isArray(historyResult.value.logs) && (typeof historyResult.value.nextCursor === 'string' || historyResult.value.nextCursor === null)) {
+      const page = historyResult.value;
+      setHistory((previous) => {
+        if (!previous || previous.userId !== userId || previous.logs.length === 0) return { userId, ...page };
+        const existingIds = new Set(previous.logs.map((log) => log.id));
+        const overlaps = page.logs.some((log) => existingIds.has(log.id));
+        // Keep older loaded pages and their cursor across routine refreshes.
+        // If the new page no longer overlaps, follow its cursor to fill the gap.
+        return {
+          userId,
+          logs: mergeHistoryLogs(page.logs, previous.logs),
+          nextCursor: overlaps || page.logs.length === 0 ? previous.nextCursor : page.nextCursor,
+        };
+      });
       setHistoryError(false);
     } else {
       setHistoryError(true);
@@ -122,6 +154,8 @@ export function TimeTrackingView() {
     queueMicrotask(() => {
       if (!active) return;
       setLoading(true);
+      setLoadingMore(false);
+      setLoadMoreError(false);
       void fetchLogs();
     });
     const refresh = () => {
@@ -132,10 +166,38 @@ export function TimeTrackingView() {
     return () => {
       active = false;
       requestSequence.current++;
+      historyEpoch.current++;
+      loadMoreInProgress.current = false;
       window.clearInterval(interval);
       window.removeEventListener('focus', refresh);
     };
   }, [fetchLogs]);
+
+  const loadMore = useCallback(async () => {
+    if (!userId || !history || history.userId !== userId || !history.nextCursor || loadMoreInProgress.current) return;
+    const cursor = history.nextCursor;
+    const epoch = historyEpoch.current;
+    loadMoreInProgress.current = true;
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      const params = new URLSearchParams({ mode: 'history', limit: '50', cursor });
+      const response = await fetch(`/api/time-logs?${params.toString()}`, { cache: 'no-store' });
+      const page = await readApiJson<HistoryPage>(response, 'Không thể tải thêm lịch sử chấm công');
+      if (!page || !Array.isArray(page.logs) || (typeof page.nextCursor !== 'string' && page.nextCursor !== null)) throw new Error('Dữ liệu lịch sử không hợp lệ');
+      if (epoch !== historyEpoch.current || useAppStore.getState().user?.id !== userId) return;
+      setHistory((previous) => previous && previous.userId === userId && previous.nextCursor === cursor
+        ? { userId, logs: mergeHistoryLogs(previous.logs, page.logs), nextCursor: page.nextCursor }
+        : previous);
+    } catch {
+      if (epoch === historyEpoch.current && useAppStore.getState().user?.id === userId) setLoadMoreError(true);
+    } finally {
+      if (epoch === historyEpoch.current && useAppStore.getState().user?.id === userId) {
+        loadMoreInProgress.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }, [history, userId]);
 
   /* Live timer for current session */
   useEffect(() => {
@@ -170,6 +232,9 @@ export function TimeTrackingView() {
       }
       toast.success(data.message || 'Check-in thành công!');
       setActiveTimeLog(data.timeLog);
+      if (data.timeLog?.id) setHistory((previous) => previous?.userId === userId
+        ? { ...previous, logs: mergeHistoryLogs([data.timeLog], previous.logs) }
+        : previous);
       setNoteInput('');
       await fetchLogs();
     } catch {
@@ -201,6 +266,9 @@ export function TimeTrackingView() {
       }
       toast.success(data.message || 'Check-out thành công!');
       setActiveTimeLog(null);
+      if (data.timeLog?.id) setHistory((previous) => previous?.userId === userId
+        ? { ...previous, logs: previous.logs.map((log) => log.id === data.timeLog.id ? data.timeLog : log) }
+        : previous);
       setNoteInput('');
       await fetchLogs();
     } catch {
@@ -355,7 +423,7 @@ export function TimeTrackingView() {
             <FileText className="h-4 w-4" />
             Lịch sử chấm công
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Hiển thị tối đa 100 phiên gần nhất; thống kê ở trên tính toàn bộ lịch sử.</p>
+          <p className="text-xs text-muted-foreground">Thống kê ở trên tính toàn bộ lịch sử; bạn có thể tải thêm các phiên cũ.</p>
         </CardHeader>
         <CardContent>
           {historyError && history?.userId !== userId ? (
@@ -433,6 +501,15 @@ export function TimeTrackingView() {
                   </div>
                 );
               })}
+            </div>
+          )}
+          {history && userId && history.userId === userId && history.nextCursor && (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              {loadMoreError && <p role="alert" className="text-sm text-destructive">Không thể tải thêm lịch sử. Vui lòng thử lại.</p>}
+              <Button type="button" variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
+                {loadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {loadingMore ? 'Đang tải...' : loadMoreError ? 'Thử tải lại' : 'Tải thêm phiên cũ'}
+              </Button>
             </div>
           )}
         </CardContent>
