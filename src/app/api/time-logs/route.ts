@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { getMondayWeekStart } from '@/lib/time-period'
+import { summarizeWorkTime } from '@/lib/work-time'
 
 /* GET /api/time-logs?mode=admin-summary or ?userId=xxx */
 export async function GET(req: NextRequest) {
@@ -31,61 +31,25 @@ export async function GET(req: NextRequest) {
       })
 
       const now = new Date()
-      const todayStart = new Date(now)
-      todayStart.setHours(0, 0, 0, 0)
-
-      const weekStart = getMondayWeekStart(now)
-
-      const summary = await Promise.all(
-        users.map(async (u) => {
-          const allLogs = await db.timeLog.findMany({
-            where: { userId: u.id },
-            orderBy: { checkIn: 'desc' },
-          })
-
-          const todayLogs = allLogs.filter((l) => new Date(l.checkIn) >= todayStart)
-          const weekLogs = allLogs.filter((l) => new Date(l.checkIn) >= weekStart)
-
-          let todayMinutes = 0
-          for (const l of todayLogs) {
-            const end = l.checkOut ? new Date(l.checkOut).getTime() : now.getTime()
-            todayMinutes += (end - new Date(l.checkIn).getTime()) / 60000
-          }
-
-          let weekMinutes = 0
-          for (const l of weekLogs) {
-            const end = l.checkOut ? new Date(l.checkOut).getTime() : now.getTime()
-            weekMinutes += (end - new Date(l.checkIn).getTime()) / 60000
-          }
-
-          let totalMinutes = 0
-          for (const l of allLogs) {
-            const end = l.checkOut ? new Date(l.checkOut).getTime() : now.getTime()
-            totalMinutes += (end - new Date(l.checkIn).getTime()) / 60000
-          }
-
-          const openSession = allLogs.find((l) => !l.checkOut)
-
-          return {
-            userId: u.id,
-            userName: u.name,
-            userColor: u.color,
-            userEmail: u.email,
-            todayMinutes: Math.round(todayMinutes),
-            weekMinutes: Math.round(weekMinutes),
-            totalMinutes: Math.round(totalMinutes),
-            todaySessions: todayLogs.length,
-            weekSessions: weekLogs.length,
-            isCurrentlyWorking: !!openSession,
-            checkInTime: openSession?.checkIn?.toISOString() || null,
-          }
-        })
-      )
+      const allLogs = users.length ? await db.timeLog.findMany({
+        where: { userId: { in: users.map((user) => user.id) } },
+        select: { userId: true, checkIn: true, checkOut: true },
+      }) : []
+      const logsByUser = new Map<string, typeof allLogs>()
+      for (const log of allLogs) {
+        const logs = logsByUser.get(log.userId) || []
+        logs.push(log)
+        logsByUser.set(log.userId, logs)
+      }
+      const summary = users.map((u) => {
+        const { activeTimeLog: _activeTimeLog, ...stats } = summarizeWorkTime(logsByUser.get(u.id) || [], now)
+        return { userId: u.id, userName: u.name, userColor: u.color, userEmail: u.email, ...stats }
+      })
 
       // Sort by today's hours descending
       summary.sort((a, b) => b.todayMinutes - a.todayMinutes)
 
-      return NextResponse.json(summary)
+      return NextResponse.json(summary, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
     }
 
     /* Member's own logs or Leader viewing their team logs */
@@ -100,6 +64,19 @@ export async function GET(req: NextRequest) {
         select: { id: true },
       })
       if (!managedMember) return NextResponse.json({ error: 'Bạn không có quyền xem nhật ký của thành viên này' }, { status: 403 })
+    }
+
+    if (mode === 'active') {
+      const activeTimeLog = await db.timeLog.findFirst({
+        where: { userId, checkOut: null },
+        orderBy: { checkIn: 'desc' },
+      })
+      return NextResponse.json({ activeTimeLog }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+    }
+
+    if (mode === 'summary') {
+      const logs = await db.timeLog.findMany({ where: { userId }, orderBy: { checkIn: 'desc' } })
+      return NextResponse.json(summarizeWorkTime(logs), { headers: { 'Cache-Control': 'no-store, max-age=0' } })
     }
 
     const where: Record<string, unknown> = { userId }

@@ -5,33 +5,35 @@ import { useAppStore } from '@/stores/app-store';
 import { Button } from '@/components/ui/button';
 import { Square } from 'lucide-react';
 import { toast } from 'sonner';
+import type { TimeLog } from '@/types';
+import { readApiJson } from '@/lib/client-api';
 
 export function FloatingTimer() {
   const { user, currentView, setCurrentView, activeTimeLog, setActiveTimeLog } = useAppStore();
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
   const [minimized, setMinimized] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-
-  // Fetch active time log on mount / user change
-  const checkActiveSession = React.useCallback(async () => {
-    if (!user) return;
-    try {
-      const res = await fetch(`/api/time-logs?userId=${user.id}`);
-      if (res.ok) {
-        const logs = await res.json();
-        const active = logs.find((l: any) => !l.checkOut);
-        if (active) {
-          setActiveTimeLog(active);
-        } else {
-          setActiveTimeLog(null);
-        }
-      }
-    } catch {}
-  }, [user, setActiveTimeLog]);
+  const requestSequence = React.useRef(0);
+  const checkoutInProgress = React.useRef(false);
 
   React.useEffect(() => {
-    void checkActiveSession();
-  }, [checkActiveSession]);
+    const userId = user?.id;
+    if (!userId) return;
+    let active = true;
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible' || checkoutInProgress.current || useAppStore.getState().currentView === 'time-tracking') return;
+      const sequence = ++requestSequence.current;
+      try {
+        const response = await fetch('/api/time-logs?mode=active', { cache: 'no-store' });
+        const summary = await readApiJson<{ activeTimeLog: TimeLog | null }>(response, 'Không thể tải phiên chấm công');
+        if (active && sequence === requestSequence.current && !checkoutInProgress.current && useAppStore.getState().user?.id === userId && useAppStore.getState().currentView !== 'time-tracking') setActiveTimeLog(summary.activeTimeLog);
+      } catch {}
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; requestSequence.current++; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
+  }, [user?.id, setActiveTimeLog]);
 
   // Live timer interval
   React.useEffect(() => {
@@ -75,6 +77,10 @@ export function FloatingTimer() {
   const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
   const handleQuickCheckOut = async () => {
+    if (checkoutInProgress.current) return;
+    checkoutInProgress.current = true;
+    requestSequence.current++;
+    const userId = user.id;
     setLoading(true);
     try {
       const res = await fetch('/api/time-logs', {
@@ -86,6 +92,7 @@ export function FloatingTimer() {
         }),
       });
 
+      if (useAppStore.getState().user?.id !== userId) return;
       if (res.ok) {
         setActiveTimeLog(null);
         toast.success('Đã kết thúc ca làm việc thành công!');
@@ -95,6 +102,7 @@ export function FloatingTimer() {
     } catch {
       toast.error('Lỗi kết nối.');
     } finally {
+      checkoutInProgress.current = false;
       setLoading(false);
     }
   };

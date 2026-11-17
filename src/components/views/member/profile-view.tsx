@@ -48,6 +48,7 @@ export function ProfileView() {
   /* Activity logs state */
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(true);
+  const [workSummary, setWorkSummary] = useState<{ userId: string; todayMinutes: number | null } | null>(null);
 
   /* Stats calculated from assigned tasks */
   const teamMemberId = user?.teamMemberId;
@@ -114,6 +115,28 @@ export function ProfileView() {
       }
     }
     fetchActivity();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId) return;
+    let active = true;
+    let sequence = 0;
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const requestSequence = ++sequence;
+      try {
+        const response = await fetch('/api/time-logs?mode=summary', { cache: 'no-store' });
+        const summary = await readApiJson<{ todayMinutes: number }>(response, 'Không thể tải giờ chấm công');
+        if (active && requestSequence === sequence && useAppStore.getState().user?.id === userId) setWorkSummary({ userId, todayMinutes: summary.todayMinutes });
+      } catch {
+        if (active && requestSequence === sequence && useAppStore.getState().user?.id === userId) setWorkSummary({ userId, todayMinutes: null });
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
   }, [user?.id]);
 
   /* Profile edit handlers */
@@ -196,41 +219,6 @@ export function ProfileView() {
     }
   }
 
-  /* Calculate working time today from login/logout pairs */
-  function getTodayWorkTime() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStart = today.getTime();
-
-    /* Get today's login/logout logs sorted by time */
-    const todayLogs = activityLogs
-      .filter((log) => new Date(log.createdAt).getTime() >= todayStart)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    let totalMs = 0;
-    let lastLoginTime: number | null = null;
-
-    for (const log of todayLogs) {
-      const logTime = new Date(log.createdAt).getTime();
-      if (log.action === 'login') {
-        lastLoginTime = logTime;
-      } else if (log.action === 'logout' && lastLoginTime !== null) {
-        totalMs += logTime - lastLoginTime;
-        lastLoginTime = null;
-      }
-    }
-
-    /* If currently logged in (has login without matching logout), count to now */
-    if (lastLoginTime !== null) {
-      totalMs += Date.now() - lastLoginTime;
-    }
-
-    const totalMinutes = Math.floor(totalMs / 60000);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return { hours, minutes };
-  }
-
   /* Format relative time for activity log */
   function formatRelativeTime(dateStr: string): string {
     const now = Date.now();
@@ -258,7 +246,7 @@ export function ProfileView() {
     });
   }
 
-  const workTime = getTodayWorkTime();
+  const currentSummary = workSummary?.userId === user?.id ? workSummary : null;
 
   return (
     <div className="space-y-6">
@@ -440,9 +428,9 @@ export function ProfileView() {
           <div className="flex items-center gap-3 mb-4 p-3 rounded-lg bg-primary/5 border border-primary/10">
             <Timer className="h-5 w-5 text-primary shrink-0" />
             <div>
-              <p className="text-sm font-medium">Tổng thời gian làm việc hôm nay</p>
+              <p className="text-sm font-medium">Thời gian chấm công hôm nay</p>
               <p className="text-lg font-bold text-primary">
-                {workTime.hours} giờ {workTime.minutes} phút
+                {!currentSummary ? 'Đang tải...' : currentSummary.todayMinutes === null ? 'Không thể tải số liệu' : `${Math.floor(currentSummary.todayMinutes / 60)} giờ ${currentSummary.todayMinutes % 60} phút`}
               </p>
             </div>
           </div>

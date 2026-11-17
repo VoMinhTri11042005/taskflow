@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { TimeLog } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +21,31 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { getMondayWeekStart } from '@/lib/time-period';
+import { readApiJson } from '@/lib/client-api';
+
+type WorkTimeSummary = {
+  todayMinutes: number;
+  weekMinutes: number;
+  totalMinutes: number;
+  totalSessions: number;
+  todaySessions: number;
+  weekSessions: number;
+  isCurrentlyWorking: boolean;
+  checkInTime: string | null;
+  calculatedAt: string;
+  activeTimeLog: TimeLog | null;
+};
+
+const WORK_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const vietnamDatePartsFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: WORK_TIME_ZONE, year: 'numeric', month: 'numeric', day: 'numeric',
+});
+
+function vietnamCalendarDay(date: Date): number {
+  const parts = vietnamDatePartsFormatter.formatToParts(date);
+  const number = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+  return Date.UTC(number('year'), number('month') - 1, number('day'));
+}
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -32,6 +56,7 @@ function formatDuration(minutes: number): string {
 
 function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString('vi-VN', {
+    timeZone: WORK_TIME_ZONE,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -40,93 +65,95 @@ function formatTime(dateStr: string): string {
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const targetDate = new Date(d);
-  targetDate.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((today.getTime() - targetDate.getTime()) / 86400000);
+  const diffDays = (vietnamCalendarDay(new Date()) - vietnamCalendarDay(d)) / 86400000;
 
   if (diffDays === 0) return 'Hôm nay';
   if (diffDays === 1) return 'Hôm qua';
-  return d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  return d.toLocaleDateString('vi-VN', { timeZone: WORK_TIME_ZONE, weekday: 'short', day: '2-digit', month: '2-digit' });
 }
 
 export function TimeTrackingView() {
-  const { user } = useAppStore();
+  const { user, setActiveTimeLog } = useAppStore();
+  const userId = user?.id;
 
-  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
+  const [history, setHistory] = useState<{ userId: string; logs: TimeLog[] } | null>(null);
+  const [summaryState, setSummaryState] = useState<{ userId: string; value: WorkTimeSummary } | null>(null);
+  const [historyError, setHistoryError] = useState(false);
+  const [summaryError, setSummaryError] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isWorking, setIsWorking] = useState(false);
-  const [currentSession, setCurrentSession] = useState<TimeLog | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [noteInput, setNoteInput] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const requestSequence = useRef(0);
+  const actionInProgress = useRef(false);
+  const timeLogs = history && userId && history.userId === userId ? history.logs : [];
+  const summary = summaryState && userId && summaryState.userId === userId ? summaryState.value : null;
+  const isWorking = summary?.isCurrentlyWorking ?? false;
+  const checkInTime = summary?.checkInTime ?? null;
 
-  /* Fetch time logs */
+  /* Fetch the full-period summary independently from the limited history list. */
   const fetchLogs = useCallback(async () => {
-    if (!user?.id) return;
-    try {
-      const res = await fetch(`/api/time-logs?userId=${user.id}`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setTimeLogs(data);
-        const open = data.find((l: TimeLog) => !l.checkOut);
-        setIsWorking(!!open);
-        setCurrentSession(open || null);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setLoading(false);
+    if (!userId) return;
+    const sequence = ++requestSequence.current;
+    const [summaryResult, historyResult] = await Promise.allSettled([
+      fetch('/api/time-logs?mode=summary', { cache: 'no-store' }).then((res) => readApiJson<WorkTimeSummary>(res, 'Không thể tải thống kê chấm công')),
+      fetch(`/api/time-logs?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' }).then((res) => readApiJson<TimeLog[]>(res, 'Không thể tải lịch sử chấm công')),
+    ]);
+    if (sequence !== requestSequence.current || useAppStore.getState().user?.id !== userId) return;
+    if (summaryResult.status === 'fulfilled') {
+      setSummaryState({ userId, value: summaryResult.value });
+      setActiveTimeLog(summaryResult.value.activeTimeLog);
+      setSummaryError(false);
+    } else {
+      setSummaryState(null);
+      setSummaryError(true);
     }
-  }, [user]);
+    if (historyResult.status === 'fulfilled' && Array.isArray(historyResult.value)) {
+      setHistory({ userId, logs: historyResult.value });
+      setHistoryError(false);
+    } else {
+      setHistoryError(true);
+    }
+    setLoading(false);
+  }, [userId, setActiveTimeLog]);
 
   useEffect(() => {
-    const run = () => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setLoading(true);
       void fetchLogs();
+    });
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && !actionInProgress.current) void fetchLogs();
     };
-    queueMicrotask(run);
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      active = false;
+      requestSequence.current++;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+    };
   }, [fetchLogs]);
 
   /* Live timer for current session */
   useEffect(() => {
-    if (!isWorking || !currentSession) return;
-    const checkInTime = new Date(currentSession.checkIn).getTime();
+    if (!isWorking || !checkInTime) return;
+    const startTime = new Date(checkInTime).getTime();
     const tick = () => {
-      setElapsedSeconds(Math.floor((Date.now() - checkInTime) / 1000));
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
     };
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [isWorking, currentSession]);
-
-  /* Calculate stats from logs */
-  const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-
-  const weekStart = getMondayWeekStart(now);
-
-  const todayLogs = timeLogs.filter((l) => new Date(l.checkIn) >= todayStart);
-  const weekLogs = timeLogs.filter((l) => new Date(l.checkIn) >= weekStart);
-
-  const todayMinutes = todayLogs.reduce((acc, l) => {
-    const end = l.checkOut ? new Date(l.checkOut).getTime() : now.getTime();
-    return acc + (end - new Date(l.checkIn).getTime()) / 60000;
-  }, 0);
-
-  const weekMinutes = weekLogs.reduce((acc, l) => {
-    const end = l.checkOut ? new Date(l.checkOut).getTime() : now.getTime();
-    return acc + (end - new Date(l.checkIn).getTime()) / 60000;
-  }, 0);
-
-  const totalMinutes = timeLogs.reduce((acc, l) => {
-    const end = l.checkOut ? new Date(l.checkOut).getTime() : now.getTime();
-    return acc + (end - new Date(l.checkIn).getTime()) / 60000;
-  }, 0);
+  }, [isWorking, checkInTime]);
 
   /* Handlers */
   async function handleCheckIn() {
+    if (!userId || actionInProgress.current) return;
+    actionInProgress.current = true;
+    requestSequence.current++;
     setActionLoading(true);
     try {
       const res = await fetch('/api/time-logs', {
@@ -135,21 +162,29 @@ export function TimeTrackingView() {
         body: JSON.stringify({ action: 'check-in', note: noteInput || undefined }),
       });
       const data = await res.json();
+      if (useAppStore.getState().user?.id !== userId) return;
       if (!res.ok) {
         toast.error(data.error || 'Không thể check-in');
+        await fetchLogs();
         return;
       }
       toast.success(data.message || 'Check-in thành công!');
+      setActiveTimeLog(data.timeLog);
       setNoteInput('');
-      fetchLogs();
+      await fetchLogs();
     } catch {
       toast.error('Có lỗi xảy ra');
+      void fetchLogs();
     } finally {
+      actionInProgress.current = false;
       setActionLoading(false);
     }
   }
 
   async function handleCheckOut() {
+    if (!userId || actionInProgress.current) return;
+    actionInProgress.current = true;
+    requestSequence.current++;
     setActionLoading(true);
     try {
       const res = await fetch('/api/time-logs', {
@@ -158,16 +193,21 @@ export function TimeTrackingView() {
         body: JSON.stringify({ action: 'check-out', note: noteInput || undefined }),
       });
       const data = await res.json();
+      if (useAppStore.getState().user?.id !== userId) return;
       if (!res.ok) {
         toast.error(data.error || 'Không thể check-out');
+        await fetchLogs();
         return;
       }
       toast.success(data.message || 'Check-out thành công!');
+      setActiveTimeLog(null);
       setNoteInput('');
-      fetchLogs();
+      await fetchLogs();
     } catch {
       toast.error('Có lỗi xảy ra');
+      void fetchLogs();
     } finally {
+      actionInProgress.current = false;
       setActionLoading(false);
     }
   }
@@ -179,10 +219,10 @@ export function TimeTrackingView() {
   const timerDisplay = `${String(timerHours).padStart(2, '0')}:${String(timerMinutes).padStart(2, '0')}:${String(timerSeconds).padStart(2, '0')}`;
 
   const statCards = [
-    { label: 'Hôm nay', value: formatDuration(Math.round(todayMinutes)), icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200' },
-    { label: 'Tuần này', value: formatDuration(Math.round(weekMinutes)), icon: Calendar, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
-    { label: 'Tổng cộng', value: formatDuration(Math.round(totalMinutes)), icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50 border-violet-200' },
-    { label: 'Số phiên', value: String(timeLogs.length), icon: Timer, color: 'text-slate-600', bg: 'bg-slate-50 border-slate-200' },
+    { label: 'Hôm nay', value: summary ? formatDuration(summary.todayMinutes) : '—', icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200' },
+    { label: 'Tuần này', value: summary ? formatDuration(summary.weekMinutes) : '—', icon: Calendar, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
+    { label: 'Tổng cộng', value: summary ? formatDuration(summary.totalMinutes) : '—', icon: TrendingUp, color: 'text-violet-600', bg: 'bg-violet-50 border-violet-200' },
+    { label: 'Số phiên', value: summary ? String(summary.totalSessions) : '—', icon: Timer, color: 'text-slate-600', bg: 'bg-slate-50 border-slate-200' },
   ];
 
   if (loading) {
@@ -198,8 +238,15 @@ export function TimeTrackingView() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Chấm công</h1>
-        <p className="text-muted-foreground">Quản lý thời gian làm việc của bạn</p>
+        <p className="text-muted-foreground">Quản lý thời gian làm việc của bạn · Múi giờ Việt Nam (UTC+7)</p>
       </div>
+
+      {(summaryError || historyError) && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <span>{summaryError ? 'Không thể tải thống kê chấm công.' : 'Không thể tải lịch sử chấm công.'} Vui lòng thử lại.</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void fetchLogs()}>Thử lại</Button>
+        </div>
+      )}
 
       {/* Check-in / Check-out card */}
       <Card className={cn(
@@ -231,14 +278,14 @@ export function TimeTrackingView() {
             {/* Status */}
             <div>
               <h2 className="text-lg font-semibold">
-                {isWorking ? 'Đang làm việc' : 'Chưa bắt đầu'}
+                {!summary ? 'Không xác định' : isWorking ? 'Đang làm việc' : 'Chưa bắt đầu'}
               </h2>
-              {isWorking && currentSession && (
+              {isWorking && checkInTime && (
                 <p className="text-sm text-muted-foreground mt-1">
-                  Bắt đầu từ {formatTime(currentSession.checkIn)}
+                  Bắt đầu từ {formatTime(checkInTime)}
                 </p>
               )}
-              {!isWorking && (
+              {!isWorking && summary && (
                 <p className="text-sm text-muted-foreground mt-1">
                   Nhấn nút bên dưới để bắt đầu chấm công
                 </p>
@@ -252,8 +299,8 @@ export function TimeTrackingView() {
                 value={noteInput}
                 onChange={(e) => setNoteInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isWorking) handleCheckIn();
-                  if (e.key === 'Enter' && isWorking) handleCheckOut();
+                  if (e.key === 'Enter' && summary && !summaryError && !isWorking) handleCheckIn();
+                  if (e.key === 'Enter' && summary && !summaryError && isWorking) handleCheckOut();
                 }}
               />
             </div>
@@ -262,7 +309,7 @@ export function TimeTrackingView() {
             <Button
               size="lg"
               onClick={isWorking ? handleCheckOut : handleCheckIn}
-              disabled={actionLoading}
+              disabled={actionLoading || !summary || summaryError}
               className={cn(
                 'min-w-[200px] text-base gap-2',
                 isWorking
@@ -308,9 +355,12 @@ export function TimeTrackingView() {
             <FileText className="h-4 w-4" />
             Lịch sử chấm công
           </CardTitle>
+          <p className="text-xs text-muted-foreground">Hiển thị tối đa 100 phiên gần nhất; thống kê ở trên tính toàn bộ lịch sử.</p>
         </CardHeader>
         <CardContent>
-          {timeLogs.length === 0 ? (
+          {historyError && history?.userId !== userId ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Không thể tải lịch sử chấm công.</p>
+          ) : timeLogs.length === 0 ? (
             <div className="text-center py-8">
               <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">Chưa có dữ liệu chấm công</p>
@@ -321,7 +371,7 @@ export function TimeTrackingView() {
                 const duration = log.checkOut
                   ? (new Date(log.checkOut).getTime() - new Date(log.checkIn).getTime()) / 60000
                   : (Date.now() - new Date(log.checkIn).getTime()) / 60000;
-                const isToday = new Date(log.checkIn) >= todayStart;
+                const isToday = vietnamCalendarDay(new Date(log.checkIn)) === vietnamCalendarDay(new Date());
 
                 return (
                   <div
@@ -376,7 +426,7 @@ export function TimeTrackingView() {
                       </p>
                       {!isToday && (
                         <p className="text-[10px] text-muted-foreground">
-                          {new Date(log.checkIn).toLocaleDateString('vi-VN')}
+                          {new Date(log.checkIn).toLocaleDateString('vi-VN', { timeZone: WORK_TIME_ZONE })}
                         </p>
                       )}
                     </div>
