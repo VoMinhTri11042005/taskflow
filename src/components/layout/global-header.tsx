@@ -44,8 +44,7 @@ export function GlobalHeader() {
     toggleSidebarCollapsed,
     notifications,
     unreadCount,
-    setNotifications,
-    setUnreadCount,
+    notificationMutationPending,
     setCurrentView,
     setCommandPaletteOpen,
     projects,
@@ -122,17 +121,23 @@ export function GlobalHeader() {
 
   const handleMarkAllRead = async () => {
     if (!user) return;
+    const store = useAppStore.getState();
+    const token = store.beginNotificationMutation();
+    if (!token) return;
+    const readIds = store.notifications.filter((item) => !item.read).map((item) => item.id);
+    let succeeded = false;
     try {
       const response = await fetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, markAll: true }),
+        body: JSON.stringify({ userId: token.userId, markAll: true }),
       });
       await ensureApiSuccess(response, 'Không thể đánh dấu thông báo đã đọc');
-      setNotifications(notifications.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
+      succeeded = true;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Không thể đánh dấu thông báo đã đọc');
+      if (useAppStore.getState().notificationSession === token.session) toast.error(error instanceof Error ? error.message : 'Không thể đánh dấu thông báo đã đọc');
+    } finally {
+      useAppStore.getState().finishNotificationMutation(token, succeeded ? readIds : undefined);
     }
   };
 
@@ -256,7 +261,7 @@ export function GlobalHeader() {
                 )}
               </div>
               {unreadCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={handleMarkAllRead} className="h-7 text-xs text-muted-foreground hover:text-primary">
+                <Button variant="ghost" size="sm" onClick={handleMarkAllRead} disabled={notificationMutationPending} className="h-7 text-xs text-muted-foreground hover:text-primary">
                   Đánh dấu đã đọc
                 </Button>
               )}

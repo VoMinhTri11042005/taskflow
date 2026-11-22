@@ -135,6 +135,8 @@ export function TaskDrawer() {
   const [commentDraft, setCommentDraft] = React.useState('');
   const [sendingComment, setSendingComment] = React.useState(false);
   const [collaborationOffline, setCollaborationOffline] = React.useState(false);
+  const [manualRefreshLoading, setManualRefreshLoading] = React.useState(false);
+  const refreshNow = React.useRef<(() => void) | null>(null);
   const refreshGeneration = React.useRef(0);
   const drawerGeneration = React.useRef(0);
   const initialDetailsPending = React.useRef(false);
@@ -250,6 +252,7 @@ export function TaskDrawer() {
       setConflictPreview(null);
       setPreviewLoading(false);
       setCollaborationOffline(false);
+      setManualRefreshLoading(false);
       if (draftOwner.current !== nextDraftOwner) {
         draftOwner.current = nextDraftOwner;
         setCommentDraft('');
@@ -289,11 +292,16 @@ export function TaskDrawer() {
 
     let active = true;
     let controller: AbortController | null = null;
-    const refresh = async () => {
-      if (!active || document.visibilityState !== 'visible' || initialDetailsPending.current || pendingMutations.current || controller) return;
+    const refresh = async (manual = false) => {
+      if (!active || document.visibilityState !== 'visible') return;
+      if (initialDetailsPending.current || pendingMutations.current || controller) {
+        if (manual) toast.info('Đang xử lý thay đổi. Vui lòng thử cập nhật lại sau giây lát.');
+        return;
+      }
       const generation = ++refreshGeneration.current;
       const request = new AbortController();
       controller = request;
+      if (manual) setManualRefreshLoading(true);
       try {
         const response = await fetch(`/api/tasks/${selectedTaskId}`, { cache: 'no-store', signal: request.signal });
         if (!active || !isCurrentTask() || generation !== refreshGeneration.current) return;
@@ -301,18 +309,24 @@ export function TaskDrawer() {
           handleAccessLost();
           return;
         }
-        const nextTask = await readApiJson<Task>(response, 'Không thể cập nhật trao đổi');
+        const nextTask = await readApiJson<Task>(response, 'Không thể cập nhật thông tin dùng chung');
         if (!active || !isCurrentTask() || generation !== refreshGeneration.current || document.visibilityState !== 'visible') return;
         setDetailTask((current) => current?.id === selectedTaskId
-          ? { ...current, comments: nextTask.comments, activities: nextTask.activities }
+          ? { ...current, comments: nextTask.comments, activities: nextTask.activities, checklist: nextTask.checklist, links: nextTask.links }
           : current);
         setCollaborationOffline(false);
+        if (manual) toast.success('Đã cập nhật thông tin dùng chung.');
       } catch {
-        if (active && !request.signal.aborted && isCurrentTask() && generation === refreshGeneration.current) setCollaborationOffline(true);
+        if (active && !request.signal.aborted && isCurrentTask() && generation === refreshGeneration.current) {
+          setCollaborationOffline(true);
+          if (manual) toast.error('Không thể cập nhật thông tin dùng chung. Vui lòng thử lại.');
+        }
       } finally {
         if (controller === request) controller = null;
+        if (manual && active && isCurrentTask()) setManualRefreshLoading(false);
       }
     };
+    refreshNow.current = () => void refresh(true);
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') void refresh();
       else { refreshGeneration.current += 1; controller?.abort(); }
@@ -323,6 +337,7 @@ export function TaskDrawer() {
     window.addEventListener('focus', onFocus);
     return () => {
       active = false;
+      refreshNow.current = null;
       refreshGeneration.current += 1;
       controller?.abort();
       window.clearInterval(timer);
@@ -802,7 +817,10 @@ export function TaskDrawer() {
 
             <section className="space-y-3">
               <div className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" /><h3 className="text-sm font-bold">Ghi chú & trao đổi</h3><span className="text-xs text-muted-foreground">{task.comments?.length || 0}</span></div>
-              <p role="status" className="text-[11px] text-muted-foreground">{collaborationOffline ? 'Chưa thể cập nhật trao đổi. Sẽ tự thử lại khi có kết nối.' : 'Trao đổi tự cập nhật khi bạn đang mở công việc.'}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p role="status" className="text-[11px] text-muted-foreground">{collaborationOffline ? 'Chưa thể cập nhật thông tin dùng chung. Sẽ tự thử lại khi có kết nối.' : 'Trao đổi, checklist và tài liệu tự cập nhật khi bạn đang mở công việc.'}</p>
+                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" disabled={manualRefreshLoading} onClick={() => refreshNow.current?.()}>{manualRefreshLoading ? 'Đang cập nhật...' : 'Cập nhật ngay'}</Button>
+              </div>
               <div className="space-y-3">
                 {(task.comments || []).length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-5 text-center text-xs text-muted-foreground">Chưa có trao đổi. Hãy để lại cập nhật hoặc câu hỏi cho nhóm.</div>

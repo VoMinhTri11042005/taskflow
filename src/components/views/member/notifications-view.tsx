@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { Notification } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -12,14 +12,12 @@ import {
   CheckCircle2,
   Info,
   AlertTriangle,
-  Bell,
   BellOff,
   UserCheck,
   UserPlus,
   UserX,
   CheckCheck,
   MessageSquare,
-  Trash2,
   Sparkles,
   Vote,
 } from 'lucide-react';
@@ -60,32 +58,47 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 export function NotificationsView() {
-  const { user, notifications, setNotifications, unreadCount, setUnreadCount } = useAppStore();
+  const { user, notifications, unreadCount, notificationMutationPending, notificationAppliedRequest, notificationRevision } = useAppStore();
   const [loading, setLoading] = useState(true);
+  const [loadErrorRequest, setLoadErrorRequest] = useState<{ request: number; revision: number } | null>(null);
+  const [retry, setRetry] = useState(0);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'unread'>('all');
+  const loadError = Boolean(loadErrorRequest && loadErrorRequest.revision === notificationRevision && loadErrorRequest.request > notificationAppliedRequest);
 
   useEffect(() => {
     const userId = user?.id;
     if (!userId) return;
+    let active = true;
     async function fetchNotifications() {
+      const token = useAppStore.getState().beginNotificationLoad();
+      if (!token || token.userId !== userId) {
+        if (active) setLoading(false);
+        return;
+      }
+      if (active) { setLoading(true); setLoadErrorRequest(null); }
       try {
-        const res = await fetch(`/api/notifications?userId=${userId}`, { cache: 'no-store' });
+        const res = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`, { cache: 'no-store' });
         const data = await readApiJson<Notification[]>(res, 'Không thể tải thông báo');
-        if (useAppStore.getState().user?.id !== userId) return;
-        setNotifications(data);
-        const unread = data.filter((n: Notification) => !n.read).length;
-        setUnreadCount(unread);
+        if (active) useAppStore.getState().applyNotificationLoad(token, data);
       } catch {
-        /* silent */
+        if (active && useAppStore.getState().notificationSession === token.session) setLoadErrorRequest({ request: token.request, revision: token.revision });
       } finally {
-        setLoading(false);
+        if (active && useAppStore.getState().notificationSession === token.session) setLoading(false);
       }
     }
-    fetchNotifications();
-  }, [user?.id, setNotifications, setUnreadCount]);
+    queueMicrotask(() => { if (active) void fetchNotifications(); });
+    return () => { active = false; };
+  }, [user?.id, user?.role, retry]);
 
   async function handleMarkRead(notification: Notification) {
     if (notification.read) return;
+    const store = useAppStore.getState();
+    if (!store.notifications.some((item) => item.id === notification.id && !item.read)) return;
+    const token = store.beginNotificationMutation();
+    if (!token) return;
+    let succeeded = false;
+    setPendingId(notification.id);
     try {
       const response = await fetch(`/api/notifications/${notification.id}`, {
         method: 'PUT',
@@ -93,30 +106,34 @@ export function NotificationsView() {
         body: JSON.stringify({ read: true }),
       });
       await ensureApiSuccess(response, 'Không thể đánh dấu đã đọc');
-      setNotifications(
-        notifications.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
-      );
-      setUnreadCount(Math.max(0, unreadCount - 1));
+      succeeded = true;
     } catch {
-      toast.error('Không thể đánh dấu đã đọc');
+      if (useAppStore.getState().notificationSession === token.session) toast.error('Không thể đánh dấu đã đọc');
+    } finally {
+      useAppStore.getState().finishNotificationMutation(token, succeeded ? [notification.id] : undefined);
+      if (useAppStore.getState().notificationSession === token.session) setPendingId(null);
     }
   }
 
   async function handleMarkAllRead() {
-    const unreadNotifications = notifications.filter((n) => !n.read);
+    const unreadNotifications = useAppStore.getState().notifications.filter((n) => !n.read);
     if (unreadNotifications.length === 0) return;
+    const token = useAppStore.getState().beginNotificationMutation();
+    if (!token) return;
+    let succeeded = false;
     try {
       const response = await fetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id, markAll: true }),
+        body: JSON.stringify({ userId: token.userId, markAll: true }),
       });
       await ensureApiSuccess(response, 'Không thể đánh dấu tất cả đã đọc');
-      setNotifications(notifications.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
-      toast.success('Đã đánh dấu tất cả là đã đọc');
+      succeeded = true;
+      if (useAppStore.getState().notificationSession === token.session) toast.success('Đã đánh dấu tất cả là đã đọc');
     } catch {
-      toast.error('Có lỗi xảy ra');
+      if (useAppStore.getState().notificationSession === token.session) toast.error('Không thể đánh dấu tất cả đã đọc');
+    } finally {
+      useAppStore.getState().finishNotificationMutation(token, succeeded ? unreadNotifications.map((item) => item.id) : undefined);
     }
   }
 
@@ -168,6 +185,7 @@ export function NotificationsView() {
               variant="outline"
               size="sm"
               onClick={handleMarkAllRead}
+              disabled={notificationMutationPending}
               className="h-8 px-3 text-xs font-medium gap-1.5 shadow-2xs"
             >
               <CheckCheck className="h-3.5 w-3.5 text-primary" />
@@ -204,7 +222,15 @@ export function NotificationsView() {
       </div>
 
       {/* Notifications List */}
-      {displayedNotifications.length === 0 ? (
+      {loadError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          <span>Không thể tải thông báo mới nhất. Vui lòng thử lại.</span>
+          <Button variant="outline" size="sm" onClick={() => setRetry((value) => value + 1)}>Thử lại</Button>
+        </div>
+      )}
+      {loading && notifications.length === 0 ? (
+        <p role="status" className="py-12 text-center text-sm text-muted-foreground">Đang tải thông báo...</p>
+      ) : loadError && notifications.length === 0 ? null : displayedNotifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-dashed border-border/70 bg-card/40">
           <BellOff className="h-10 w-10 text-muted-foreground/40 mb-3" />
           <h3 className="text-sm font-semibold text-foreground">
@@ -226,9 +252,8 @@ export function NotificationsView() {
             return (
               <Card
                 key={notification.id}
-                onClick={() => handleMarkRead(notification)}
                 className={cn(
-                  'cursor-pointer transition-all border-border/60 rounded-xl overflow-hidden',
+                  'transition-all border-border/60 rounded-xl overflow-hidden',
                   notification.read
                     ? 'bg-card/50 opacity-75 hover:opacity-100 hover:bg-card/80'
                     : isImportantUnread
@@ -248,8 +273,8 @@ export function NotificationsView() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 truncate">
-                        <h4 className={cn('text-xs font-semibold truncate', !notification.read ? 'text-foreground' : 'text-muted-foreground')}>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h4 className={cn('break-words text-xs font-semibold', !notification.read ? 'text-foreground' : 'text-muted-foreground')}>
                           {notification.title}
                         </h4>
                         {!notification.read && (
@@ -267,9 +292,10 @@ export function NotificationsView() {
                       </span>
                     </div>
 
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                    <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
                       {notification.message}
                     </p>
+                    {!notification.read && <Button type="button" variant="ghost" size="sm" className="mt-2 h-8 px-2 text-xs text-primary" disabled={notificationMutationPending} onClick={() => void handleMarkRead(notification)} aria-label={`Đánh dấu đã đọc: ${notification.title}`}>{pendingId === notification.id ? 'Đang đánh dấu...' : 'Đánh dấu đã đọc'}</Button>}
                   </div>
                 </CardContent>
               </Card>

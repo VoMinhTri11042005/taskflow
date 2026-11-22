@@ -351,15 +351,14 @@ export default function HomePage() {
 
     let active = true;
     const loadNotifications = async () => {
+      const token = useAppStore.getState().beginNotificationLoad();
+      if (!token || token.userId !== userId) return;
       try {
         const response = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`, {
           cache: 'no-store',
         });
         const data = await readApiJson<Notification[]>(response, 'Không thể tải thông báo');
-        if (active && useAppStore.getState().user?.id === userId && Array.isArray(data)) {
-          setNotifications(data);
-          setUnreadCount(data.filter((notification) => !notification.read).length);
-        }
+        if (active) useAppStore.getState().applyNotificationLoad(token, data);
       } catch {}
     };
 

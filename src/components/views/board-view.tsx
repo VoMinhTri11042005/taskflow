@@ -54,8 +54,8 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
-import { format, isPast, isToday, addDays } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { getTaskDeadlineInfo } from '@/lib/task-deadline';
+import { format } from 'date-fns';
 
 const columns: { id: Task['status']; label: string; color: string; bgColor: string; dotColor: string }[] = [
   { id: 'todo', label: 'Cần làm', color: 'text-slate-600 dark:text-slate-400', bgColor: 'bg-slate-100/70 dark:bg-slate-900/40', dotColor: 'bg-slate-400' },
@@ -332,14 +332,6 @@ export function BoardView() {
     }
   }
 
-  function getDueDateInfo(dateStr: string) {
-    const date = new Date(dateStr);
-    if (isToday(date)) return { text: 'Hôm nay', className: 'text-amber-600 dark:text-amber-400 font-medium' };
-    if (isPast(date)) return { text: 'Quá hạn', className: 'text-rose-600 dark:text-rose-400 font-medium' };
-    if (date <= addDays(new Date(), 3)) return { text: format(date, 'dd/MM', { locale: vi }), className: 'text-orange-600 dark:text-orange-400' };
-    return { text: format(date, 'dd/MM', { locale: vi }), className: 'text-muted-foreground' };
-  }
-
   // Filtered tasks calculation
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
@@ -592,7 +584,7 @@ export function BoardView() {
                             const assignees = getTaskAssignees(task);
                             const project = task.project;
                             const priority = priorityConfig[task.priority];
-                            const dueInfo = task.dueDate ? getDueDateInfo(task.dueDate) : null;
+                            const dueInfo = getTaskDeadlineInfo(task.dueDate, task.status);
                             const hasLinks = task.links && task.links.length > 0;
 
                             return (

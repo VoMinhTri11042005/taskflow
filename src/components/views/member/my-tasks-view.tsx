@@ -33,6 +33,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
+import { getTaskDeadlineInfo } from '@/lib/task-deadline';
 
 const columns: { id: Task['status']; label: string; color: string; bgColor: string; dotColor: string }[] = [
   { id: 'todo', label: 'Cần làm', color: 'text-slate-600 dark:text-slate-400', bgColor: 'bg-slate-100/70 dark:bg-slate-900/40', dotColor: 'bg-slate-400' },
@@ -134,36 +135,6 @@ export function MyTasksView() {
     } finally {
       setMovingId(null);
     }
-  }
-
-  /* Deadline countdown calculation */
-  function getDeadlineInfo(dateStr: string) {
-    const dueDate = new Date(dateStr);
-    const now = new Date();
-    const daysRemaining = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000);
-
-    if (daysRemaining < 0) {
-      return {
-        text: `Quá hạn ${Math.abs(daysRemaining)} ngày!`,
-        className: 'text-rose-600 dark:text-rose-400 font-bold',
-      };
-    }
-    if (daysRemaining === 0) {
-      return {
-        text: 'Hạn hôm nay!',
-        className: 'text-amber-600 dark:text-amber-400 font-semibold',
-      };
-    }
-    if (daysRemaining <= 3) {
-      return {
-        text: `Còn ${daysRemaining} ngày`,
-        className: 'text-orange-600 dark:text-orange-400',
-      };
-    }
-    return {
-      text: `Còn ${daysRemaining} ngày`,
-      className: 'text-muted-foreground',
-    };
   }
 
   /* Request review */
@@ -397,7 +368,7 @@ export function MyTasksView() {
                           {columnTasks.map((task) => {
                             const project = task.project;
                             const priority = priorityConfig[task.priority];
-                            const deadline = task.dueDate ? getDeadlineInfo(task.dueDate) : null;
+                            const deadline = getTaskDeadlineInfo(task.dueDate, task.status);
                             const hasLinks = task.links && task.links.length > 0;
                             const isMoving = movingId === task.id;
                             const isReviewing = reviewingId === task.id;

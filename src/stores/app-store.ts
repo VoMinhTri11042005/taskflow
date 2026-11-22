@@ -8,6 +8,9 @@ function normalizeTaskProject(task: Task): Task {
     : task;
 }
 
+type NotificationLoadToken = { session: number; revision: number; request: number; userId: string };
+type NotificationMutationToken = { session: number; revision: number; userId: string };
+
 interface AppState {
   currentView: ViewType;
   setCurrentView: (view: ViewType) => void;
@@ -47,6 +50,15 @@ interface AppState {
   setNotifications: (notifications: Notification[]) => void;
   unreadCount: number;
   setUnreadCount: (count: number) => void;
+  notificationSession: number;
+  notificationRevision: number;
+  notificationRequest: number;
+  notificationAppliedRequest: number;
+  notificationMutationPending: boolean;
+  beginNotificationLoad: () => NotificationLoadToken | null;
+  applyNotificationLoad: (token: NotificationLoadToken, notifications: Notification[]) => void;
+  beginNotificationMutation: () => NotificationMutationToken | null;
+  finishNotificationMutation: (token: NotificationMutationToken, readIds?: string[]) => void;
 
   // Data
   members: TeamMember[];
@@ -114,6 +126,9 @@ export const useAppStore = create<AppState>((set) => ({
     if (!identityChanged) return { user };
     return {
       user,
+      notificationSession: state.notificationSession + 1,
+      notificationRevision: state.notificationRevision + 1,
+      notificationMutationPending: false,
       tasks: [], projects: [], members: [], polls: [], notifications: [], unreadCount: 0,
       selectedTask: null, taskDrawerOpen: false, activeTimeLog: null, stats: null, activityLogs: [],
       selectedProjectId: null, selectedMemberId: null, selectedPriority: null, searchQuery: '',
@@ -126,6 +141,49 @@ export const useAppStore = create<AppState>((set) => ({
   setNotifications: (notifications) => set({ notifications: Array.isArray(notifications) ? notifications : [] }),
   unreadCount: 0,
   setUnreadCount: (count) => set({ unreadCount: count }),
+  notificationSession: 0,
+  notificationRevision: 0,
+  notificationRequest: 0,
+  notificationAppliedRequest: 0,
+  notificationMutationPending: false,
+  beginNotificationLoad: () => {
+    let token: NotificationLoadToken | null = null;
+    set((state) => {
+      if (!state.user || state.notificationMutationPending) return state;
+      const request = state.notificationRequest + 1;
+      token = { session: state.notificationSession, revision: state.notificationRevision, request, userId: state.user.id };
+      return { notificationRequest: request };
+    });
+    return token;
+  },
+  applyNotificationLoad: (token, notifications) => set((state) => {
+    if (state.user?.id !== token.userId || state.notificationSession !== token.session ||
+      state.notificationRevision !== token.revision || token.request <= state.notificationAppliedRequest ||
+      state.notificationMutationPending || !Array.isArray(notifications)) return state;
+    return { notifications, unreadCount: notifications.filter((item) => !item.read).length, notificationAppliedRequest: token.request };
+  }),
+  beginNotificationMutation: () => {
+    let token: NotificationMutationToken | null = null;
+    set((state) => {
+      if (!state.user || state.notificationMutationPending) return state;
+      const revision = state.notificationRevision + 1;
+      token = { session: state.notificationSession, revision, userId: state.user.id };
+      return { notificationRevision: revision, notificationMutationPending: true };
+    });
+    return token;
+  },
+  finishNotificationMutation: (token, readIds) => set((state) => {
+    if (state.user?.id !== token.userId || state.notificationSession !== token.session ||
+      state.notificationRevision !== token.revision || !state.notificationMutationPending) return state;
+    const ids = new Set(readIds || []);
+    const notifications = readIds ? state.notifications.map((item) => ids.has(item.id) ? { ...item, read: true } : item) : state.notifications;
+    return {
+      notifications,
+      unreadCount: notifications.filter((item) => !item.read).length,
+      notificationRevision: state.notificationRevision + 1,
+      notificationMutationPending: false,
+    };
+  }),
 
   // Data
   members: [],
