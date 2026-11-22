@@ -118,12 +118,22 @@ export function TaskDrawer() {
   } = useAppStore();
 
   const [detailTask, setDetailTask] = React.useState<Task | null>(null);
+  const [initialDetails, setInitialDetails] = React.useState<{ task: Task; state: 'loading' | 'ready' | 'error' } | null>(null);
+  const [initialRetry, setInitialRetry] = React.useState(0);
   const [saving, setSaving] = React.useState(false);
   const [checklistBusyId, setChecklistBusyId] = React.useState<string | null>(null);
   const [newChecklistItem, setNewChecklistItem] = React.useState('');
   const [addingChecklist, setAddingChecklist] = React.useState(false);
   const [commentDraft, setCommentDraft] = React.useState('');
   const [sendingComment, setSendingComment] = React.useState(false);
+  const [collaborationOffline, setCollaborationOffline] = React.useState(false);
+  const refreshGeneration = React.useRef(0);
+  const drawerGeneration = React.useRef(0);
+  const initialDetailsPending = React.useRef(false);
+  const formDirty = React.useRef(false);
+  const pendingMutations = React.useRef(0);
+  const draftOwner = React.useRef('');
+  const linkDraftRevision = React.useRef(0);
   const [newLinkTitle, setNewLinkTitle] = React.useState('');
   const [newLinkUrl, setNewLinkUrl] = React.useState('');
   const [newLinkType, setNewLinkType] = React.useState('google_doc');
@@ -141,8 +151,12 @@ export function TaskDrawer() {
   const [reviewNotes, setReviewNotes] = React.useState('');
 
   const selectedTaskId = selectedTask?.id;
+  const userId = user?.id;
+  const userRole = user?.role;
   const task = detailTask?.id === selectedTaskId ? detailTask : selectedTask;
-  const detailLoading = Boolean(taskDrawerOpen && selectedTaskId && detailTask?.id !== selectedTaskId);
+  const initialDetailsState = initialDetails?.task === selectedTask ? initialDetails.state : 'loading';
+  const detailLoading = initialDetailsState === 'loading';
+  const canEditTask = initialDetailsState === 'ready' && !saving;
   const canManage = user?.role === 'leader';
   const isMember = user?.role === 'member';
   const canContribute = Boolean(user && user.role !== 'admin');
@@ -164,39 +178,146 @@ export function TaskDrawer() {
     hydrateForm(nextTask);
   }, [hydrateForm, setTasks, tasks]);
 
+  const isCurrentTask = React.useCallback(() => {
+    const state = useAppStore.getState();
+    return Boolean(state.taskDrawerOpen && state.selectedTask?.id === selectedTaskId
+      && state.user?.id === userId && state.user?.role === userRole);
+  }, [selectedTaskId, userId, userRole]);
+
+  const beginMutation = React.useCallback(() => {
+    pendingMutations.current += 1;
+    refreshGeneration.current += 1;
+    return drawerGeneration.current;
+  }, []);
+
+  const isCurrentMutation = React.useCallback((generation: number) =>
+    generation === drawerGeneration.current && isCurrentTask(), [isCurrentTask]);
+
+  const endMutation = React.useCallback(() => {
+    pendingMutations.current = Math.max(0, pendingMutations.current - 1);
+  }, []);
+
+  const handleAccessLost = React.useCallback(() => {
+    if (!isCurrentTask()) return;
+    refreshGeneration.current += 1;
+    setDetailTask(null);
+    setInitialDetails(null);
+    setCommentDraft('');
+    closeTaskDetail();
+    toast.error('Công việc không còn khả dụng hoặc bạn không còn quyền truy cập.');
+  }, [closeTaskDetail, isCurrentTask]);
+
   const loadTaskDetails = React.useCallback(async () => {
     if (!selectedTaskId) return null;
+    const generation = ++refreshGeneration.current;
     const response = await fetch(`/api/tasks/${selectedTaskId}`, { cache: 'no-store' });
+    if (!isCurrentTask() || generation !== refreshGeneration.current) return null;
+    if ([401, 403, 404].includes(response.status)) {
+      handleAccessLost();
+      return null;
+    }
     const nextTask = await readApiJson<Task>(response, 'Không thể tải chi tiết công việc');
+    if (!isCurrentTask() || generation !== refreshGeneration.current) return null;
     setDetailTask(nextTask);
-    hydrateForm(nextTask);
     return nextTask;
-  }, [hydrateForm, selectedTaskId]);
+  }, [handleAccessLost, isCurrentTask, selectedTaskId]);
 
   React.useEffect(() => {
     if (!taskDrawerOpen || !selectedTask) return;
 
     let active = true;
+    drawerGeneration.current += 1;
+    initialDetailsPending.current = true;
+    formDirty.current = false;
+    const generation = ++refreshGeneration.current;
+    const nextDraftOwner = `${userId}:${userRole}:${selectedTask.id}`;
     // Defer the optimistic form hydration. The task detail request remains the
     // source of truth while avoiding an unnecessary cascading render.
     queueMicrotask(() => {
       if (!active) return;
+      setInitialDetails({ task: selectedTask, state: 'loading' });
+      setSaving(false);
+      setCollaborationOffline(false);
+      if (draftOwner.current !== nextDraftOwner) {
+        draftOwner.current = nextDraftOwner;
+        setCommentDraft('');
+      }
       setDetailTask(selectedTask);
       hydrateForm(selectedTask);
     });
     void fetch(`/api/tasks/${selectedTask.id}`, { cache: 'no-store' })
-      .then((response) => readApiJson<Task>(response, 'Không thể tải chi tiết công việc'))
+      .then((response) => {
+        if (active && isCurrentTask() && [401, 403, 404].includes(response.status)) {
+          handleAccessLost();
+          return null;
+        }
+        return readApiJson<Task>(response, 'Không thể tải chi tiết công việc');
+      })
       .then((nextTask) => {
-        if (!active) return;
-        setDetailTask(nextTask);
-        hydrateForm(nextTask);
+        if (!active || !nextTask || !isCurrentTask()) return;
+        // Another local mutation can supersede the comment/activity snapshot,
+        // but it cannot change the locked task form during this initial load.
+        if (generation === refreshGeneration.current) setDetailTask(nextTask);
+        if (!formDirty.current) hydrateForm(nextTask);
+        setInitialDetails({ task: selectedTask, state: 'ready' });
       })
       .catch((error) => {
-        if (active) toast.error(getErrorMessage(error, 'Không thể tải chi tiết công việc'));
-      });
+        if (active && isCurrentTask()) {
+          setInitialDetails({ task: selectedTask, state: 'error' });
+          toast.error(getErrorMessage(error, 'Không thể tải chi tiết công việc'));
+        }
+      })
+      .finally(() => { if (active) initialDetailsPending.current = false; });
 
-    return () => { active = false; };
-  }, [hydrateForm, loadTaskDetails, selectedTask, taskDrawerOpen]);
+    return () => { active = false; refreshGeneration.current += 1; drawerGeneration.current += 1; };
+  }, [handleAccessLost, hydrateForm, initialRetry, isCurrentTask, selectedTask, taskDrawerOpen, userId, userRole]);
+
+  React.useEffect(() => {
+    if (!taskDrawerOpen || !selectedTaskId || !userId) return;
+
+    let active = true;
+    let controller: AbortController | null = null;
+    const refresh = async () => {
+      if (!active || document.visibilityState !== 'visible' || initialDetailsPending.current || pendingMutations.current || controller) return;
+      const generation = ++refreshGeneration.current;
+      const request = new AbortController();
+      controller = request;
+      try {
+        const response = await fetch(`/api/tasks/${selectedTaskId}`, { cache: 'no-store', signal: request.signal });
+        if (!active || !isCurrentTask() || generation !== refreshGeneration.current) return;
+        if ([401, 403, 404].includes(response.status)) {
+          handleAccessLost();
+          return;
+        }
+        const nextTask = await readApiJson<Task>(response, 'Không thể cập nhật trao đổi');
+        if (!active || !isCurrentTask() || generation !== refreshGeneration.current || document.visibilityState !== 'visible') return;
+        setDetailTask((current) => current?.id === selectedTaskId
+          ? { ...current, comments: nextTask.comments, activities: nextTask.activities }
+          : current);
+        setCollaborationOffline(false);
+      } catch {
+        if (active && !request.signal.aborted && isCurrentTask() && generation === refreshGeneration.current) setCollaborationOffline(true);
+      } finally {
+        if (controller === request) controller = null;
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refresh();
+      else { refreshGeneration.current += 1; controller?.abort(); }
+    };
+    const onFocus = () => { void refresh(); };
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      active = false;
+      refreshGeneration.current += 1;
+      controller?.abort();
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [handleAccessLost, isCurrentTask, selectedTaskId, taskDrawerOpen, userId]);
 
   React.useEffect(() => {
     const projectId = task?.projectId;
@@ -245,7 +366,21 @@ export function TaskDrawer() {
     ? (Object.keys(statusConfig) as Task['status'][])
     : (['todo', 'in_progress', 'review'] as Task['status'][]);
 
+  async function refreshAfterMutation(mutationGeneration: number) {
+    if (!isCurrentMutation(mutationGeneration)) return;
+    try {
+      await loadTaskDetails();
+    } catch {
+      if (isCurrentMutation(mutationGeneration)) {
+        setCollaborationOffline(true);
+        toast.warning('Đã lưu thay đổi nhưng chưa thể tải lại chi tiết. Vui lòng mở lại công việc.');
+      }
+    }
+  }
+
   async function updateTask(payload: Record<string, unknown>, successMessage: string) {
+    if (!canEditTask) return null;
+    const mutationGeneration = beginMutation();
     setSaving(true);
     try {
       const response = await fetch(`/api/tasks/${taskId}`, {
@@ -254,14 +389,16 @@ export function TaskDrawer() {
         body: JSON.stringify(payload),
       });
       const updated = await readApiJson<Task>(response, 'Không thể lưu thay đổi công việc');
+      if (!isCurrentMutation(mutationGeneration)) return null;
       replaceTask(updated);
       toast.success(successMessage);
       return updated;
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Không thể lưu thay đổi công việc'));
+      if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể lưu thay đổi công việc'));
       return null;
     } finally {
-      setSaving(false);
+      endMutation();
+      if (isCurrentMutation(mutationGeneration)) setSaving(false);
     }
   }
 
@@ -291,6 +428,7 @@ export function TaskDrawer() {
   }
 
   async function handleChecklistToggle(item: TaskChecklistItem, checked: boolean) {
+    const mutationGeneration = beginMutation();
     setChecklistBusyId(item.id);
     try {
       const response = await fetch(`/api/tasks/${taskId}/checklist`, {
@@ -299,10 +437,11 @@ export function TaskDrawer() {
         body: JSON.stringify({ itemId: item.id, isCompleted: checked }),
       });
       await readApiJson<unknown>(response, 'Không thể cập nhật checklist');
-      await loadTaskDetails();
+      await refreshAfterMutation(mutationGeneration);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Không thể cập nhật checklist'));
+      if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể cập nhật checklist'));
     } finally {
+      endMutation();
       setChecklistBusyId(null);
     }
   }
@@ -310,6 +449,7 @@ export function TaskDrawer() {
   async function handleAddChecklist() {
     const itemTitle = newChecklistItem.trim();
     if (!itemTitle) return;
+    const mutationGeneration = beginMutation();
     setAddingChecklist(true);
     try {
       const response = await fetch(`/api/tasks/${taskId}/checklist`, {
@@ -318,16 +458,18 @@ export function TaskDrawer() {
         body: JSON.stringify({ title: itemTitle }),
       });
       await readApiJson<unknown>(response, 'Không thể thêm checklist');
-      setNewChecklistItem('');
-      await loadTaskDetails();
+      if (isCurrentMutation(mutationGeneration)) setNewChecklistItem((current) => current.trim() === itemTitle ? '' : current);
+      await refreshAfterMutation(mutationGeneration);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Không thể thêm checklist'));
+      if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể thêm checklist'));
     } finally {
+      endMutation();
       setAddingChecklist(false);
     }
   }
 
   async function handleDeleteChecklist(item: TaskChecklistItem) {
+    const mutationGeneration = beginMutation();
     setChecklistBusyId(item.id);
     try {
       const response = await fetch(`/api/tasks/${taskId}/checklist`, {
@@ -336,10 +478,11 @@ export function TaskDrawer() {
         body: JSON.stringify({ itemId: item.id }),
       });
       await readApiJson<unknown>(response, 'Không thể xóa checklist');
-      await loadTaskDetails();
+      await refreshAfterMutation(mutationGeneration);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Không thể xóa checklist'));
+      if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể xóa checklist'));
     } finally {
+      endMutation();
       setChecklistBusyId(null);
     }
   }
@@ -347,6 +490,7 @@ export function TaskDrawer() {
   async function handleSendComment() {
     const content = commentDraft.trim();
     if (!content) return;
+    const mutationGeneration = beginMutation();
     setSendingComment(true);
     try {
       const response = await fetch(`/api/tasks/${taskId}/comments`, {
@@ -355,46 +499,59 @@ export function TaskDrawer() {
         body: JSON.stringify({ content }),
       });
       await readApiJson<unknown>(response, 'Không thể gửi bình luận');
-      setCommentDraft('');
-      await loadTaskDetails();
+      if (isCurrentMutation(mutationGeneration)) setCommentDraft((current) => current.trim() === content ? '' : current);
+      await refreshAfterMutation(mutationGeneration);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Không thể gửi bình luận'));
+      if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể gửi bình luận'));
     } finally {
+      endMutation();
       setSendingComment(false);
     }
   }
 
   async function handleAddLink() {
-    if (!newLinkTitle.trim() || !newLinkUrl.trim()) {
+    const linkTitle = newLinkTitle.trim();
+    const linkUrl = newLinkUrl.trim();
+    if (!linkTitle || !linkUrl) {
       toast.error('Vui lòng nhập tên và đường dẫn tài liệu');
       return;
     }
+    const mutationGeneration = beginMutation();
+    const submittedRevision = linkDraftRevision.current;
     setAddingLink(true);
     try {
       const response = await fetch(`/api/tasks/${taskId}/links`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newLinkTitle.trim(), url: newLinkUrl.trim(), type: newLinkType }),
+        body: JSON.stringify({ title: linkTitle, url: linkUrl, type: newLinkType }),
       });
       await readApiJson<unknown>(response, 'Không thể thêm liên kết');
-      setNewLinkTitle('');
-      setNewLinkUrl('');
-      await loadTaskDetails();
+      if (isCurrentMutation(mutationGeneration) && submittedRevision === linkDraftRevision.current) {
+        setNewLinkTitle('');
+        setNewLinkUrl('');
+      }
+      await refreshAfterMutation(mutationGeneration);
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Không thể thêm liên kết'));
+      if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể thêm liên kết'));
     } finally {
+      endMutation();
       setAddingLink(false);
     }
   }
 
   async function handleDeleteLink(linkId: string) {
+    const mutationGeneration = beginMutation();
     try {
       const response = await fetch(`/api/links/${linkId}`, { method: 'DELETE' });
       await readApiJson<unknown>(response, 'Không thể xóa liên kết');
-      await loadTaskDetails();
-      toast.success('Đã xóa liên kết');
+      if (isCurrentMutation(mutationGeneration)) {
+        await refreshAfterMutation(mutationGeneration);
+        if (isCurrentMutation(mutationGeneration)) toast.success('Đã xóa liên kết');
+      }
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Không thể xóa liên kết'));
+      if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể xóa liên kết'));
+    } finally {
+      endMutation();
     }
   }
 
@@ -409,7 +566,7 @@ export function TaskDrawer() {
   const currentStatus = statusConfig[status];
 
   return (
-    <Sheet open={taskDrawerOpen} onOpenChange={(open) => !open && closeTaskDetail()}>
+    <Sheet open={taskDrawerOpen} onOpenChange={(open) => { if (!open) { setInitialDetails(null); closeTaskDetail(); } }}>
       <SheetContent className="flex w-full flex-col gap-0 overflow-hidden border-l border-border/60 bg-background p-0 shadow-2xl sm:max-w-2xl">
         <SheetHeader className="border-b border-border/50 bg-muted/15 px-4 py-4 text-left sm:px-6">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -465,17 +622,23 @@ export function TaskDrawer() {
                 <label className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Thông tin công việc</label>
                 {canManage && <span className="text-[11px] text-muted-foreground">Leader có thể chỉnh sửa toàn bộ</span>}
               </div>
+              {initialDetailsState === 'error' && (
+                <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+                  <span>Không thể tải chi tiết mới nhất. Hãy thử lại trước khi chỉnh sửa hoặc lưu.</span>
+                  <Button size="sm" variant="outline" onClick={() => { setInitialDetails({ task: selectedTask, state: 'loading' }); setInitialRetry((value) => value + 1); }}>Thử lại</Button>
+                </div>
+              )}
               <Input
                 value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                disabled={!canManage}
+                onChange={(event) => { formDirty.current = true; setTitle(event.target.value); }}
+                disabled={!canManage || !canEditTask}
                 className="h-11 border-border/60 bg-muted/20 text-base font-bold shadow-none focus-visible:bg-background"
                 aria-label="Tiêu đề công việc"
               />
               <Textarea
                 value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                disabled={!canManage}
+                onChange={(event) => { formDirty.current = true; setDescription(event.target.value); }}
+                disabled={!canManage || !canEditTask}
                 rows={4}
                 placeholder="Mô tả, mục tiêu và hướng dẫn thực hiện..."
                 className="resize-none border-border/60 bg-muted/20 text-sm leading-relaxed shadow-none focus-visible:bg-background"
@@ -485,7 +648,7 @@ export function TaskDrawer() {
             <section className="grid grid-cols-1 gap-3 rounded-2xl border border-border/50 bg-muted/15 p-3 sm:grid-cols-2">
               <div className="rounded-xl bg-background/75 p-3">
                 <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Tiến độ</label>
-                <Select value={status} onValueChange={(value) => setStatus(value as Task['status'])} disabled={!canContribute}>
+                <Select value={status} onValueChange={(value) => { formDirty.current = true; setStatus(value as Task['status']); }} disabled={!canContribute || !canEditTask}>
                   <SelectTrigger className="h-9 border-border/60 bg-background text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {selectableStatuses.map((value) => <SelectItem key={value} value={value}>{statusConfig[value].label}</SelectItem>)}
@@ -494,7 +657,7 @@ export function TaskDrawer() {
               </div>
               <div className="rounded-xl bg-background/75 p-3">
                 <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"><Flag className="h-3.5 w-3.5 text-rose-500" /> Ưu tiên</label>
-                <Select value={priority} onValueChange={(value) => setPriority(value as Task['priority'])} disabled={!canManage}>
+                <Select value={priority} onValueChange={(value) => { formDirty.current = true; setPriority(value as Task['priority']); }} disabled={!canManage || !canEditTask}>
                   <SelectTrigger className="h-9 border-border/60 bg-background text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {priorityOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
@@ -504,19 +667,19 @@ export function TaskDrawer() {
               <div className="rounded-xl bg-background/75 p-3">
                 <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"><UserRound className="h-3.5 w-3.5 text-blue-500" /> Người thực hiện</label>
                 {canManage ? (
-                  <AssigneePicker members={visibleProjectAssignees} selectedIds={assigneeIds} onChange={setAssigneeIds} loading={assigneesProjectId !== task.projectId} />
+                  <AssigneePicker members={visibleProjectAssignees} selectedIds={assigneeIds} onChange={(value) => { formDirty.current = true; setAssigneeIds(value); }} disabled={!canEditTask} loading={assigneesProjectId !== task.projectId} />
                 ) : (
                   <p className="text-xs">{getTaskAssignees(task).map((member) => member.name).join(', ') || 'Chưa phân công'}</p>
                 )}
               </div>
               <div className="rounded-xl bg-background/75 p-3">
                 <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"><Calendar className="h-3.5 w-3.5 text-amber-500" /> Hạn hoàn thành</label>
-                <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} disabled={!canManage} className="h-9 border-border/60 bg-background text-xs" />
+                <Input type="date" value={dueDate} onChange={(event) => { formDirty.current = true; setDueDate(event.target.value); }} disabled={!canManage || !canEditTask} className="h-9 border-border/60 bg-background text-xs" />
               </div>
               {canManage && (
                 <div className="rounded-xl bg-background/75 p-3 sm:col-span-2">
                   <label className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"><Sparkles className="h-3.5 w-3.5 text-violet-500" /> Độ phức tạp (Story points)</label>
-                  <Input type="number" min="1" max="100" value={storyPoints} onChange={(event) => setStoryPoints(event.target.value)} className="h-9 max-w-32 border-border/60 bg-background text-xs" />
+                  <Input type="number" min="1" max="100" value={storyPoints} onChange={(event) => { formDirty.current = true; setStoryPoints(event.target.value); }} disabled={!canEditTask} className="h-9 max-w-32 border-border/60 bg-background text-xs" />
                 </div>
               )}
             </section>
@@ -548,6 +711,7 @@ export function TaskDrawer() {
 
             <section className="space-y-3">
               <div className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" /><h3 className="text-sm font-bold">Ghi chú & trao đổi</h3><span className="text-xs text-muted-foreground">{task.comments?.length || 0}</span></div>
+              <p role="status" className="text-[11px] text-muted-foreground">{collaborationOffline ? 'Chưa thể cập nhật trao đổi. Sẽ tự thử lại khi có kết nối.' : 'Trao đổi tự cập nhật khi bạn đang mở công việc.'}</p>
               <div className="space-y-3">
                 {(task.comments || []).length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-5 text-center text-xs text-muted-foreground">Chưa có trao đổi. Hãy để lại cập nhật hoặc câu hỏi cho nhóm.</div>
@@ -563,7 +727,7 @@ export function TaskDrawer() {
               </div>
               {canContribute && (
                 <div className="rounded-2xl border border-border/60 bg-card p-2.5 shadow-2xs">
-                  <Textarea value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder="Viết cập nhật, câu hỏi hoặc phản hồi..." rows={3} className="resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0" />
+                  <Textarea aria-label="Viết ghi chú hoặc trao đổi" maxLength={4000} value={commentDraft} onChange={(event) => setCommentDraft(event.target.value)} placeholder="Viết cập nhật, câu hỏi hoặc phản hồi..." rows={3} className="resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0" />
                   <div className="mt-2 flex items-center justify-between border-t border-border/50 pt-2"><span className="text-[11px] text-muted-foreground">Mọi người trong công việc này đều xem được.</span><Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => void handleSendComment()} disabled={sendingComment || !commentDraft.trim()}>{sendingComment ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Gửi</Button></div>
                 </div>
               )}
@@ -582,9 +746,9 @@ export function TaskDrawer() {
               </div>
               {canManage && (
                 <div className="grid gap-2 rounded-xl border border-dashed border-border/70 bg-muted/10 p-3 sm:grid-cols-[1fr_1.2fr_auto_auto]">
-                  <Input value={newLinkTitle} onChange={(event) => setNewLinkTitle(event.target.value)} placeholder="Tên tài liệu" className="h-9 text-xs" />
-                  <Input value={newLinkUrl} onChange={(event) => setNewLinkUrl(event.target.value)} placeholder="https://..." className="h-9 text-xs" />
-                  <Select value={newLinkType} onValueChange={setNewLinkType}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="google_doc">Google Docs</SelectItem><SelectItem value="google_sheet">Google Sheets</SelectItem><SelectItem value="google_slide">Google Slides</SelectItem><SelectItem value="google_form">Google Forms</SelectItem><SelectItem value="other">Khác</SelectItem></SelectContent></Select>
+                  <Input value={newLinkTitle} onChange={(event) => { linkDraftRevision.current += 1; setNewLinkTitle(event.target.value); }} placeholder="Tên tài liệu" className="h-9 text-xs" />
+                  <Input value={newLinkUrl} onChange={(event) => { linkDraftRevision.current += 1; setNewLinkUrl(event.target.value); }} placeholder="https://..." className="h-9 text-xs" />
+                  <Select value={newLinkType} onValueChange={(value) => { linkDraftRevision.current += 1; setNewLinkType(value); }}><SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="google_doc">Google Docs</SelectItem><SelectItem value="google_sheet">Google Sheets</SelectItem><SelectItem value="google_slide">Google Slides</SelectItem><SelectItem value="google_form">Google Forms</SelectItem><SelectItem value="other">Khác</SelectItem></SelectContent></Select>
                   <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={() => void handleAddLink()} disabled={addingLink}>{addingLink ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Thêm</Button>
                 </div>
               )}
@@ -602,9 +766,9 @@ export function TaskDrawer() {
             <section className="space-y-2 rounded-2xl border border-border/50 bg-muted/10 p-4">
               <div className="flex items-center gap-2"><CircleDashed className="h-4 w-4 text-violet-500" /><h3 className="text-sm font-bold">Ghi chú xem xét</h3></div>
               <p className="text-xs leading-relaxed text-muted-foreground">{isMember ? 'Khi gửi chờ xem xét, bạn có thể tóm tắt kết quả hoặc nêu phần cần Leader hỗ trợ.' : 'Dùng phần này để phản hồi hoặc hướng dẫn trước khi duyệt công việc.'}</p>
-              <Textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} disabled={!canContribute} rows={3} placeholder={isMember ? 'Ví dụ: Đã hoàn thành, cần Leader kiểm tra phần...' : 'Thêm phản hồi cho thành viên...'} className="resize-none border-border/60 bg-background text-sm" />
+              <Textarea value={reviewNotes} onChange={(event) => { formDirty.current = true; setReviewNotes(event.target.value); }} disabled={!canContribute || !canEditTask} rows={3} placeholder={isMember ? 'Ví dụ: Đã hoàn thành, cần Leader kiểm tra phần...' : 'Thêm phản hồi cho thành viên...'} className="resize-none border-border/60 bg-background text-sm" />
               {canManage && task.reviewStatus === 'pending' && (
-                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end"><Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void handleReviewDecision(false)} disabled={saving}><CircleDashed className="h-3.5 w-3.5" /> Gửi lại cập nhật</Button><Button size="sm" className="gap-1.5 text-xs" onClick={() => void handleReviewDecision(true)} disabled={saving}><Check className="h-3.5 w-3.5" /> Duyệt hoàn thành</Button></div>
+                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end"><Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void handleReviewDecision(false)} disabled={!canEditTask}><CircleDashed className="h-3.5 w-3.5" /> Gửi lại cập nhật</Button><Button size="sm" className="gap-1.5 text-xs" onClick={() => void handleReviewDecision(true)} disabled={!canEditTask}><Check className="h-3.5 w-3.5" /> Duyệt hoàn thành</Button></div>
               )}
             </section>
           </div>
@@ -612,7 +776,7 @@ export function TaskDrawer() {
 
         <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
           <p className="hidden text-xs text-muted-foreground sm:block">{canManage ? 'Thay đổi được lưu an toàn và thông báo đến người liên quan.' : 'Cập nhật tiến độ để Leader theo dõi công việc.'}</p>
-          <div className="ml-auto flex items-center gap-2"><Button variant="outline" size="sm" onClick={closeTaskDetail}>Đóng</Button>{canContribute && <Button size="sm" className="gap-1.5" onClick={() => void handleSave()} disabled={saving || (canManage && !title.trim())}>{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{isMember && status === 'review' ? 'Gửi Leader duyệt' : 'Lưu thay đổi'}</Button>}</div>
+          <div className="ml-auto flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => { setInitialDetails(null); closeTaskDetail(); }}>Đóng</Button>{canContribute && <Button size="sm" className="gap-1.5" onClick={() => void handleSave()} disabled={!canEditTask || (canManage && !title.trim())}>{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{isMember && status === 'review' ? 'Gửi Leader duyệt' : 'Lưu thay đổi'}</Button>}</div>
         </div>
       </SheetContent>
     </Sheet>
