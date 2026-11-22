@@ -9,6 +9,7 @@ const taskStatusSchema = z.enum(['todo', 'in_progress', 'review', 'done'])
 const prioritySchema = z.enum(['low', 'medium', 'high', 'urgent'])
 
 const updateTaskSchema = z.object({
+  expectedUpdatedAt: z.string().datetime().optional(),
   title: z.string().trim().min(1).max(180).optional(),
   description: z.string().trim().max(10_000).optional().nullable(),
   status: taskStatusSchema.optional(),
@@ -117,6 +118,7 @@ export async function PUT(
     const currentTask = await db.task.findUnique({
       where: { id },
       select: {
+        updatedAt: true,
         title: true,
         projectId: true,
         status: true,
@@ -158,8 +160,17 @@ export async function PUT(
       }
     }
 
+    // Use the version observed by the editor, when supplied. Legacy clients
+    // still get an atomic check against the version read for this request.
+    const expectedUpdatedAt = validated.expectedUpdatedAt
+      ? new Date(validated.expectedUpdatedAt)
+      : currentTask.updatedAt
     const data: Record<string, unknown> = { ...validated }
+    delete data.expectedUpdatedAt
     delete data.assigneeIds
+    // Prisma's @updatedAt has millisecond precision. Ensure consecutive writes
+    // can never reuse the current version even within the same millisecond.
+    data.updatedAt = new Date(Math.max(Date.now(), currentTask.updatedAt.getTime() + 1, expectedUpdatedAt.getTime() + 1))
     const changingAssignees = validated.assigneeIds !== undefined || validated.assigneeId !== undefined
     const nextAssigneeIds = changingAssignees
       ? [...new Set(validated.assigneeIds ?? (validated.assigneeId ? [validated.assigneeId] : []))]
@@ -182,7 +193,18 @@ export async function PUT(
       else if (validated.status === 'review') data.reviewStatus = 'pending'
     }
 
-    const task = await db.task.update({ where: { id }, data, include: detailInclude })
+    let task
+    try {
+      // The version predicate and nested assignee writes are one atomic update.
+      task = await db.task.update({ where: { id, updatedAt: expectedUpdatedAt }, data, include: detailInclude })
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2025') {
+        const exists = await db.task.findUnique({ where: { id }, select: { id: true } })
+        if (!exists) return NextResponse.json({ error: 'Không tìm thấy công việc' }, { status: 404 })
+        return NextResponse.json({ code: 'TASK_CONFLICT', error: 'Công việc đã được người khác cập nhật. Vui lòng xem lại trước khi lưu.' }, { status: 409 })
+      }
+      throw error
+    }
 
     if (validated.status !== undefined && validated.status !== currentTask.status) {
       await recordTaskActivity({
@@ -193,7 +215,7 @@ export async function PUT(
       })
     } else if (validated.reviewNotes !== undefined) {
       await recordTaskActivity({ taskId: id, userId: session.id, action: 'review_note_updated', details: 'Đã cập nhật ghi chú xem xét' })
-    } else if (Object.keys(validated).length > 0) {
+    } else if (Object.keys(validated).some((key) => key !== 'expectedUpdatedAt')) {
       await recordTaskActivity({ taskId: id, userId: session.id, action: 'updated', details: 'Đã cập nhật thông tin công việc' })
     }
 

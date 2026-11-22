@@ -119,8 +119,13 @@ export function MyTasksView() {
       const response = await fetch(`/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, expectedUpdatedAt: task.updatedAt }),
       });
+      if (response.status === 409) {
+        toast.warning('Công việc đã được thay đổi. Danh sách sẽ được tải lại; hãy kiểm tra rồi thử chuyển trạng thái lần nữa.');
+        await fetchTasks();
+        return;
+      }
       await ensureApiSuccess(response, 'Không thể cập nhật trạng thái');
       toast.success(`Đã chuyển sang "${columns[newIdx].label}"`);
       await fetchTasks();
@@ -169,8 +174,13 @@ export function MyTasksView() {
       const updateResponse = await fetch(`/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'review' }),
+        body: JSON.stringify({ status: 'review', expectedUpdatedAt: task.updatedAt }),
       });
+      if (updateResponse.status === 409) {
+        toast.warning('Công việc đã được thay đổi. Danh sách sẽ được tải lại; hãy kiểm tra rồi thử gửi duyệt lần nữa.');
+        await fetchTasks();
+        return;
+      }
       await ensureApiSuccess(updateResponse, 'Không thể gửi yêu cầu xem xét');
 
       toast.success('Đã gửi yêu cầu review cho Leader');

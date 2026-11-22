@@ -73,6 +73,11 @@ const priorityConfig: Record<string, { label: string; className: string }> = {
 
 type ProjectAssignee = Pick<TeamMember, 'id' | 'name' | 'email' | 'color'>;
 
+function sameAccount(user: { id: string; role: string } | null) {
+  const current = useAppStore.getState().user;
+  return Boolean(user && current?.id === user.id && current.role === user.role);
+}
+
 export function BoardView() {
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<Task['status']>('todo');
@@ -87,6 +92,8 @@ export function BoardView() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editConflict, setEditConflict] = useState(false);
+  const [formBusy, setFormBusy] = useState(false);
 
   // Filters
   const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -105,14 +112,15 @@ export function BoardView() {
   const loadingProjectAssignees = Boolean(formProjectId && assigneesProjectId !== formProjectId);
 
   // Drag & drop state
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [draggedTask, setDraggedTask] = useState<Task | null>(null);
 
   const fetchTasks = useCallback(async () => {
+    const account = useAppStore.getState().user;
     const params = new URLSearchParams();
     if (selectedProjectId) params.set('projectId', selectedProjectId);
     const res = await fetch(`/api/tasks?${params.toString()}`);
     const data = await readApiJson<Task[]>(res, 'Không thể tải danh sách công việc');
-    setTasks(data);
+    if (sameAccount(account)) setTasks(data);
   }, [selectedProjectId, setTasks]);
 
   useEffect(() => {
@@ -171,6 +179,7 @@ export function BoardView() {
   }, [formProjectId]);
 
   function openCreateDialog(status: Task['status'] = 'todo') {
+    setEditConflict(false);
     setEditingTask(null);
     setFormTitle('');
     setFormDesc('');
@@ -185,6 +194,7 @@ export function BoardView() {
   }
 
   function openEditDialog(task: Task) {
+    setEditConflict(false);
     setEditingTask(task);
     setFormTitle(task.title);
     setFormDesc(task.description || '');
@@ -199,7 +209,9 @@ export function BoardView() {
   }
 
   async function handleSave() {
-    if (!formTitle.trim() || !formProjectId) return;
+    if (!formTitle.trim() || !formProjectId || formBusy || editConflict) return;
+    const account = useAppStore.getState().user;
+    setFormBusy(true);
     try {
       const body: Record<string, unknown> = {
         title: formTitle,
@@ -212,11 +224,31 @@ export function BoardView() {
       };
 
       if (editingTask) {
+        body.expectedUpdatedAt = editingTask.updatedAt;
         const response = await fetch(`/api/tasks/${editingTask.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
+        if (!sameAccount(account)) return;
+        if ([401, 404].includes(response.status)) {
+          dismissUnavailable();
+          return;
+        }
+        if (response.status === 403) {
+          // A 403 can also mean an invalid assignee/project selection. Keep
+          // the draft unless a separate read confirms access was revoked.
+          const check = await fetch(`/api/tasks/${editingTask.id}`, { cache: 'no-store' });
+          if (!sameAccount(account)) return;
+          if ([401, 403, 404].includes(check.status)) {
+            dismissUnavailable();
+            return;
+          }
+        }
+        if (response.status === 409) {
+          setEditConflict(true);
+          return;
+        }
         await ensureApiSuccess(response, 'Không thể cập nhật công việc');
         toast.success('Đã cập nhật công việc');
       } else {
@@ -225,13 +257,48 @@ export function BoardView() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
+        if (!sameAccount(account)) return;
         await ensureApiSuccess(response, 'Không thể tạo công việc');
         toast.success('Đã tạo công việc mới');
       }
       setDialogOpen(false);
       await fetchTasks();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+      if (sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+    } finally {
+      setFormBusy(false);
+    }
+  }
+
+  function dismissUnavailable() {
+    setDialogOpen(false);
+    setEditingTask(null);
+    setEditConflict(false);
+    setFormTitle('');
+    setFormDesc('');
+    setFormAssigneeIds([]);
+    setFormDueDate('');
+    toast.error('Công việc không còn khả dụng hoặc bạn không còn quyền truy cập.');
+  }
+
+  async function reloadEditTask() {
+    if (!editingTask || formBusy) return;
+    const account = useAppStore.getState().user;
+    setFormBusy(true);
+    try {
+      const response = await fetch(`/api/tasks/${editingTask.id}`, { cache: 'no-store' });
+      if (!sameAccount(account)) return;
+      if ([401, 403, 404].includes(response.status)) {
+        dismissUnavailable();
+        return;
+      }
+      const latest = await readApiJson<Task>(response, 'Không thể tải công việc mới nhất');
+      if (!sameAccount(account)) return;
+      openEditDialog(latest);
+    } catch (error) {
+      if (sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Không thể tải công việc mới nhất');
+    } finally {
+      setFormBusy(false);
     }
   }
 
@@ -246,13 +313,18 @@ export function BoardView() {
     }
   }
 
-  async function handleStatusChange(taskId: string, newStatus: Task['status']) {
+  async function handleStatusChange(task: Task, newStatus: Task['status']) {
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
+      const response = await fetch(`/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, expectedUpdatedAt: task.updatedAt }),
       });
+      if (response.status === 409) {
+        toast.warning('Công việc đã được thay đổi. Danh sách sẽ được tải lại; hãy kiểm tra rồi thử chuyển trạng thái lần nữa.');
+        await fetchTasks();
+        return;
+      }
       await ensureApiSuccess(response, 'Không thể cập nhật trạng thái');
       await fetchTasks();
     } catch (error) {
@@ -480,9 +552,9 @@ export function BoardView() {
                       key={column.id}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => {
-                        if (draggedTaskId) {
-                          void handleStatusChange(draggedTaskId, column.id);
-                          setDraggedTaskId(null);
+                        if (draggedTask) {
+                          void handleStatusChange(draggedTask, column.id);
+                          setDraggedTask(null);
                         }
                       }}
                       className={cn(
@@ -527,7 +599,8 @@ export function BoardView() {
                               <Card
                                 key={task.id}
                                 draggable
-                                onDragStart={() => setDraggedTaskId(task.id)}
+                                onDragStart={() => setDraggedTask(task)}
+                                onDragEnd={() => setDraggedTask(null)}
                                 onClick={() => openTaskDetail(task)}
                                 className={cn(
                                   'cursor-pointer bg-card/95 hover:bg-card border-border/70 hover:border-primary/40 transition-all group',
@@ -608,18 +681,25 @@ export function BoardView() {
       </div>
 
       {/* Create/Edit Task Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!formBusy) setDialogOpen(open); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {editingTask ? 'Chỉnh sửa công việc' : 'Tạo công việc mới'}
             </DialogTitle>
           </DialogHeader>
+          {editConflict && (
+            <div role="alert" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+              <p>Công việc đã được người khác cập nhật. Nội dung bạn đang nhập vẫn được giữ lại; hãy sao chép nội dung cần thiết trước khi tải bản mới.</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => void reloadEditTask()} disabled={formBusy}>Tải bản mới và thay nội dung đang nhập</Button>
+            </div>
+          )}
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Tiêu đề *</Label>
               <Input
                 value={formTitle}
+                disabled={formBusy}
                 onChange={(e) => setFormTitle(e.target.value)}
                 placeholder="Nhập tiêu đề công việc..."
               />
@@ -628,6 +708,7 @@ export function BoardView() {
               <Label>Mô tả</Label>
               <Textarea
                 value={formDesc}
+                disabled={formBusy}
                 onChange={(e) => setFormDesc(e.target.value)}
                 placeholder="Mô tả chi tiết..."
                 rows={3}
@@ -636,7 +717,7 @@ export function BoardView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Trạng thái</Label>
-                <Select value={formStatus} onValueChange={(v) => setFormStatus(v as Task['status'])}>
+                <Select value={formStatus} onValueChange={(v) => setFormStatus(v as Task['status'])} disabled={formBusy}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {columns.map((c) => (
@@ -647,7 +728,7 @@ export function BoardView() {
               </div>
               <div className="space-y-2">
                 <Label>Ưu tiên</Label>
-                <Select value={formPriority} onValueChange={(v) => setFormPriority(v as Task['priority'])}>
+                <Select value={formPriority} onValueChange={(v) => setFormPriority(v as Task['priority'])} disabled={formBusy}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="low">Thấp</SelectItem>
@@ -663,6 +744,7 @@ export function BoardView() {
                 <Label>Dự án</Label>
                 <Select
                   value={formProjectId}
+                  disabled={formBusy}
                   onValueChange={(projectId) => {
                     setFormProjectId(projectId);
                     setFormAssigneeIds([]);
@@ -682,13 +764,14 @@ export function BoardView() {
               </div>
               <div className="space-y-2">
                 <Label>Người thực hiện</Label>
-                <AssigneePicker members={projectAssignees} selectedIds={formAssigneeIds} onChange={setFormAssigneeIds} disabled={!formProjectId || loadingProjectAssignees} loading={loadingProjectAssignees} />
+                <AssigneePicker members={projectAssignees} selectedIds={formAssigneeIds} onChange={setFormAssigneeIds} disabled={formBusy || !formProjectId || loadingProjectAssignees} loading={loadingProjectAssignees} />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Hạn chót</Label>
               <Input
                 type="date"
+                disabled={formBusy}
                 value={formDueDate}
                 onChange={(e) => setFormDueDate(e.target.value)}
               />
@@ -696,9 +779,9 @@ export function BoardView() {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Hủy</Button>
+              <Button variant="outline" disabled={formBusy}>Hủy</Button>
             </DialogClose>
-            <Button onClick={handleSave} disabled={!formTitle.trim() || !formProjectId}>
+            <Button onClick={handleSave} disabled={formBusy || editConflict || !formTitle.trim() || !formProjectId}>
               {editingTask ? 'Cập nhật' : 'Tạo mới'}
             </Button>
           </DialogFooter>

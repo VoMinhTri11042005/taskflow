@@ -42,6 +42,10 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { DocumentLink } from '@/components/tasks/document-link';
 import { AssigneePicker, getTaskAssigneeIds, getTaskAssignees } from '@/components/tasks/assignee-picker';
 import {
@@ -121,6 +125,10 @@ export function TaskDrawer() {
   const [initialDetails, setInitialDetails] = React.useState<{ task: Task; state: 'loading' | 'ready' | 'error' } | null>(null);
   const [initialRetry, setInitialRetry] = React.useState(0);
   const [saving, setSaving] = React.useState(false);
+  const [conflict, setConflict] = React.useState(false);
+  const [conflictPreview, setConflictPreview] = React.useState<Task | null>(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const formVersion = React.useRef<string | null>(null);
   const [checklistBusyId, setChecklistBusyId] = React.useState<string | null>(null);
   const [newChecklistItem, setNewChecklistItem] = React.useState('');
   const [addingChecklist, setAddingChecklist] = React.useState(false);
@@ -162,6 +170,7 @@ export function TaskDrawer() {
   const canContribute = Boolean(user && user.role !== 'admin');
 
   const hydrateForm = React.useCallback((nextTask: Task) => {
+    formVersion.current = nextTask.updatedAt;
     setTitle(nextTask.title || '');
     setDescription(nextTask.description || '');
     setStatus(nextTask.status || 'todo');
@@ -237,6 +246,9 @@ export function TaskDrawer() {
       if (!active) return;
       setInitialDetails({ task: selectedTask, state: 'loading' });
       setSaving(false);
+      setConflict(false);
+      setConflictPreview(null);
+      setPreviewLoading(false);
       setCollaborationOffline(false);
       if (draftOwner.current !== nextDraftOwner) {
         draftOwner.current = nextDraftOwner;
@@ -379,15 +391,26 @@ export function TaskDrawer() {
   }
 
   async function updateTask(payload: Record<string, unknown>, successMessage: string) {
-    if (!canEditTask) return null;
+    if (!canEditTask || conflict || !formVersion.current) return null;
     const mutationGeneration = beginMutation();
     setSaving(true);
     try {
       const response = await fetch(`/api/tasks/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, expectedUpdatedAt: formVersion.current }),
       });
+      if (response.status === 409) {
+        const body = await response.clone().json().catch(() => null);
+        if (body?.code === 'TASK_CONFLICT') {
+          if (isCurrentMutation(mutationGeneration)) {
+            setConflict(true);
+            setConflictPreview(null);
+            toast.warning('Công việc đã thay đổi. Nội dung bạn đang sửa vẫn được giữ lại.');
+          }
+          return null;
+        }
+      }
       const updated = await readApiJson<Task>(response, 'Không thể lưu thay đổi công việc');
       if (!isCurrentMutation(mutationGeneration)) return null;
       replaceTask(updated);
@@ -399,6 +422,39 @@ export function TaskDrawer() {
     } finally {
       endMutation();
       if (isCurrentMutation(mutationGeneration)) setSaving(false);
+    }
+  }
+
+  async function fetchConflictVersion(apply: boolean) {
+    const mutationGeneration = beginMutation();
+    if (apply) setSaving(true);
+    else setPreviewLoading(true);
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, { cache: 'no-store' });
+      if (!isCurrentMutation(mutationGeneration)) return;
+      if ([401, 403, 404].includes(response.status)) {
+        handleAccessLost();
+        return;
+      }
+      const latest = await readApiJson<Task>(response, 'Không thể tải phiên bản mới');
+      if (!isCurrentMutation(mutationGeneration)) return;
+      if (apply) {
+        replaceTask(latest);
+        formDirty.current = false;
+        setConflict(false);
+        setConflictPreview(null);
+        toast.success('Đã tải phiên bản mới nhất');
+      } else {
+        setConflictPreview(latest);
+      }
+    } catch (error) {
+      if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể tải phiên bản mới'));
+    } finally {
+      endMutation();
+      if (isCurrentMutation(mutationGeneration)) {
+        if (apply) setSaving(false);
+        else setPreviewLoading(false);
+      }
     }
   }
 
@@ -628,6 +684,41 @@ export function TaskDrawer() {
                   <Button size="sm" variant="outline" onClick={() => { setInitialDetails({ task: selectedTask, state: 'loading' }); setInitialRetry((value) => value + 1); }}>Thử lại</Button>
                 </div>
               )}
+              {conflict && (
+                <div role="alert" className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+                  <p className="font-semibold">Công việc đã được người khác cập nhật.</p>
+                  <p>Nội dung bạn đang sửa vẫn được giữ bên dưới. Hãy đối chiếu và lưu lại nội dung cần giữ trước khi tải phiên bản mới. Bạn chưa thể lưu cho đến khi tải lại.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" disabled={previewLoading || saving} onClick={() => void fetchConflictVersion(false)}>{previewLoading ? 'Đang tải...' : 'Xem phiên bản mới'}</Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild><Button size="sm" disabled={previewLoading || saving}>Tải phiên bản mới</Button></AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Bỏ nội dung đang sửa?</AlertDialogTitle>
+                          <AlertDialogDescription>Phiên bản mới nhất sẽ thay thế các thông tin công việc bạn đang nhập nhưng chưa lưu. Hãy sao chép nội dung cần giữ trước khi tiếp tục.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Giữ bản nháp</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => void fetchConflictVersion(true)}>Bỏ bản nháp và tải mới</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                  {conflictPreview && (
+                    <div className="space-y-1 rounded-lg border border-amber-200 bg-background/80 p-3 text-foreground dark:border-amber-800">
+                      <p className="font-semibold">Thông tin mới tại thời điểm xem</p>
+                      <p><strong>Tên:</strong> {conflictPreview.title}</p>
+                      <p className="whitespace-pre-wrap break-words"><strong>Mô tả:</strong> {conflictPreview.description || 'Chưa có'}</p>
+                      <p><strong>Trạng thái:</strong> {statusConfig[conflictPreview.status]?.label || conflictPreview.status}</p>
+                      <p><strong>Ưu tiên:</strong> {priorityOptions.find((option) => option.value === conflictPreview.priority)?.label || conflictPreview.priority}</p>
+                      <p><strong>Người thực hiện:</strong> {getTaskAssignees(conflictPreview).map((member) => member.name).join(', ') || 'Chưa phân công'}</p>
+                      <p><strong>Hạn hoàn thành:</strong> {conflictPreview.dueDate ? format(new Date(conflictPreview.dueDate), 'dd/MM/yyyy') : 'Chưa có'}</p>
+                      <p><strong>Độ phức tạp:</strong> {conflictPreview.storyPoints || 1}</p>
+                      <p className="whitespace-pre-wrap break-words"><strong>Ghi chú xem xét:</strong> {conflictPreview.reviewNotes || 'Chưa có'}</p>
+                    </div>
+                  )}
+                </div>
+              )}
               <Input
                 value={title}
                 onChange={(event) => { formDirty.current = true; setTitle(event.target.value); }}
@@ -768,7 +859,7 @@ export function TaskDrawer() {
               <p className="text-xs leading-relaxed text-muted-foreground">{isMember ? 'Khi gửi chờ xem xét, bạn có thể tóm tắt kết quả hoặc nêu phần cần Leader hỗ trợ.' : 'Dùng phần này để phản hồi hoặc hướng dẫn trước khi duyệt công việc.'}</p>
               <Textarea value={reviewNotes} onChange={(event) => { formDirty.current = true; setReviewNotes(event.target.value); }} disabled={!canContribute || !canEditTask} rows={3} placeholder={isMember ? 'Ví dụ: Đã hoàn thành, cần Leader kiểm tra phần...' : 'Thêm phản hồi cho thành viên...'} className="resize-none border-border/60 bg-background text-sm" />
               {canManage && task.reviewStatus === 'pending' && (
-                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end"><Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void handleReviewDecision(false)} disabled={!canEditTask}><CircleDashed className="h-3.5 w-3.5" /> Gửi lại cập nhật</Button><Button size="sm" className="gap-1.5 text-xs" onClick={() => void handleReviewDecision(true)} disabled={!canEditTask}><Check className="h-3.5 w-3.5" /> Duyệt hoàn thành</Button></div>
+                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end"><Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void handleReviewDecision(false)} disabled={!canEditTask || conflict}><CircleDashed className="h-3.5 w-3.5" /> Gửi lại cập nhật</Button><Button size="sm" className="gap-1.5 text-xs" onClick={() => void handleReviewDecision(true)} disabled={!canEditTask || conflict}><Check className="h-3.5 w-3.5" /> Duyệt hoàn thành</Button></div>
               )}
             </section>
           </div>
@@ -776,7 +867,7 @@ export function TaskDrawer() {
 
         <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
           <p className="hidden text-xs text-muted-foreground sm:block">{canManage ? 'Thay đổi được lưu an toàn và thông báo đến người liên quan.' : 'Cập nhật tiến độ để Leader theo dõi công việc.'}</p>
-          <div className="ml-auto flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => { setInitialDetails(null); closeTaskDetail(); }}>Đóng</Button>{canContribute && <Button size="sm" className="gap-1.5" onClick={() => void handleSave()} disabled={!canEditTask || (canManage && !title.trim())}>{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{isMember && status === 'review' ? 'Gửi Leader duyệt' : 'Lưu thay đổi'}</Button>}</div>
+          <div className="ml-auto flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => { setInitialDetails(null); closeTaskDetail(); }}>Đóng</Button>{canContribute && <Button size="sm" className="gap-1.5" onClick={() => void handleSave()} disabled={!canEditTask || conflict || (canManage && !title.trim())}>{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{isMember && status === 'review' ? 'Gửi Leader duyệt' : 'Lưu thay đổi'}</Button>}</div>
         </div>
       </SheetContent>
     </Sheet>
