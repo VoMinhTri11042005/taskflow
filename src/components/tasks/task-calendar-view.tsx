@@ -19,11 +19,11 @@ import {
   eachDayOfInterval,
   isSameMonth,
   isToday,
-  parseISO,
 } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app-store';
+import { getTaskDateKey } from '@/lib/task-deadline';
 
 const priorityColors: Record<string, string> = {
   low: 'border-l-slate-400 bg-slate-500/10 text-slate-700 dark:text-slate-300',
@@ -69,16 +69,11 @@ export function TaskCalendarView({ tasks, onTaskClick, onDateClick }: TaskCalend
   const tasksByDate = useMemo(() => {
     const map = new Map<string, Task[]>();
     tasks.forEach((task) => {
-      if (task.dueDate) {
-        try {
-          const dateStr = format(parseISO(task.dueDate), 'yyyy-MM-dd');
-          const existing = map.get(dateStr) || [];
-          existing.push(task);
-          map.set(dateStr, existing);
-        } catch {
-          // ignore invalid date
-        }
-      }
+      const dateStr = getTaskDateKey(task.dueDate);
+      if (!dateStr) return;
+      const existing = map.get(dateStr) || [];
+      existing.push(task);
+      map.set(dateStr, existing);
     });
     return map;
   }, [tasks]);
@@ -98,7 +93,7 @@ export function TaskCalendarView({ tasks, onTaskClick, onDateClick }: TaskCalend
               {format(currentMonth, 'MMMM yyyy', { locale: vi })}
             </h2>
             <p className="text-xs text-muted-foreground">
-              {tasks.filter((t) => t.dueDate).length} công việc có lịch hạn chót
+              {tasks.filter((t) => getTaskDateKey(t.dueDate)).length} công việc có lịch hạn chót
             </p>
           </div>
         </div>

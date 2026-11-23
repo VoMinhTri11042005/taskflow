@@ -54,8 +54,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
-import { getTaskDeadlineInfo } from '@/lib/task-deadline';
-import { format } from 'date-fns';
+import { getTaskDateKey, getTaskDeadlineInfo } from '@/lib/task-deadline';
 
 const columns: { id: Task['status']; label: string; color: string; bgColor: string; dotColor: string }[] = [
   { id: 'todo', label: 'Cần làm', color: 'text-slate-600 dark:text-slate-400', bgColor: 'bg-slate-100/70 dark:bg-slate-900/40', dotColor: 'bg-slate-400' },
@@ -202,7 +201,7 @@ export function BoardView() {
     setFormPriority(task.priority);
     setFormProjectId(task.projectId);
     setFormAssigneeIds(getTaskAssigneeIds(task));
-    setFormDueDate(task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '');
+    setFormDueDate(getTaskDateKey(task.dueDate) || '');
     setProjectAssignees([]);
     setAssigneesProjectId(null);
     setDialogOpen(true);

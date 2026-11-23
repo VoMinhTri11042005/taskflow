@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { formatTaskDate } from '@/lib/task-deadline';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   todo: { label: 'Cần làm', color: 'text-slate-500', bg: 'bg-slate-500/10', icon: ListTodo },
@@ -318,7 +319,7 @@ export function DashboardView() {
                     </div>
                     <div className="flex flex-col items-end shrink-0">
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 mb-1 border-rose-500/20 text-rose-600 bg-rose-500/5">
-                        {task.dueDate ? new Date(task.dueDate).toLocaleDateString('vi-VN') : ''}
+                        {formatTaskDate(task.dueDate) || ''}
                       </Badge>
                     </div>
                   </div>

@@ -12,8 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { formatTaskDate } from '@/lib/task-deadline';
 import {
   Flag,
   Calendar,
@@ -122,7 +121,7 @@ export function TaskTableView({ tasks }: TaskTableViewProps) {
               </TableCell>
 
               <TableCell className="text-muted-foreground font-medium">
-                {task.dueDate ? format(new Date(task.dueDate), 'dd/MM/yyyy') : '—'}
+                {formatTaskDate(task.dueDate) || '—'}
               </TableCell>
 
               <TableCell className="text-right">

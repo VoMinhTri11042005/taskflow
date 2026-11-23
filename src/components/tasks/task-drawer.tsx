@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import {
   Calendar,
@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { useAppStore } from '@/stores/app-store';
 import type { Task, TaskChecklistItem } from '@/types';
 import { readApiJson } from '@/lib/client-api';
+import { formatTaskDate, getTaskDateKey } from '@/lib/task-deadline';
 import { cn } from '@/lib/utils';
 import {
   Sheet,
@@ -179,7 +180,7 @@ export function TaskDrawer() {
     setPriority(nextTask.priority || 'medium');
     setStoryPoints(String(nextTask.storyPoints || 1));
     setAssigneeIds(getTaskAssigneeIds(nextTask));
-    setDueDate(nextTask.dueDate ? format(new Date(nextTask.dueDate), 'yyyy-MM-dd') : '');
+    setDueDate(getTaskDateKey(nextTask.dueDate) || '');
     setReviewNotes(nextTask.reviewNotes || '');
   }, []);
 
@@ -727,7 +728,7 @@ export function TaskDrawer() {
                       <p><strong>Trạng thái:</strong> {statusConfig[conflictPreview.status]?.label || conflictPreview.status}</p>
                       <p><strong>Ưu tiên:</strong> {priorityOptions.find((option) => option.value === conflictPreview.priority)?.label || conflictPreview.priority}</p>
                       <p><strong>Người thực hiện:</strong> {getTaskAssignees(conflictPreview).map((member) => member.name).join(', ') || 'Chưa phân công'}</p>
-                      <p><strong>Hạn hoàn thành:</strong> {conflictPreview.dueDate ? format(new Date(conflictPreview.dueDate), 'dd/MM/yyyy') : 'Chưa có'}</p>
+                      <p><strong>Hạn hoàn thành:</strong> {formatTaskDate(conflictPreview.dueDate) || 'Chưa có'}</p>
                       <p><strong>Độ phức tạp:</strong> {conflictPreview.storyPoints || 1}</p>
                       <p className="whitespace-pre-wrap break-words"><strong>Ghi chú xem xét:</strong> {conflictPreview.reviewNotes || 'Chưa có'}</p>
                     </div>

@@ -21,7 +21,8 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isPast } from 'date-fns';
+import { startOfDay } from 'date-fns';
+import { getTaskDateLocal } from '@/lib/task-deadline';
 
 const priorityConfig: Record<string, { label: string; color: string }> = {
   low: { label: 'Thấp', color: 'bg-slate-400' },
@@ -39,9 +40,11 @@ export function AdminReportsView() {
     const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
     const activeMembers = members.length;
     const avgTasksPerMember = activeMembers > 0 ? (totalTasks / activeMembers).toFixed(1) : '0';
-    const overdueTasks = tasks.filter(
-      (t) => t.dueDate && isPast(new Date(t.dueDate)) && t.status !== 'done'
-    ).length;
+    const today = startOfDay(new Date());
+    const overdueTasks = tasks.filter((t) => {
+      const dueDate = getTaskDateLocal(t.dueDate);
+      return dueDate !== null && dueDate < today && t.status !== 'done';
+    }).length;
 
     return {
       totalTasks,

@@ -25,6 +25,7 @@ import {
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { formatTaskDate, getTaskDateLocal } from '@/lib/task-deadline';
 
 const statusSummary = [
   { key: 'todo', label: 'Cần làm', className: 'bg-slate-500' },
@@ -97,8 +98,7 @@ function TaskRow({
   variant: 'review' | 'attention';
 }) {
   const isReview = variant === 'review';
-  const dueDate = task.dueDate ? new Date(task.dueDate) : null;
-  const isValidDueDate = Boolean(dueDate && !Number.isNaN(dueDate.getTime()));
+  const dueDateLabel = formatTaskDate(task.dueDate, 'dd/MM');
 
   return (
     <button
@@ -129,9 +129,9 @@ function TaskRow({
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {!isReview && isValidDueDate ? (
+        {!isReview && dueDateLabel ? (
           <span className="hidden rounded-md bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-700 sm:inline-block dark:text-rose-300">
-            {format(dueDate!, 'dd/MM')}
+            {dueDateLabel}
           </span>
         ) : null}
         <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
@@ -160,13 +160,17 @@ export function LeaderDashboardView() {
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
   const overdueTasks = useMemo(
-    () => openTasks.filter((task) => task.dueDate && new Date(task.dueDate).getTime() < dayStart.getTime()),
+    () => openTasks.filter((task) => {
+      const dueDate = getTaskDateLocal(task.dueDate);
+      return dueDate !== null && dueDate.getTime() < dayStart.getTime();
+    }),
     [openTasks, dayStart]
   );
   const dueTodayTasks = useMemo(
     () => openTasks.filter((task) => {
-      if (!task.dueDate) return false;
-      const dueTime = new Date(task.dueDate).getTime();
+      const dueDate = getTaskDateLocal(task.dueDate);
+      if (!dueDate) return false;
+      const dueTime = dueDate.getTime();
       return dueTime >= dayStart.getTime() && dueTime < tomorrowStart.getTime();
     }),
     [openTasks, dayStart, tomorrowStart]

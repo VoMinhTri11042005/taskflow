@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/accordion';
 import { CalendarDays, CheckCircle2, ClipboardList, FolderKanban, Users } from 'lucide-react';
 import { readApiJson } from '@/lib/client-api';
+import { formatTaskDate } from '@/lib/task-deadline';
 import { cn } from '@/lib/utils';
 import { getProjectDisplayName } from '@/lib/project-name';
 import type { Project, Task } from '@/types';
@@ -93,10 +94,8 @@ const statusConfig: Record<Task['status'], { label: string; className: string }>
 };
 
 function formatDueDate(value: string | null) {
-  if (!value) return 'Chưa đặt hạn';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Chưa đặt hạn';
-  return `Hạn ${new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit' }).format(date)}`;
+  const date = formatTaskDate(value, 'dd/MM');
+  return date ? `Hạn ${date}` : 'Chưa đặt hạn';
 }
 
 export function MemberTeamView() {
