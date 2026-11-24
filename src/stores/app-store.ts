@@ -11,6 +11,14 @@ function normalizeTaskProject(task: Task): Task {
 type NotificationLoadToken = { session: number; revision: number; request: number; userId: string };
 type NotificationMutationToken = { session: number; revision: number; userId: string };
 
+// The drawer registers a synchronous guard so keyboard navigation cannot
+// replace an unsaved task before the user has decided what to do with it.
+let taskDetailGuard: ((nextTask: Task) => boolean) | null = null;
+export function registerTaskDetailGuard(guard: (nextTask: Task) => boolean) {
+  taskDetailGuard = guard;
+  return () => { if (taskDetailGuard === guard) taskDetailGuard = null; };
+}
+
 interface AppState {
   currentView: ViewType;
   setCurrentView: (view: ViewType) => void;
@@ -89,7 +97,7 @@ interface AppState {
   setSelectedPriority: (priority: string | null) => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   currentView: 'admin-overview',
   setCurrentView: (view) => set({ currentView: view }),
   sidebarOpen: true,
@@ -108,7 +116,12 @@ export const useAppStore = create<AppState>((set) => ({
   setSelectedTask: (task) => set({ selectedTask: task }),
   taskDrawerOpen: false,
   setTaskDrawerOpen: (open) => set({ taskDrawerOpen: open }),
-  openTaskDetail: (task) => set({ selectedTask: task, taskDrawerOpen: true }),
+  openTaskDetail: (task) => {
+    const state = get();
+    if (state.taskDrawerOpen && state.selectedTask?.id === task.id) return;
+    if (state.taskDrawerOpen && taskDetailGuard && !taskDetailGuard(task)) return;
+    set({ selectedTask: task, taskDrawerOpen: true });
+  },
   closeTaskDetail: () => set({ selectedTask: null, taskDrawerOpen: false }),
 
   // Board View Mode

@@ -27,10 +27,11 @@ import {
   UserRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAppStore } from '@/stores/app-store';
+import { registerTaskDetailGuard, useAppStore } from '@/stores/app-store';
 import type { Task, TaskChecklistItem } from '@/types';
 import { readApiJson } from '@/lib/client-api';
 import { formatTaskDate, getTaskDateKey } from '@/lib/task-deadline';
+import { beginTaskMutation, finishTaskMutation, hasUnsavedTaskDraft, taskLeaveDecision, type TaskFormDraft } from '@/lib/task-draft';
 import { cn } from '@/lib/utils';
 import {
   Sheet,
@@ -120,16 +121,21 @@ export function TaskDrawer() {
     tasks,
     setTasks,
     user,
+    notificationSession,
   } = useAppStore();
 
   const [detailTask, setDetailTask] = React.useState<Task | null>(null);
   const [initialDetails, setInitialDetails] = React.useState<{ task: Task; state: 'loading' | 'ready' | 'error' } | null>(null);
   const [initialRetry, setInitialRetry] = React.useState(0);
   const [saving, setSaving] = React.useState(false);
+  const [closeConfirmationOpen, setCloseConfirmationOpen] = React.useState(false);
+  const [pendingSwitch, setPendingSwitch] = React.useState<Task | null>(null);
+  const [leaveDuringPending, setLeaveDuringPending] = React.useState(false);
   const [conflict, setConflict] = React.useState(false);
   const [conflictPreview, setConflictPreview] = React.useState<Task | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
   const formVersion = React.useRef<string | null>(null);
+  const formBaseline = React.useRef<TaskFormDraft | null>(null);
   const [checklistBusyId, setChecklistBusyId] = React.useState<string | null>(null);
   const [newChecklistItem, setNewChecklistItem] = React.useState('');
   const [addingChecklist, setAddingChecklist] = React.useState(false);
@@ -142,7 +148,7 @@ export function TaskDrawer() {
   const drawerGeneration = React.useRef(0);
   const initialDetailsPending = React.useRef(false);
   const formDirty = React.useRef(false);
-  const pendingMutations = React.useRef(0);
+  const pendingMutations = React.useRef(new Map<number, number>());
   const draftOwner = React.useRef('');
   const linkDraftRevision = React.useRef(0);
   const [newLinkTitle, setNewLinkTitle] = React.useState('');
@@ -174,14 +180,22 @@ export function TaskDrawer() {
 
   const hydrateForm = React.useCallback((nextTask: Task) => {
     formVersion.current = nextTask.updatedAt;
-    setTitle(nextTask.title || '');
-    setDescription(nextTask.description || '');
-    setStatus(nextTask.status || 'todo');
-    setPriority(nextTask.priority || 'medium');
-    setStoryPoints(String(nextTask.storyPoints || 1));
-    setAssigneeIds(getTaskAssigneeIds(nextTask));
-    setDueDate(getTaskDateKey(nextTask.dueDate) || '');
-    setReviewNotes(nextTask.reviewNotes || '');
+    const baseline: TaskFormDraft = {
+      title: nextTask.title || '', description: nextTask.description || '',
+      status: nextTask.status || 'todo', priority: nextTask.priority || 'medium',
+      storyPoints: String(nextTask.storyPoints || 1), assigneeIds: getTaskAssigneeIds(nextTask),
+      dueDate: getTaskDateKey(nextTask.dueDate) || '', reviewNotes: nextTask.reviewNotes || '',
+    };
+    formBaseline.current = baseline;
+    formDirty.current = false;
+    setTitle(baseline.title);
+    setDescription(baseline.description);
+    setStatus(baseline.status);
+    setPriority(baseline.priority);
+    setStoryPoints(baseline.storyPoints);
+    setAssigneeIds(baseline.assigneeIds);
+    setDueDate(baseline.dueDate);
+    setReviewNotes(baseline.reviewNotes);
   }, []);
 
   const replaceTask = React.useCallback((nextTask: Task) => {
@@ -193,20 +207,22 @@ export function TaskDrawer() {
   const isCurrentTask = React.useCallback(() => {
     const state = useAppStore.getState();
     return Boolean(state.taskDrawerOpen && state.selectedTask?.id === selectedTaskId
-      && state.user?.id === userId && state.user?.role === userRole);
-  }, [selectedTaskId, userId, userRole]);
+      && state.user?.id === userId && state.user?.role === userRole
+      && state.notificationSession === notificationSession);
+  }, [selectedTaskId, userId, userRole, notificationSession]);
 
   const beginMutation = React.useCallback(() => {
-    pendingMutations.current += 1;
+    const generation = drawerGeneration.current;
+    beginTaskMutation(pendingMutations.current, generation);
     refreshGeneration.current += 1;
-    return drawerGeneration.current;
+    return generation;
   }, []);
 
   const isCurrentMutation = React.useCallback((generation: number) =>
     generation === drawerGeneration.current && isCurrentTask(), [isCurrentTask]);
 
-  const endMutation = React.useCallback(() => {
-    pendingMutations.current = Math.max(0, pendingMutations.current - 1);
+  const endMutation = React.useCallback((generation: number) => {
+    finishTaskMutation(pendingMutations.current, generation);
   }, []);
 
   const handleAccessLost = React.useCallback(() => {
@@ -215,6 +231,13 @@ export function TaskDrawer() {
     setDetailTask(null);
     setInitialDetails(null);
     setCommentDraft('');
+    setNewChecklistItem('');
+    setNewLinkTitle('');
+    setNewLinkUrl('');
+    setNewLinkType('google_doc');
+    setCloseConfirmationOpen(false);
+    setPendingSwitch(null);
+    draftOwner.current = '';
     closeTaskDetail();
     toast.error('Công việc không còn khả dụng hoặc bạn không còn quyền truy cập.');
   }, [closeTaskDetail, isCurrentTask]);
@@ -238,25 +261,37 @@ export function TaskDrawer() {
     if (!taskDrawerOpen || !selectedTask) return;
 
     let active = true;
-    drawerGeneration.current += 1;
+    const drawerRun = ++drawerGeneration.current;
+    const pendingForRuns = pendingMutations.current;
     initialDetailsPending.current = true;
     formDirty.current = false;
     const generation = ++refreshGeneration.current;
-    const nextDraftOwner = `${userId}:${userRole}:${selectedTask.id}`;
+    const nextDraftOwner = `${notificationSession}:${userId}:${userRole}:${selectedTask.id}`;
     // Defer the optimistic form hydration. The task detail request remains the
     // source of truth while avoiding an unnecessary cascading render.
     queueMicrotask(() => {
       if (!active) return;
       setInitialDetails({ task: selectedTask, state: 'loading' });
       setSaving(false);
+      setChecklistBusyId(null);
+      setAddingChecklist(false);
+      setSendingComment(false);
+      setAddingLink(false);
       setConflict(false);
       setConflictPreview(null);
       setPreviewLoading(false);
       setCollaborationOffline(false);
       setManualRefreshLoading(false);
+      setCloseConfirmationOpen(false);
+      setPendingSwitch(null);
       if (draftOwner.current !== nextDraftOwner) {
         draftOwner.current = nextDraftOwner;
         setCommentDraft('');
+        setNewChecklistItem('');
+        setNewLinkTitle('');
+        setNewLinkUrl('');
+        setNewLinkType('google_doc');
+        linkDraftRevision.current += 1;
       }
       setDetailTask(selectedTask);
       hydrateForm(selectedTask);
@@ -285,8 +320,13 @@ export function TaskDrawer() {
       })
       .finally(() => { if (active) initialDetailsPending.current = false; });
 
-    return () => { active = false; refreshGeneration.current += 1; drawerGeneration.current += 1; };
-  }, [handleAccessLost, hydrateForm, initialRetry, isCurrentTask, selectedTask, taskDrawerOpen, userId, userRole]);
+    return () => {
+      active = false;
+      pendingForRuns.delete(drawerRun);
+      refreshGeneration.current += 1;
+      drawerGeneration.current += 1;
+    };
+  }, [handleAccessLost, hydrateForm, initialRetry, isCurrentTask, notificationSession, selectedTask, taskDrawerOpen, userId, userRole]);
 
   React.useEffect(() => {
     if (!taskDrawerOpen || !selectedTaskId || !userId) return;
@@ -295,7 +335,7 @@ export function TaskDrawer() {
     let controller: AbortController | null = null;
     const refresh = async (manual = false) => {
       if (!active || document.visibilityState !== 'visible') return;
-      if (initialDetailsPending.current || pendingMutations.current || controller) {
+      if (initialDetailsPending.current || pendingMutations.current.get(drawerGeneration.current) || controller) {
         if (manual) toast.info('Đang xử lý thay đổi. Vui lòng thử cập nhật lại sau giây lát.');
         return;
       }
@@ -377,6 +417,58 @@ export function TaskDrawer() {
     return () => { active = false; };
   }, [canManage, task?.projectId]);
 
+  const isDraftUnsaved = React.useCallback(() => hasUnsavedTaskDraft(
+    formBaseline.current,
+    { title, description, status, priority, storyPoints, assigneeIds, dueDate, reviewNotes },
+    { comment: commentDraft, checklist: newChecklistItem, linkTitle: newLinkTitle, linkUrl: newLinkUrl },
+  ), [title, description, status, priority, storyPoints, assigneeIds, dueDate, reviewNotes, commentDraft, newChecklistItem, newLinkTitle, newLinkUrl]);
+
+  const requestLeave = React.useCallback((nextTask: Task | null) => {
+    if (!isCurrentTask()) return true;
+    const decision = taskLeaveDecision(pendingMutations.current.get(drawerGeneration.current) || 0, isDraftUnsaved());
+    if (decision === 'allow') return true;
+    setLeaveDuringPending(decision === 'wait');
+    setPendingSwitch(nextTask);
+    setCloseConfirmationOpen(true);
+    return false;
+  }, [isCurrentTask, isDraftUnsaved]);
+
+  React.useEffect(() => {
+    if (!taskDrawerOpen || !selectedTaskId || !userId) return;
+    return registerTaskDetailGuard((nextTask) => requestLeave(nextTask));
+  }, [taskDrawerOpen, selectedTaskId, userId, requestLeave]);
+
+  React.useEffect(() => {
+    if (!taskDrawerOpen || !selectedTaskId || !userId) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (isCurrentTask() && (isDraftUnsaved() || (pendingMutations.current.get(drawerGeneration.current) || 0) > 0)) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [taskDrawerOpen, selectedTaskId, userId, isCurrentTask, isDraftUnsaved]);
+
+  const finishLeave = React.useCallback((nextTask: Task | null) => {
+    if (!isCurrentTask()) return;
+    setCloseConfirmationOpen(false);
+    setPendingSwitch(null);
+    setInitialDetails(null);
+    setCommentDraft('');
+    setNewChecklistItem('');
+    setNewLinkTitle('');
+    setNewLinkUrl('');
+    setNewLinkType('google_doc');
+    draftOwner.current = '';
+    if (nextTask) {
+      // The guard has already obtained explicit consent for this switch.
+      useAppStore.setState({ selectedTask: nextTask, taskDrawerOpen: true });
+    } else {
+      closeTaskDetail();
+    }
+  }, [closeTaskDetail, isCurrentTask]);
+
   if (!selectedTask || !task) return null;
 
   // Keep a stable, non-null ID for event handlers. React's closure analysis
@@ -436,7 +528,7 @@ export function TaskDrawer() {
       if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể lưu thay đổi công việc'));
       return null;
     } finally {
-      endMutation();
+      endMutation(mutationGeneration);
       if (isCurrentMutation(mutationGeneration)) setSaving(false);
     }
   }
@@ -466,7 +558,7 @@ export function TaskDrawer() {
     } catch (error) {
       if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể tải phiên bản mới'));
     } finally {
-      endMutation();
+      endMutation(mutationGeneration);
       if (isCurrentMutation(mutationGeneration)) {
         if (apply) setSaving(false);
         else setPreviewLoading(false);
@@ -493,6 +585,15 @@ export function TaskDrawer() {
   }
 
   async function handleReviewDecision(approved: boolean) {
+    // A review decision only persists status and review notes. Do not replace
+    // unrelated unsaved form changes with the server response.
+    const baseline = formBaseline.current;
+    if (baseline && hasUnsavedTaskDraft(baseline,
+      { title, description, status, priority, storyPoints, assigneeIds, dueDate, reviewNotes: baseline.reviewNotes },
+      { comment: '', checklist: '', linkTitle: '', linkUrl: '' })) {
+      toast.info('Vui lòng lưu các thay đổi thông tin công việc trước khi duyệt.');
+      return;
+    }
     await updateTask(
       { status: approved ? 'done' : 'in_progress', reviewNotes: reviewNotes.trim() || null },
       approved ? 'Đã duyệt hoàn thành công việc' : 'Đã gửi lại công việc để cập nhật'
@@ -513,8 +614,8 @@ export function TaskDrawer() {
     } catch (error) {
       if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể cập nhật checklist'));
     } finally {
-      endMutation();
-      setChecklistBusyId(null);
+      endMutation(mutationGeneration);
+      if (isCurrentMutation(mutationGeneration)) setChecklistBusyId(null);
     }
   }
 
@@ -535,8 +636,8 @@ export function TaskDrawer() {
     } catch (error) {
       if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể thêm checklist'));
     } finally {
-      endMutation();
-      setAddingChecklist(false);
+      endMutation(mutationGeneration);
+      if (isCurrentMutation(mutationGeneration)) setAddingChecklist(false);
     }
   }
 
@@ -554,8 +655,8 @@ export function TaskDrawer() {
     } catch (error) {
       if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể xóa checklist'));
     } finally {
-      endMutation();
-      setChecklistBusyId(null);
+      endMutation(mutationGeneration);
+      if (isCurrentMutation(mutationGeneration)) setChecklistBusyId(null);
     }
   }
 
@@ -576,8 +677,8 @@ export function TaskDrawer() {
     } catch (error) {
       if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể gửi bình luận'));
     } finally {
-      endMutation();
-      setSendingComment(false);
+      endMutation(mutationGeneration);
+      if (isCurrentMutation(mutationGeneration)) setSendingComment(false);
     }
   }
 
@@ -606,8 +707,8 @@ export function TaskDrawer() {
     } catch (error) {
       if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể thêm liên kết'));
     } finally {
-      endMutation();
-      setAddingLink(false);
+      endMutation(mutationGeneration);
+      if (isCurrentMutation(mutationGeneration)) setAddingLink(false);
     }
   }
 
@@ -623,7 +724,7 @@ export function TaskDrawer() {
     } catch (error) {
       if (isCurrentMutation(mutationGeneration)) toast.error(getErrorMessage(error, 'Không thể xóa liên kết'));
     } finally {
-      endMutation();
+      endMutation(mutationGeneration);
     }
   }
 
@@ -638,7 +739,7 @@ export function TaskDrawer() {
   const currentStatus = statusConfig[status];
 
   return (
-    <Sheet open={taskDrawerOpen} onOpenChange={(open) => { if (!open) { setInitialDetails(null); closeTaskDetail(); } }}>
+    <Sheet open={taskDrawerOpen} onOpenChange={(open) => { if (!open && requestLeave(null)) finishLeave(null); }}>
       <SheetContent className="flex w-full flex-col gap-0 overflow-hidden border-l border-border/60 bg-background p-0 shadow-2xl sm:max-w-2xl">
         <SheetHeader className="border-b border-border/50 bg-muted/15 px-4 py-4 text-left sm:px-6">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -886,8 +987,20 @@ export function TaskDrawer() {
 
         <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
           <p className="hidden text-xs text-muted-foreground sm:block">{canManage ? 'Thay đổi được lưu an toàn và thông báo đến người liên quan.' : 'Cập nhật tiến độ để Leader theo dõi công việc.'}</p>
-          <div className="ml-auto flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => { setInitialDetails(null); closeTaskDetail(); }}>Đóng</Button>{canContribute && <Button size="sm" className="gap-1.5" onClick={() => void handleSave()} disabled={!canEditTask || conflict || (canManage && !title.trim())}>{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{isMember && status === 'review' ? 'Gửi Leader duyệt' : 'Lưu thay đổi'}</Button>}</div>
+          <div className="ml-auto flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => { if (requestLeave(null)) finishLeave(null); }}>Đóng</Button>{canContribute && <Button size="sm" className="gap-1.5" onClick={() => void handleSave()} disabled={!canEditTask || conflict || (canManage && !title.trim())}>{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{isMember && status === 'review' ? 'Gửi Leader duyệt' : 'Lưu thay đổi'}</Button>}</div>
         </div>
+        <AlertDialog open={closeConfirmationOpen} onOpenChange={setCloseConfirmationOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{leaveDuringPending ? 'Rời khi thao tác đang xử lý?' : 'Bỏ nội dung chưa lưu?'}</AlertDialogTitle>
+              <AlertDialogDescription>{leaveDuringPending ? 'Một thao tác vẫn đang xử lý và có thể hoàn tất trên máy chủ sau khi bạn rời đi. Nội dung chưa lưu hoặc chưa gửi sẽ bị bỏ.' : 'Các thay đổi và nội dung đang soạn chưa được lưu hoặc gửi sẽ bị bỏ. Bạn có thể tiếp tục chỉnh sửa trước khi rời công việc.'}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Tiếp tục chỉnh sửa</AlertDialogCancel>
+              <AlertDialogAction onClick={() => finishLeave(pendingSwitch)}>{leaveDuringPending ? (pendingSwitch ? 'Vẫn chuyển công việc' : 'Vẫn đóng') : (pendingSwitch ? 'Bỏ nội dung và chuyển công việc' : 'Bỏ nội dung và đóng')}</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SheetContent>
     </Sheet>
   );

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Task } from '@/types';
+import { useMemo, type ReactNode } from 'react';
+import type { Project, Task, TeamMember } from '@/types';
 import { useAppStore } from '@/stores/app-store';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -140,14 +140,15 @@ function TaskRow({
   );
 }
 
-export function LeaderDashboardView() {
-  const { user, projects, tasks, members, setCurrentView, setSelectedProjectId, openTaskDetail } = useAppStore();
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => setIsInitialLoad(false), 450);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
+export function LeaderDashboardView({ loading, failedResources, onRetry, tasks, projects, members }: {
+  loading: boolean;
+  failedResources: string[];
+  onRetry: () => void;
+  tasks: Task[];
+  projects: Project[];
+  members: TeamMember[];
+}) {
+  const { user, setCurrentView, setSelectedProjectId, openTaskDetail } = useAppStore();
 
   const activeProjects = useMemo(() => projects.filter((project) => project.status === 'active'), [projects]);
   const openTasks = useMemo(() => tasks.filter((task) => task.status !== 'done'), [tasks]);
@@ -198,8 +199,6 @@ export function LeaderDashboardView() {
     [activeProjects, tasks]
   );
 
-  const hasWorkspaceData = projects.length > 0 || tasks.length > 0 || members.length > 0;
-  const showLoadingState = isInitialLoad && !hasWorkspaceData;
   const todayLabel = format(new Date(), "EEEE, dd 'tháng' MM", { locale: vi });
   const metrics = [
     { label: 'Dự án hoạt động', value: activeProjects.length, note: 'Dự án đang điều phối', icon: FolderKanban, accent: 'blue' },
@@ -208,7 +207,14 @@ export function LeaderDashboardView() {
     { label: 'Mốc cần lưu ý', value: attentionTasks.length, note: overdueTasks.length ? `${overdueTasks.length} việc đã quá hạn` : 'Không có việc quá hạn', icon: Clock3, accent: 'rose' },
   ] as const;
 
-  if (showLoadingState) return <DashboardSkeleton />;
+  if (loading) return <DashboardSkeleton />;
+  if (failedResources.length) return (
+    <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+      <h1 className="text-base font-semibold">Chưa thể tải tổng quan</h1>
+      <p className="mt-2 text-sm">Không thể tải dữ liệu {failedResources.join(', ')}. Hãy kiểm tra kết nối và thử lại để xem số liệu đầy đủ.</p>
+      <Button type="button" variant="outline" size="sm" className="mt-4" onClick={onRetry}>Thử tải lại</Button>
+    </div>
+  );
 
   return (
     <div className="space-y-5 pb-2 sm:space-y-6">
@@ -250,6 +256,9 @@ export function LeaderDashboardView() {
               </div>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={onRetry} className="h-9 border-white/35 bg-white/10 px-3 text-xs font-semibold text-white hover:bg-white/20 hover:text-white">
+                Làm mới
+              </Button>
               <Button variant="secondary" size="sm" onClick={() => setCurrentView('projects')} className="h-9 bg-white px-3 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-50">
                 <Layers className="h-3.5 w-3.5" aria-hidden="true" />
                 Dự án

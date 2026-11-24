@@ -54,11 +54,18 @@ export default function HomePage() {
   const {
     currentView, sidebarOpen, setSidebarOpen, setCurrentView,
     setTasks, setProjects, setMembers, setUser, setSelectedProjectId,
-    user, notifications, setNotifications, unreadCount, setUnreadCount, setPolls
+    user, notifications, setNotifications, unreadCount, setUnreadCount, setPolls, notificationSession, taskDrawerOpen
   } = useAppStore();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [leaderRetry, setLeaderRetry] = useState(0);
+  const [leaderLoad, setLeaderLoad] = useState<{
+    session: number;
+    attempt: number;
+    status: Record<'tasks' | 'projects' | 'members', 'loading' | 'ready' | 'error'>;
+    data: { tasks: Task[]; projects: Project[]; members: TeamMember[] };
+  } | null>(null);
   const handledProjectInvite = useRef<string | null>(null);
   const activeUserRef = useRef<User | null>(null);
   const mobileDrawerRef = useRef<HTMLDivElement>(null);
@@ -310,9 +317,12 @@ export default function HomePage() {
     const abortController = new AbortController();
     const requestUserId = user.id;
     const requestRole = user.role;
+    const initial = useAppStore.getState();
+    const requestSession = initial.notificationSession;
     const stillCurrent = () => {
-      const current = useAppStore.getState().user;
-      return !abortController.signal.aborted && current?.id === requestUserId && current.role === requestRole;
+      const state = useAppStore.getState();
+      return !abortController.signal.aborted && state.user?.id === requestUserId && state.user.role === requestRole
+        && state.notificationSession === requestSession;
     };
     if (user.role === 'admin') {
       setMembers([]);
@@ -322,24 +332,66 @@ export default function HomePage() {
     } else {
       fetch('/api/members', { signal: abortController.signal })
         .then((response) => readApiJson<TeamMember[]>(response, 'Không thể tải danh sách thành viên'))
-        .then((data) => { if (stillCurrent()) setMembers(data); })
+        .then((data) => { if (stillCurrent() && useAppStore.getState().members === initial.members) setMembers(data); })
         .catch(() => {});
       fetch('/api/tasks', { signal: abortController.signal })
         .then((response) => readApiJson<Task[]>(response, 'Không thể tải danh sách công việc'))
-        .then((data) => { if (stillCurrent()) setTasks(data); })
+        .then((data) => { if (stillCurrent() && useAppStore.getState().tasks === initial.tasks) setTasks(data); })
         .catch(() => {});
       fetch('/api/projects', { signal: abortController.signal })
         .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
-        .then((data) => { if (stillCurrent()) setProjects(data); })
+        .then((data) => { if (stillCurrent() && useAppStore.getState().projects === initial.projects) setProjects(data); })
         .catch(() => {});
       fetch('/api/polls', { signal: abortController.signal })
         .then((response) => readApiJson<Poll[]>(response, 'Không thể tải danh sách bình chọn'))
-        .then((data) => { if (stillCurrent()) setPolls(data); })
+        .then((data) => { if (stillCurrent() && useAppStore.getState().polls === initial.polls) setPolls(data); })
         .catch(() => {});
     }
     trackActivity('login');
     return () => abortController.abort();
   }, [setTasks, setProjects, setMembers, setPolls, user, trackActivity]);
+
+  // The dashboard needs to distinguish an empty workspace from failed or
+  // unfinished requests. Keep the three loads independent so a retry can
+  // recover from partial network failures without inventing zero counts.
+  useEffect(() => {
+    if (!user || user.role !== 'leader' || currentView !== 'leader-dashboard' || taskDrawerOpen) return;
+    const userId = user.id;
+    const session = notificationSession;
+    const attempt = leaderRetry;
+    const controller = new AbortController();
+    const current = () => {
+      const state = useAppStore.getState();
+      return !controller.signal.aborted && state.user?.id === userId && state.user.role === 'leader'
+        && state.notificationSession === session && state.currentView === 'leader-dashboard' && !state.taskDrawerOpen;
+    };
+    queueMicrotask(() => {
+      if (current()) setLeaderLoad({ session, attempt, status: { tasks: 'loading', projects: 'loading', members: 'loading' }, data: { tasks: [], projects: [], members: [] } });
+    });
+    const load = async (resource: 'tasks' | 'projects' | 'members') => {
+      let status: 'ready' | 'error' = 'error';
+      try {
+        const response = await fetch(`/api/${resource}`, { cache: 'no-store', signal: controller.signal });
+        const data = await readApiJson<unknown>(response, 'Không thể tải dữ liệu tổng quan');
+        if (!Array.isArray(data)) throw new Error('Dữ liệu tổng quan không hợp lệ');
+        if (!current()) return;
+        // Keep an unfiltered dashboard snapshot separate from board filters.
+        setLeaderLoad((previous) => previous?.session === session && previous.attempt === attempt
+          ? { ...previous, data: { ...previous.data, [resource]: data } }
+          : previous);
+        status = 'ready';
+      } catch {
+        if (!current()) return;
+      }
+      if (current()) setLeaderLoad((previous) => previous?.session === session && previous.attempt === attempt
+        ? { ...previous, status: { ...previous.status, [resource]: status } }
+        : previous);
+    };
+    void load('tasks');
+    void load('projects');
+    void load('members');
+    return () => controller.abort();
+  }, [user?.id, user?.role, notificationSession, leaderRetry, currentView, taskDrawerOpen]);
 
   useEffect(() => {
     const userId = user?.id;
@@ -415,15 +467,22 @@ export default function HomePage() {
       }
     }
     if (isLeader) {
+      const currentLoad = leaderLoad?.session === notificationSession && leaderLoad.attempt === leaderRetry ? leaderLoad : null;
+      const labels = { tasks: 'công việc', projects: 'dự án', members: 'thành viên' } as const;
+      const errors = currentLoad
+        ? (Object.keys(labels) as Array<keyof typeof labels>).filter((key) => currentLoad.status[key] === 'error').map((key) => labels[key])
+        : [];
+      const leaderLoading = !currentLoad || (!errors.length && Object.values(currentLoad.status).includes('loading'));
+      const dashboard = <LeaderDashboardView loading={leaderLoading} failedResources={errors} onRetry={() => setLeaderRetry((value) => value + 1)} tasks={currentLoad?.data.tasks || []} projects={currentLoad?.data.projects || []} members={currentLoad?.data.members || []} />;
       switch (currentView) {
-        case 'leader-dashboard': return <LeaderDashboardView />;
+        case 'leader-dashboard': return dashboard;
         case 'projects': return <ProjectsView />;
         case 'board': return <BoardView />;
         case 'members': return <MembersView />;
         case 'polls': return <AdminPollsView />;
         case 'leader-time': return <LeaderTimeView />;
         case 'notifications': return <NotificationsView />;
-        default: return <LeaderDashboardView />;
+        default: return dashboard;
       }
     }
     switch (currentView) {
