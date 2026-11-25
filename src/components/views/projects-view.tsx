@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { Project } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -54,7 +54,7 @@ const projectColors = [
 ];
 
 export function ProjectsView() {
-  const { projects, setProjects, setCurrentView, setSelectedProjectId } = useAppStore();
+  const { user, notificationSession, projects, setProjects, setCurrentView, setSelectedProjectId } = useAppStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [formName, setFormName] = useState('');
@@ -62,18 +62,66 @@ export function ProjectsView() {
   const [formColor, setFormColor] = useState('#10b981');
   const [showArchived, setShowArchived] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const mutationPending = useRef(false);
+  const mounted = useRef(false);
+  const lifecycle = useRef(0);
+  const requestSequence = useRef(0);
+  const appliedRequest = useRef(0);
+  const lastLoaded = useRef<Project[] | null>(null);
+  const userId = user?.id;
+  const userRole = user?.role;
 
-  async function fetchProjects() {
-    const res = await fetch('/api/projects');
-    const data = await readApiJson<Project[]>(res, 'Không thể tải danh sách dự án');
-    setProjects(data);
-  }
+  const isCurrent = useCallback(() => {
+    const state = useAppStore.getState();
+    return mounted.current && state.user?.id === userId && state.user?.role === userRole
+      && state.notificationSession === notificationSession;
+  }, [userId, userRole, notificationSession]);
+
+  const fetchProjects = useCallback(async () => {
+    if (!isCurrent()) return;
+    const generation = lifecycle.current;
+    const request = ++requestSequence.current;
+    const previous = useAppStore.getState().projects;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/projects', { cache: 'no-store' });
+      const data = await readApiJson<Project[]>(res, 'Không thể tải danh sách dự án');
+      if (!Array.isArray(data)) throw new Error('Dữ liệu dự án không hợp lệ');
+      if (!isCurrent() || generation !== lifecycle.current || request <= appliedRequest.current) return;
+      appliedRequest.current = request;
+      const current = useAppStore.getState().projects;
+      if (current === previous || current === lastLoaded.current) {
+        setProjects(data);
+        lastLoaded.current = useAppStore.getState().projects;
+      }
+      setLoadError(false);
+    } catch {
+      if (isCurrent() && generation === lifecycle.current && request >= appliedRequest.current) setLoadError(true);
+    } finally {
+      if (isCurrent() && generation === lifecycle.current && request === requestSequence.current) setLoading(false);
+    }
+  }, [isCurrent, setProjects]);
 
   useEffect(() => {
-    void fetchProjects().catch((error) => {
-      toast.error(error instanceof Error ? error.message : 'Không thể tải danh sách dự án');
+    mounted.current = true;
+    const generation = ++lifecycle.current;
+    requestSequence.current = 0;
+    appliedRequest.current = 0;
+    lastLoaded.current = null;
+    queueMicrotask(() => {
+      if (!isCurrent() || generation !== lifecycle.current) return;
+      setDialogOpen(false);
+      setEditingProject(null);
+      setSaving(false);
+      mutationPending.current = false;
+      setLoadError(false);
+      void fetchProjects();
     });
-  }, [setProjects]);
+    return () => { mounted.current = false; lifecycle.current += 1; };
+  }, [fetchProjects, isCurrent]);
 
   function openCreateDialog() {
     setEditingProject(null);
@@ -92,11 +140,18 @@ export function ProjectsView() {
   }
 
   async function handleSave() {
+    if (mutationPending.current || !isCurrent()) return;
+    const generation = lifecycle.current;
+    const current = () => isCurrent() && generation === lifecycle.current;
     const projectName = normalizeProjectName(formName);
     if (!projectName) {
       toast.error('Vui lòng nhập tên dự án');
       return;
     }
+    mutationPending.current = true;
+    setSaving(true);
+    requestSequence.current += 1;
+    appliedRequest.current = requestSequence.current;
     try {
       if (editingProject) {
         const response = await fetch(`/api/projects/${editingProject.id}`, {
@@ -105,7 +160,7 @@ export function ProjectsView() {
           body: JSON.stringify({ name: projectName, description: formDesc || null, color: formColor }),
         });
         await ensureApiSuccess(response, 'Không thể cập nhật dự án');
-        toast.success('Đã cập nhật dự án');
+        if (current()) toast.success('Đã cập nhật dự án');
       } else {
         const response = await fetch('/api/projects', {
           method: 'POST',
@@ -113,27 +168,49 @@ export function ProjectsView() {
           body: JSON.stringify({ name: projectName, description: formDesc || null, color: formColor }),
         });
         await ensureApiSuccess(response, 'Không thể tạo dự án');
-        toast.success('Đã tạo dự án mới');
+        if (current()) toast.success('Đã tạo dự án mới');
       }
+      if (!current()) return;
+      appliedRequest.current = ++requestSequence.current;
       setDialogOpen(false);
       await fetchProjects();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+      if (current()) toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+    } finally {
+      if (current()) { mutationPending.current = false; setSaving(false); }
     }
   }
 
   async function handleDelete(id: string) {
+    if (mutationPending.current || !isCurrent()) return;
+    const generation = lifecycle.current;
+    const current = () => isCurrent() && generation === lifecycle.current;
+    mutationPending.current = true;
+    setSaving(true);
+    requestSequence.current += 1;
+    appliedRequest.current = requestSequence.current;
     try {
       const response = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
       await ensureApiSuccess(response, 'Không thể xóa dự án');
+      if (!current()) return;
       toast.success('Đã xóa dự án');
+      appliedRequest.current = ++requestSequence.current;
       await fetchProjects();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+      if (current()) toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+    } finally {
+      if (current()) { mutationPending.current = false; setSaving(false); }
     }
   }
 
   async function handleToggleArchive(project: Project) {
+    if (mutationPending.current || !isCurrent()) return;
+    const generation = lifecycle.current;
+    const current = () => isCurrent() && generation === lifecycle.current;
+    mutationPending.current = true;
+    setSaving(true);
+    requestSequence.current += 1;
+    appliedRequest.current = requestSequence.current;
     const newStatus = project.status === 'active' ? 'archived' : 'active';
     try {
       const response = await fetch(`/api/projects/${project.id}`, {
@@ -142,10 +219,14 @@ export function ProjectsView() {
         body: JSON.stringify({ status: newStatus }),
       });
       await ensureApiSuccess(response, 'Không thể cập nhật trạng thái');
+      if (!current()) return;
       toast.success(newStatus === 'archived' ? 'Đã lưu trữ dự án' : 'Đã kích hoạt dự án');
+      appliedRequest.current = ++requestSequence.current;
       await fetchProjects();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+      if (current()) toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+    } finally {
+      if (current()) { mutationPending.current = false; setSaving(false); }
     }
   }
 
@@ -182,6 +263,7 @@ export function ProjectsView() {
         <div className="flex items-center gap-2">
           <Button
             onClick={openCreateDialog}
+            disabled={saving}
             className="h-8 px-3 text-xs font-semibold gap-1.5 shadow-xs"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -189,6 +271,13 @@ export function ProjectsView() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          <span>Không thể tải danh sách dự án mới nhất. Dữ liệu đã tải trước đó vẫn được giữ lại.</span>
+          <Button variant="outline" size="sm" onClick={() => void fetchProjects()} disabled={loading}>Thử lại</Button>
+        </div>
+      )}
 
       {/* Toolbar: Search & Tab filters */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -241,7 +330,9 @@ export function ProjectsView() {
       </div>
 
       {/* Projects Grid */}
-      {filteredProjects.length === 0 ? (
+      {loading && projects.length === 0 ? (
+        <p role="status" className="py-12 text-center text-sm text-muted-foreground">Đang tải danh sách dự án...</p>
+      ) : loadError && projects.length === 0 ? null : filteredProjects.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-dashed border-border/70 bg-card/40">
           <FolderKanban className="h-10 w-10 text-muted-foreground/40 mb-3" />
           <h3 className="text-sm font-semibold text-foreground">
@@ -301,6 +392,7 @@ export function ProjectsView() {
                         size="icon"
                         className="h-7 w-7 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
                         onClick={() => openEditDialog(project)}
+                        disabled={saving}
                         title="Chỉnh sửa dự án"
                         aria-label={`Chỉnh sửa dự án ${projectName}`}
                       >
@@ -314,6 +406,7 @@ export function ProjectsView() {
                             size="icon"
                             className="h-7 w-7 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-600"
                             title="Xóa dự án"
+                            disabled={saving}
                             aria-label={`Xóa dự án ${projectName}`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -363,6 +456,7 @@ export function ProjectsView() {
                         size="sm"
                         className="text-[11px] h-7 px-2 text-muted-foreground hover:text-foreground"
                         onClick={() => handleToggleArchive(project)}
+                        disabled={saving}
                       >
                         {project.status === 'active' ? (
                           <><Archive className="mr-1 h-3 w-3" />Lưu trữ</>
@@ -393,7 +487,7 @@ export function ProjectsView() {
       )}
 
       {/* Create / Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!saving) setDialogOpen(open); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -405,6 +499,7 @@ export function ProjectsView() {
               <Label>Tên dự án *</Label>
               <Input
                 value={formName}
+                disabled={saving}
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="VD: Thiết kế Website Landing Page..."
               />
@@ -413,6 +508,7 @@ export function ProjectsView() {
               <Label>Mô tả mục tiêu</Label>
               <Textarea
                 value={formDesc}
+                disabled={saving}
                 onChange={(e) => setFormDesc(e.target.value)}
                 placeholder="Mô tả phạm vi và mục tiêu của dự án..."
                 rows={3}
@@ -425,6 +521,7 @@ export function ProjectsView() {
                   <button
                     key={color}
                     type="button"
+                    disabled={saving}
                     className={cn(
                       'h-7 w-7 rounded-full transition-all shadow-xs',
                       formColor === color
@@ -440,9 +537,9 @@ export function ProjectsView() {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Hủy</Button>
+              <Button variant="outline" disabled={saving}>Hủy</Button>
             </DialogClose>
-            <Button onClick={handleSave} disabled={!formName.trim()}>
+            <Button onClick={handleSave} disabled={saving || !formName.trim()}>
               {editingProject ? 'Lưu thay đổi' : 'Tạo dự án'}
             </Button>
           </DialogFooter>

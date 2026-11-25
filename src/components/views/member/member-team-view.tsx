@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useReducer } from 'react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import {
   Select,
@@ -21,6 +22,7 @@ import {
 import { CalendarDays, CheckCircle2, ClipboardList, FolderKanban, Users } from 'lucide-react';
 import { readApiJson } from '@/lib/client-api';
 import { formatTaskDate } from '@/lib/task-deadline';
+import { summarizeTeamTasks } from '@/lib/project-team-summary';
 import { cn } from '@/lib/utils';
 import { getProjectDisplayName } from '@/lib/project-name';
 import type { Project, Task } from '@/types';
@@ -56,6 +58,7 @@ type ProjectTeamOverview = {
 };
 
 type OverviewState = {
+  key: string;
   overview: ProjectTeamOverview | null;
   loading: boolean;
   error: string;
@@ -63,11 +66,12 @@ type OverviewState = {
 
 type OverviewAction =
   | { type: 'reset' }
-  | { type: 'loading' }
-  | { type: 'success'; overview: ProjectTeamOverview }
-  | { type: 'error'; message: string };
+  | { type: 'loading'; key: string }
+  | { type: 'success'; key: string; overview: ProjectTeamOverview }
+  | { type: 'error'; key: string; message: string };
 
 const initialOverviewState: OverviewState = {
+  key: '',
   overview: null,
   loading: false,
   error: '',
@@ -78,11 +82,11 @@ function overviewReducer(state: OverviewState, action: OverviewAction): Overview
     case 'reset':
       return initialOverviewState;
     case 'loading':
-      return { ...state, loading: true, error: '', overview: null };
+      return { key: action.key, loading: true, error: '', overview: null };
     case 'success':
-      return { overview: action.overview, loading: false, error: '' };
+      return state.key === action.key ? { key: action.key, overview: action.overview, loading: false, error: '' } : state;
     case 'error':
-      return { overview: null, loading: false, error: action.message };
+      return state.key === action.key ? { key: action.key, overview: null, loading: false, error: action.message } : state;
   }
 }
 
@@ -99,15 +103,38 @@ function formatDueDate(value: string | null) {
 }
 
 export function MemberTeamView() {
-  const { projects, setProjects, selectedProjectId, setSelectedProjectId } = useAppStore();
+  const { user, notificationSession, projects, setProjects, selectedProjectId, setSelectedProjectId } = useAppStore();
   const [overviewState, dispatchOverview] = useReducer(overviewReducer, initialOverviewState);
+  const [projectsState, setProjectsState] = useState<{ session: number; loading: boolean; error: boolean }>({ session: notificationSession, loading: true, error: false });
+  const [projectsRetry, setProjectsRetry] = useState(0);
+  const [overviewRetry, setOverviewRetry] = useState(0);
+  const projectLoading = projectsState.session !== notificationSession || projectsState.loading;
+  const projectError = projectsState.session === notificationSession && projectsState.error;
 
   useEffect(() => {
-    fetch('/api/projects', { cache: 'no-store' })
+    const userId = user?.id;
+    const role = user?.role;
+    if (!userId || !role) return;
+    const session = notificationSession;
+    const previous = useAppStore.getState().projects;
+    const controller = new AbortController();
+    const current = () => {
+      const state = useAppStore.getState();
+      return !controller.signal.aborted && state.notificationSession === session
+        && state.user?.id === userId && state.user?.role === role;
+    };
+    queueMicrotask(() => { if (current()) setProjectsState({ session, loading: true, error: false }); });
+    fetch('/api/projects', { cache: 'no-store', signal: controller.signal })
       .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
-      .then(setProjects)
-      .catch(() => {});
-  }, [setProjects]);
+      .then((data) => {
+        if (!Array.isArray(data)) throw new Error('Dữ liệu dự án không hợp lệ');
+        if (!current()) return;
+        if (useAppStore.getState().projects === previous) setProjects(data);
+        setProjectsState({ session, loading: false, error: false });
+      })
+      .catch(() => { if (current()) setProjectsState({ session, loading: false, error: true }); });
+    return () => controller.abort();
+  }, [user?.id, user?.role, notificationSession, projectsRetry, setProjects]);
 
   const activeProjects = useMemo(
     () => projects.filter((project) => project.status === 'active'),
@@ -128,40 +155,44 @@ export function MemberTeamView() {
       return;
     }
 
-    let cancelled = false;
-    dispatchOverview({ type: 'loading' });
+    const userId = user?.id;
+    const role = user?.role;
+    if (!userId || !role) return;
+    const session = notificationSession;
+    const key = `${session}:${projectId}`;
+    const controller = new AbortController();
+    const current = () => {
+      const state = useAppStore.getState();
+      return !controller.signal.aborted && state.notificationSession === session
+        && state.user?.id === userId && state.user?.role === role;
+    };
+    dispatchOverview({ type: 'loading', key });
 
-    fetch(`/api/projects/${encodeURIComponent(projectId)}/team-progress`, { cache: 'no-store' })
+    fetch(`/api/projects/${encodeURIComponent(projectId)}/team-progress`, { cache: 'no-store', signal: controller.signal })
       .then((response) => readApiJson<ProjectTeamOverview>(response, 'Không thể tải nhóm dự án'))
       .then((data) => {
-        if (!cancelled) dispatchOverview({ type: 'success', overview: data });
+        if (current()) dispatchOverview({ type: 'success', key, overview: data });
       })
       .catch((fetchError: unknown) => {
-        if (!cancelled) {
+        if (current()) {
           dispatchOverview({
             type: 'error',
+            key,
             message: fetchError instanceof Error ? fetchError.message : 'Không thể tải nhóm dự án',
           });
         }
       });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
+    return () => controller.abort();
+  }, [projectId, user?.id, user?.role, notificationSession, overviewRetry]);
 
-  const { overview, loading, error } = overviewState;
+  const currentKey = `${notificationSession}:${projectId}`;
+  const visibleOverview = overviewState.key === currentKey ? overviewState : { ...initialOverviewState, loading: Boolean(projectId) };
+  const { overview, loading, error } = visibleOverview;
 
   const summary = useMemo(() => {
     const members = overview?.members || [];
-    const total = members.reduce((sum, member) => sum + member.taskSummary.total, 0);
-    const done = members.reduce((sum, member) => sum + member.taskSummary.done, 0);
-    return {
-      memberCount: members.length,
-      total,
-      done,
-      completionRate: total > 0 ? Math.round((done / total) * 100) : 0,
-    };
+    return { memberCount: members.length, ...summarizeTeamTasks(members) };
   }, [overview]);
 
   function handleProjectChange(id: string) {
@@ -196,7 +227,15 @@ export function MemberTeamView() {
         )}
       </div>
 
-      {activeProjects.length === 0 ? (
+      {projectError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          <span>Không thể tải danh sách dự án mới nhất. Dữ liệu đã tải trước đó vẫn được giữ lại.</span>
+          <Button variant="outline" size="sm" onClick={() => setProjectsRetry((value) => value + 1)} disabled={projectLoading}>Thử lại</Button>
+        </div>
+      )}
+      {projectLoading && activeProjects.length === 0 ? (
+        <p role="status" className="py-12 text-center text-sm text-muted-foreground">Đang tải danh sách dự án...</p>
+      ) : projectError && activeProjects.length === 0 ? null : activeProjects.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <FolderKanban className="mb-4 h-12 w-12 text-muted-foreground/40" />
@@ -223,6 +262,7 @@ export function MemberTeamView() {
           <CardContent className="py-10 text-center">
             <p className="font-medium text-destructive">Không thể tải nhóm dự án</p>
             <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => setOverviewRetry((value) => value + 1)}>Thử lại</Button>
           </CardContent>
         </Card>
       ) : overview ? (

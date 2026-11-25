@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 import { getTaskDeadlineInfo } from '@/lib/task-deadline';
+import { createTaskListRequestGate } from '@/lib/task-list-request';
 
 const columns: { id: Task['status']; label: string; color: string; bgColor: string; dotColor: string }[] = [
   { id: 'todo', label: 'Cần làm', color: 'text-slate-600 dark:text-slate-400', bgColor: 'bg-slate-100/70 dark:bg-slate-900/40', dotColor: 'bg-slate-400' },
@@ -49,6 +50,16 @@ const priorityConfig: Record<string, { label: string; className: string }> = {
   urgent: { label: 'Gấp', className: 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-semibold' },
 };
 
+function captureAccount() {
+  const state = useAppStore.getState();
+  return state.user ? { id: state.user.id, role: state.user.role, session: state.notificationSession } : null;
+}
+
+function sameAccount(account: ReturnType<typeof captureAccount>) {
+  const state = useAppStore.getState();
+  return Boolean(account && state.user?.id === account.id && state.user.role === account.role && state.notificationSession === account.session);
+}
+
 export function MyTasksView() {
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<Task['status']>('todo');
@@ -59,42 +70,119 @@ export function MyTasksView() {
     boardViewMode, setBoardViewMode,
     openTaskDetail,
     searchQuery, setSearchQuery,
-    user,
+    user, notificationSession, taskDrawerOpen,
   } = useAppStore();
 
   const [movingId, setMovingId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>('all');
-  const taskFetchSequence = useRef(0);
+  const taskGate = useRef(createTaskListRequestGate());
+  const taskSettled = useRef(0);
+  const mounted = useRef(false);
+  const latestOwnTasks = useRef<Task[] | null>(null);
+  const pendingWrites = useRef(new Map<number, number>());
+  const fetchTasksRef = useRef<(() => Promise<void>) | null>(null);
+  const [listState, setListState] = useState<{ session: number; projectId: string | null; status: 'ready' | 'error'; loaded: boolean } | null>(null);
+  const [projectErrorSession, setProjectErrorSession] = useState<number | null>(null);
+  const [retry, setRetry] = useState(0);
+  const listMatches = listState?.session === notificationSession && listState.projectId === selectedProjectId;
+  const listStatus = listMatches ? listState.status : 'loading';
+  const listLoaded = Boolean(listMatches && listState.loaded);
   const teamMemberId = user?.teamMemberId ?? null;
   const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
 
-  const fetchTasks = useCallback(async () => {
-    const requestSequence = ++taskFetchSequence.current;
-    const params = new URLSearchParams();
-    if (selectedProjectId) params.set('projectId', selectedProjectId);
-    const currentUserId = useAppStore.getState().user?.id;
-    const res = await fetch(`/api/tasks?${params.toString()}`, { cache: 'no-store' });
-    const data = await readApiJson<Task[]>(res, 'Không thể tải danh sách công việc');
-    const currentState = useAppStore.getState();
-    if (requestSequence === taskFetchSequence.current && currentUserId && currentState.user?.id === currentUserId && currentState.selectedProjectId === selectedProjectId && !currentState.taskDrawerOpen) setTasks(data);
-  }, [selectedProjectId, setTasks]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; taskGate.current.invalidate(); };
+  }, []);
 
   useEffect(() => {
-    void Promise.all([
-      fetchTasks(),
-      fetch('/api/projects')
-        .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
-        .then(setProjects),
-    ]).catch((error) => {
-      toast.error(error instanceof Error ? error.message : 'Không thể tải dữ liệu công việc');
+    const account = captureAccount();
+    queueMicrotask(() => {
+      if (mounted.current && sameAccount(account)) {
+        setMovingId(null);
+        setReviewingId(null);
+      }
     });
-  }, [fetchTasks, setProjects]);
+  }, [notificationSession]);
+
+  const fetchTasks = useCallback(async () => {
+    const account = captureAccount();
+    if (!account || pendingWrites.current.get(account.session)) return;
+    const token = taskGate.current.begin();
+    const snapshot = useAppStore.getState().tasks;
+    const params = new URLSearchParams();
+    if (selectedProjectId) params.set('projectId', selectedProjectId);
+    try {
+      const res = await fetch(`/api/tasks?${params.toString()}`, { cache: 'no-store' });
+      const data = await readApiJson<Task[]>(res, 'Không thể tải danh sách công việc');
+      if (!Array.isArray(data)) throw new Error('Dữ liệu công việc không hợp lệ');
+      const current = useAppStore.getState();
+      if (!mounted.current || !sameAccount(account) || current.selectedProjectId !== selectedProjectId || current.taskDrawerOpen || pendingWrites.current.get(account.session)) return;
+      if (current.tasks !== snapshot && current.tasks !== latestOwnTasks.current) {
+        void fetchTasksRef.current?.();
+        return;
+      }
+      if (!taskGate.current.accept(token)) return;
+      setTasks(data);
+      latestOwnTasks.current = useAppStore.getState().tasks;
+      if (token.sequence >= taskSettled.current) {
+        taskSettled.current = token.sequence;
+        setListState({ session: account.session, projectId: selectedProjectId, status: 'ready', loaded: true });
+      } else {
+        setListState((old) => old?.session === account.session && old.projectId === selectedProjectId ? { ...old, loaded: true } : old);
+      }
+    } catch {
+      if (mounted.current && sameAccount(account) && useAppStore.getState().selectedProjectId === selectedProjectId && taskGate.current.isValid(token) && token.sequence >= taskSettled.current) {
+        taskSettled.current = token.sequence;
+        setListState((old) => ({ session: account.session, projectId: selectedProjectId, status: 'error', loaded: Boolean(old?.session === account.session && old.projectId === selectedProjectId && old.loaded) }));
+      }
+    }
+  }, [selectedProjectId, setTasks]);
+
+  useEffect(() => { fetchTasksRef.current = fetchTasks; return () => { fetchTasksRef.current = null; }; }, [fetchTasks]);
+
+  function beginWrite(account: NonNullable<ReturnType<typeof captureAccount>>) {
+    taskGate.current.invalidate();
+    pendingWrites.current.set(account.session, (pendingWrites.current.get(account.session) || 0) + 1);
+  }
+
+  function endWrite(account: NonNullable<ReturnType<typeof captureAccount>>) {
+    const count = pendingWrites.current.get(account.session) || 0;
+    if (count <= 1) pendingWrites.current.delete(account.session);
+    else pendingWrites.current.set(account.session, count - 1);
+    if (count <= 1 && mounted.current && sameAccount(account)) void fetchTasksRef.current?.();
+  }
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => { if (active && !taskDrawerOpen) void fetchTasks(); });
+    return () => { active = false; };
+  }, [fetchTasks, notificationSession, retry, taskDrawerOpen]);
+
+  useEffect(() => {
+    const account = captureAccount();
+    if (!account) return;
+    let active = true;
+    const controller = new AbortController();
+    const snapshot = useAppStore.getState().projects;
+    void fetch('/api/projects', { cache: 'no-store', signal: controller.signal })
+      .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
+      .then((data) => {
+        if (!Array.isArray(data)) throw new Error('Dữ liệu dự án không hợp lệ');
+        if (active && sameAccount(account)) {
+          if (useAppStore.getState().projects === snapshot) setProjects(data);
+          setProjectErrorSession(null);
+        }
+      })
+      .catch(() => { if (active && sameAccount(account)) setProjectErrorSession(account.session); });
+    return () => { active = false; controller.abort(); };
+  }, [user?.id, user?.role, notificationSession, retry, setProjects]);
 
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState !== 'visible' || movingId || reviewingId || useAppStore.getState().taskDrawerOpen) return;
-      void fetchTasks().catch(() => {});
+      void fetchTasks();
     };
     const interval = window.setInterval(refresh, 30_000);
     window.addEventListener('focus', refresh);
@@ -114,7 +202,9 @@ export function MyTasksView() {
     if (newIdx < 0 || newIdx >= columns.length) return;
 
     const newStatus = columns[newIdx].id;
-    taskFetchSequence.current++;
+    const account = captureAccount();
+    if (!account) return;
+    beginWrite(account);
     setMovingId(task.id);
     try {
       const response = await fetch(`/api/tasks/${task.id}`, {
@@ -122,24 +212,26 @@ export function MyTasksView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, expectedUpdatedAt: task.updatedAt }),
       });
+      if (!mounted.current || !sameAccount(account)) return;
       if (response.status === 409) {
         toast.warning('Công việc đã được thay đổi. Danh sách sẽ được tải lại; hãy kiểm tra rồi thử chuyển trạng thái lần nữa.');
-        await fetchTasks();
         return;
       }
       await ensureApiSuccess(response, 'Không thể cập nhật trạng thái');
-      toast.success(`Đã chuyển sang "${columns[newIdx].label}"`);
-      await fetchTasks();
+      if (mounted.current && sameAccount(account)) toast.success(`Đã chuyển sang "${columns[newIdx].label}"`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái');
+      if (mounted.current && sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái');
     } finally {
-      setMovingId(null);
+      endWrite(account);
+      if (mounted.current && sameAccount(account)) setMovingId(null);
     }
   }
 
   /* Request review */
   async function handleRequestReview(task: Task) {
-    taskFetchSequence.current++;
+    const account = captureAccount();
+    if (!account) return;
+    beginWrite(account);
     setReviewingId(task.id);
     try {
       const updateResponse = await fetch(`/api/tasks/${task.id}`, {
@@ -147,19 +239,18 @@ export function MyTasksView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'review', expectedUpdatedAt: task.updatedAt }),
       });
+      if (!mounted.current || !sameAccount(account)) return;
       if (updateResponse.status === 409) {
         toast.warning('Công việc đã được thay đổi. Danh sách sẽ được tải lại; hãy kiểm tra rồi thử gửi duyệt lần nữa.');
-        await fetchTasks();
         return;
       }
       await ensureApiSuccess(updateResponse, 'Không thể gửi yêu cầu xem xét');
-
-      toast.success('Đã gửi yêu cầu review cho Leader');
-      await fetchTasks();
+      if (mounted.current && sameAccount(account)) toast.success('Đã gửi yêu cầu review cho Leader');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Không thể gửi yêu cầu review');
+      if (mounted.current && sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Không thể gửi yêu cầu review');
     } finally {
-      setReviewingId(null);
+      endWrite(account);
+      if (mounted.current && sameAccount(account)) setReviewingId(null);
     }
   }
 
@@ -191,7 +282,7 @@ export function MyTasksView() {
               {currentProject ? currentProject.name : 'Công việc của tôi'}
             </h1>
             <Badge variant="outline" className="text-xs h-5 px-2 bg-muted/40 font-mono">
-              {myTasks.length} việc
+              {listLoaded ? `${myTasks.length} việc` : 'Đang tải'}
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -298,9 +389,18 @@ export function MyTasksView() {
         </div>
       </div>
 
+      {(listStatus === 'error' || projectErrorSession === notificationSession) && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          <span>Không thể tải dữ liệu mới nhất. {listLoaded ? 'Danh sách đã tải trước đó vẫn được giữ lại.' : 'Vui lòng thử lại.'}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => setRetry((value) => value + 1)}>Thử lại</Button>
+        </div>
+      )}
+
       {/* Main View Area */}
       <div className="flex-1 min-h-0">
-        {boardViewMode === 'table' ? (
+        {!listLoaded ? (
+          listStatus === 'loading' ? <p role="status" className="py-12 text-center text-sm text-muted-foreground">Đang tải công việc...</p> : null
+        ) : boardViewMode === 'table' ? (
           <TaskTableView tasks={myTasks} />
         ) : boardViewMode === 'calendar' ? (
           <TaskCalendarView tasks={myTasks} onTaskClick={(task) => openTaskDetail(task)} />

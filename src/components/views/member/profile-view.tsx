@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
-import type { ActivityLog } from '@/types';
+import type { ActivityLog, Task } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,9 +28,34 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { readApiJson } from '@/lib/client-api';
+import { isProfileSessionCurrent } from '@/lib/profile-session';
 
 export function ProfileView() {
-  const { user, tasks, setUser } = useAppStore();
+  const session = useAppStore((state) => state.notificationSession);
+  return <ProfileContent key={session} />;
+}
+
+function ProfileContent() {
+  const { user, setUser, notificationSession } = useAppStore();
+  const mounted = useRef(false);
+  const savingRef = useRef(false);
+  const changingPwRef = useRef(false);
+  const pendingRequests = useRef(new Set<AbortController>());
+  const userId = user?.id;
+  const userRole = user?.role;
+  const isCurrent = () => Boolean(mounted.current && userId && userRole && isProfileSessionCurrent(
+    useAppStore.getState(), { userId, role: userRole, session: notificationSession }
+  ));
+
+  useEffect(() => {
+    mounted.current = true;
+    const requests = pendingRequests.current;
+    return () => {
+      mounted.current = false;
+      for (const request of requests) request.abort();
+      requests.clear();
+    };
+  }, []);
 
   /* Profile edit state */
   const [isEditing, setIsEditing] = useState(false);
@@ -48,12 +73,17 @@ export function ProfileView() {
   /* Activity logs state */
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(true);
+  const [activityError, setActivityError] = useState(false);
+  const [activityRetry, setActivityRetry] = useState(0);
   const [workSummary, setWorkSummary] = useState<{ userId: string; todayMinutes: number | null } | null>(null);
+  const [profileTasks, setProfileTasks] = useState<Task[]>([]);
+  const [tasksState, setTasksState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [tasksRetry, setTasksRetry] = useState(0);
 
   /* Stats calculated from assigned tasks */
   const teamMemberId = user?.teamMemberId;
   const myTasks = teamMemberId
-    ? tasks.filter((t) => t.assigneeIds?.includes(teamMemberId) ?? t.assignees?.some((member) => member.id === teamMemberId) ?? t.assigneeId === teamMemberId)
+    ? profileTasks.filter((t) => t.assigneeIds?.includes(teamMemberId) ?? t.assignees?.some((member) => member.id === teamMemberId) ?? t.assigneeId === teamMemberId)
     : [];
   const totalAssigned = myTasks.length;
   const completedTasks = myTasks.filter((t) => t.status === 'done').length;
@@ -99,45 +129,85 @@ export function ProfileView() {
     },
   ];
 
+  // This view needs the complete member-scoped list, not the shared store's
+  // current project filter. Never publish a delayed response into another session.
+  useEffect(() => {
+    const userId = user?.id;
+    const role = user?.role;
+    if (!userId || !role) return;
+    const token = { userId, role, session: notificationSession };
+    let active = true;
+    const controller = new AbortController();
+    const current = () => active && isProfileSessionCurrent(useAppStore.getState(), token);
+    void fetch('/api/tasks', { cache: 'no-store', signal: controller.signal })
+      .then((response) => readApiJson<Task[]>(response, 'Không thể tải thống kê công việc'))
+      .then((data) => {
+        if (!Array.isArray(data)) throw new Error('Dữ liệu công việc không hợp lệ');
+        if (current()) { setProfileTasks(data); setTasksState('ready'); }
+      })
+      .catch(() => { if (current()) setTasksState('error'); });
+    return () => { active = false; controller.abort(); };
+  }, [user?.id, user?.role, notificationSession, tasksRetry]);
+
   /* Fetch activity logs */
   useEffect(() => {
     const userId = user?.id;
-    if (!userId) return;
+    const role = user?.role;
+    if (!userId || !role) return;
+    const token = { userId, role, session: notificationSession };
+    let active = true;
+    const controller = new AbortController();
+    const current = () => active && isProfileSessionCurrent(useAppStore.getState(), token);
     async function fetchActivity() {
       try {
-        const res = await fetch(`/api/activity-logs?userId=${userId}`);
+        const res = await fetch(`/api/activity-logs?userId=${encodeURIComponent(token.userId)}`, { cache: 'no-store', signal: controller.signal });
         const data = await readApiJson<ActivityLog[]>(res, 'Không thể tải lịch sử hoạt động');
-        setActivityLogs(data);
+        if (!Array.isArray(data)) throw new Error('Dữ liệu lịch sử không hợp lệ');
+        if (current()) { setActivityLogs(data); setActivityError(false); }
       } catch {
-        /* silent */
+        if (current()) setActivityError(true);
       } finally {
-        setLoadingActivity(false);
+        if (current()) setLoadingActivity(false);
       }
     }
-    fetchActivity();
-  }, [user?.id]);
+    void fetchActivity();
+    return () => { active = false; controller.abort(); };
+  }, [user?.id, user?.role, notificationSession, activityRetry]);
 
   useEffect(() => {
     const userId = user?.id;
-    if (!userId) return;
+    const role = user?.role;
+    if (!userId || !role) return;
+    const token = { userId, role, session: notificationSession };
     let active = true;
     let sequence = 0;
+    let applied = 0;
+    let settled = 0;
+    const controller = new AbortController();
+    const current = () => active && isProfileSessionCurrent(useAppStore.getState(), token);
     const refresh = async () => {
       if (document.visibilityState !== 'visible') return;
       const requestSequence = ++sequence;
       try {
-        const response = await fetch('/api/time-logs?mode=summary', { cache: 'no-store' });
+        const response = await fetch('/api/time-logs?mode=summary', { cache: 'no-store', signal: controller.signal });
         const summary = await readApiJson<{ todayMinutes: number }>(response, 'Không thể tải giờ chấm công');
-        if (active && requestSequence === sequence && useAppStore.getState().user?.id === userId) setWorkSummary({ userId, todayMinutes: summary.todayMinutes });
+        if (current() && requestSequence > applied) {
+          applied = requestSequence;
+          settled = Math.max(settled, requestSequence);
+          setWorkSummary({ userId, todayMinutes: summary.todayMinutes });
+        }
       } catch {
-        if (active && requestSequence === sequence && useAppStore.getState().user?.id === userId) setWorkSummary({ userId, todayMinutes: null });
+        if (current() && requestSequence > settled) {
+          settled = requestSequence;
+          setWorkSummary({ userId, todayMinutes: null });
+        }
       }
     };
     void refresh();
     const interval = window.setInterval(refresh, 30_000);
     window.addEventListener('focus', refresh);
-    return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
-  }, [user?.id]);
+    return () => { active = false; controller.abort(); window.clearInterval(interval); window.removeEventListener('focus', refresh); };
+  }, [user?.id, user?.role, notificationSession]);
 
   /* Profile edit handlers */
   function startEditing() {
@@ -151,35 +221,46 @@ export function ProfileView() {
   }
 
   async function saveName() {
+    if (savingRef.current || !user || !isCurrent()) return;
     if (!editName.trim()) {
       toast.error('Tên không được để trống');
       return;
     }
+    savingRef.current = true;
     setSaving(true);
+    const controller = new AbortController();
+    pendingRequests.current.add(controller);
     try {
       const res = await fetch('/api/auth/update-profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user?.id, name: editName.trim() }),
+        signal: controller.signal,
       });
+      if (!isCurrent()) return;
       if (!res.ok) {
         const err = await res.json();
-        toast.error(err.error || 'Không thể cập nhật tên');
+        if (isCurrent()) toast.error(err.error || 'Không thể cập nhật tên');
         return;
       }
       const data = await res.json();
-      setUser(data.user || { ...user!, name: editName.trim() });
+      if (!isCurrent()) return;
+      if (data.user && (data.user.id !== user.id || data.user.role !== user.role)) throw new Error('Tài khoản trả về không hợp lệ');
+      setUser(data.user || { ...user, name: editName.trim() });
       toast.success('Đã cập nhật tên thành công');
       setIsEditing(false);
     } catch {
-      toast.error('Có lỗi xảy ra');
+      if (isCurrent()) toast.error('Có lỗi xảy ra');
     } finally {
-      setSaving(false);
+      pendingRequests.current.delete(controller);
+      savingRef.current = false;
+      if (isCurrent()) setSaving(false);
     }
   }
 
   /* Password change handler */
   async function handleChangePassword() {
+    if (changingPwRef.current || !user || !isCurrent()) return;
     if (!currentPassword) {
       toast.error('Vui lòng nhập mật khẩu hiện tại');
       return;
@@ -192,7 +273,10 @@ export function ProfileView() {
       toast.error('Xác nhận mật khẩu không khớp');
       return;
     }
+    changingPwRef.current = true;
     setChangingPw(true);
+    const controller = new AbortController();
+    pendingRequests.current.add(controller);
     try {
       const res = await fetch('/api/auth/change-password', {
         method: 'POST',
@@ -202,10 +286,12 @@ export function ProfileView() {
           currentPassword,
           newPassword,
         }),
+        signal: controller.signal,
       });
+      if (!isCurrent()) return;
       if (!res.ok) {
         const err = await res.json();
-        toast.error(err.error || 'Không thể đổi mật khẩu');
+        if (isCurrent()) toast.error(err.error || 'Không thể đổi mật khẩu');
         return;
       }
       toast.success('Đổi mật khẩu thành công');
@@ -213,9 +299,11 @@ export function ProfileView() {
       setNewPassword('');
       setConfirmPassword('');
     } catch {
-      toast.error('Có lỗi xảy ra');
+      if (isCurrent()) toast.error('Có lỗi xảy ra');
     } finally {
-      setChangingPw(false);
+      pendingRequests.current.delete(controller);
+      changingPwRef.current = false;
+      if (isCurrent()) setChangingPw(false);
     }
   }
 
@@ -273,6 +361,7 @@ export function ProfileView() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <Input
                     value={editName}
+                    disabled={saving}
                     onChange={(e) => setEditName(e.target.value)}
                     className="max-w-[250px]"
                     placeholder="Nhập tên mới"
@@ -327,6 +416,12 @@ export function ProfileView() {
       </Card>
 
       {/* Stats grid */}
+      {tasksState === 'error' && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          <span>Không thể tải thống kê công việc.</span>
+          <Button variant="outline" size="sm" onClick={() => { setTasksState('loading'); setTasksRetry((value) => value + 1); }}>Thử lại</Button>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat) => {
           const Icon = stat.icon;
@@ -339,12 +434,13 @@ export function ProfileView() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
+                <div className="text-2xl font-bold">{tasksState === 'ready' ? stat.value : '—'}</div>
               </CardContent>
             </Card>
           );
         })}
       </div>
+      {tasksState === 'loading' && <p role="status" className="text-sm text-muted-foreground">Đang tải thống kê công việc...</p>}
 
       {/* Change password card */}
       <Card>
@@ -357,6 +453,7 @@ export function ProfileView() {
             <div className="relative">
               <Input
                 id="current-pw"
+                disabled={changingPw}
                 type={showCurrentPw ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -378,6 +475,7 @@ export function ProfileView() {
             <div className="relative">
               <Input
                 id="new-pw"
+                disabled={changingPw}
                 type={showNewPw ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -398,6 +496,7 @@ export function ProfileView() {
             <Label htmlFor="confirm-pw">Xác nhận mật khẩu mới</Label>
             <Input
               id="confirm-pw"
+              disabled={changingPw}
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -441,6 +540,11 @@ export function ProfileView() {
           {loadingActivity ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-pulse text-muted-foreground">Đang tải lịch sử...</div>
+            </div>
+          ) : activityError ? (
+            <div role="alert" className="flex flex-col items-center gap-3 py-8 text-center text-sm text-muted-foreground">
+              <span>Không thể tải lịch sử hoạt động.</span>
+              <Button variant="outline" size="sm" onClick={() => { setLoadingActivity(true); setActivityError(false); setActivityRetry((value) => value + 1); }}>Thử lại</Button>
             </div>
           ) : activityLogs.length === 0 ? (
             <div className="text-center py-8 text-sm text-muted-foreground">

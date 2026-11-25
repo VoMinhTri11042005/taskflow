@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import type { Task, TeamMember, Project } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -55,6 +55,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ensureApiSuccess, readApiJson } from '@/lib/client-api';
 import { getTaskDateKey, getTaskDeadlineInfo } from '@/lib/task-deadline';
+import { createTaskListRequestGate } from '@/lib/task-list-request';
 
 const columns: { id: Task['status']; label: string; color: string; bgColor: string; dotColor: string }[] = [
   { id: 'todo', label: 'Cần làm', color: 'text-slate-600 dark:text-slate-400', bgColor: 'bg-slate-100/70 dark:bg-slate-900/40', dotColor: 'bg-slate-400' },
@@ -72,9 +73,14 @@ const priorityConfig: Record<string, { label: string; className: string }> = {
 
 type ProjectAssignee = Pick<TeamMember, 'id' | 'name' | 'email' | 'color'>;
 
-function sameAccount(user: { id: string; role: string } | null) {
-  const current = useAppStore.getState().user;
-  return Boolean(user && current?.id === user.id && current.role === user.role);
+function captureAccount() {
+  const state = useAppStore.getState();
+  return state.user ? { id: state.user.id, role: state.user.role, session: state.notificationSession } : null;
+}
+
+function sameAccount(account: ReturnType<typeof captureAccount>) {
+  const state = useAppStore.getState();
+  return Boolean(account && state.user?.id === account.id && state.user.role === account.role && state.notificationSession === account.session);
 }
 
 export function BoardView() {
@@ -87,6 +93,7 @@ export function BoardView() {
     boardViewMode, setBoardViewMode,
     openTaskDetail,
     searchQuery, setSearchQuery,
+    user, notificationSession, taskDrawerOpen,
   } = useAppStore();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -112,35 +119,128 @@ export function BoardView() {
 
   // Drag & drop state
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-
-  const fetchTasks = useCallback(async () => {
-    const account = useAppStore.getState().user;
-    const params = new URLSearchParams();
-    if (selectedProjectId) params.set('projectId', selectedProjectId);
-    const res = await fetch(`/api/tasks?${params.toString()}`);
-    const data = await readApiJson<Task[]>(res, 'Không thể tải danh sách công việc');
-    if (sameAccount(account)) setTasks(data);
-  }, [selectedProjectId, setTasks]);
+  const taskGate = useRef(createTaskListRequestGate());
+  const taskSettled = useRef(0);
+  const mounted = useRef(false);
+  const latestOwnTasks = useRef<Task[] | null>(null);
+  const pendingWrites = useRef(new Map<number, number>());
+  const fetchTasksRef = useRef<(() => Promise<void>) | null>(null);
+  const [listState, setListState] = useState<{ session: number; projectId: string | null; status: 'ready' | 'error'; loaded: boolean } | null>(null);
+  const [projectErrorSession, setProjectErrorSession] = useState<number | null>(null);
+  const [retry, setRetry] = useState(0);
+  const listMatches = listState?.session === notificationSession && listState.projectId === selectedProjectId;
+  const listStatus = listMatches ? listState.status : 'loading';
+  const listLoaded = Boolean(listMatches && listState.loaded);
 
   useEffect(() => {
-    void Promise.all([
-      fetchTasks(),
-      fetch('/api/projects')
-        .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
-        .then(setProjects),
-    ]).catch((error) => {
-      toast.error(error instanceof Error ? error.message : 'Không thể tải dữ liệu công việc');
+    mounted.current = true;
+    return () => { mounted.current = false; taskGate.current.invalidate(); };
+  }, []);
+
+  useEffect(() => {
+    const account = captureAccount();
+    queueMicrotask(() => {
+      if (!mounted.current || !sameAccount(account)) return;
+      setDialogOpen(false);
+      setEditingTask(null);
+      setFormBusy(false);
+      setEditConflict(false);
+      setFormTitle('');
+      setFormDesc('');
+      setFormProjectId('');
+      setFormAssigneeIds([]);
+      setFormDueDate('');
+      setProjectAssignees([]);
+      setAssigneesProjectId(null);
     });
-  }, [fetchTasks, setProjects]);
+  }, [notificationSession]);
+
+  const fetchTasks = useCallback(async () => {
+    const account = captureAccount();
+    if (!account || pendingWrites.current.get(account.session)) return;
+    const token = taskGate.current.begin();
+    const snapshot = useAppStore.getState().tasks;
+    const params = new URLSearchParams();
+    if (selectedProjectId) params.set('projectId', selectedProjectId);
+    try {
+      const res = await fetch(`/api/tasks?${params.toString()}`, { cache: 'no-store' });
+      const data = await readApiJson<Task[]>(res, 'Không thể tải danh sách công việc');
+      if (!Array.isArray(data)) throw new Error('Dữ liệu công việc không hợp lệ');
+      const current = useAppStore.getState();
+      if (!mounted.current || !sameAccount(account) || current.selectedProjectId !== selectedProjectId || current.taskDrawerOpen || pendingWrites.current.get(account.session)) return;
+      if (current.tasks !== snapshot && current.tasks !== latestOwnTasks.current) {
+        void fetchTasksRef.current?.();
+        return;
+      }
+      if (!taskGate.current.accept(token)) return;
+      setTasks(data);
+      latestOwnTasks.current = useAppStore.getState().tasks;
+      if (token.sequence >= taskSettled.current) {
+        taskSettled.current = token.sequence;
+        setListState({ session: account.session, projectId: selectedProjectId, status: 'ready', loaded: true });
+      } else {
+        setListState((old) => old?.session === account.session && old.projectId === selectedProjectId
+          ? { ...old, loaded: true } : old);
+      }
+    } catch {
+      if (mounted.current && sameAccount(account) && useAppStore.getState().selectedProjectId === selectedProjectId && taskGate.current.isValid(token) && token.sequence >= taskSettled.current) {
+        taskSettled.current = token.sequence;
+        setListState((old) => ({ session: account.session, projectId: selectedProjectId, status: 'error',
+          loaded: Boolean(old?.session === account.session && old.projectId === selectedProjectId && old.loaded) }));
+      }
+    }
+  }, [selectedProjectId, setTasks]);
+
+  useEffect(() => { fetchTasksRef.current = fetchTasks; return () => { fetchTasksRef.current = null; }; }, [fetchTasks]);
+
+  function beginWrite(account: NonNullable<ReturnType<typeof captureAccount>>) {
+    taskGate.current.invalidate();
+    pendingWrites.current.set(account.session, (pendingWrites.current.get(account.session) || 0) + 1);
+  }
+
+  function endWrite(account: NonNullable<ReturnType<typeof captureAccount>>) {
+    const count = pendingWrites.current.get(account.session) || 0;
+    if (count <= 1) pendingWrites.current.delete(account.session);
+    else pendingWrites.current.set(account.session, count - 1);
+    if (count <= 1 && mounted.current && sameAccount(account)) void fetchTasksRef.current?.();
+  }
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => { if (active && !taskDrawerOpen) void fetchTasks(); });
+    return () => { active = false; };
+  }, [fetchTasks, notificationSession, retry, taskDrawerOpen]);
+
+  useEffect(() => {
+    const account = captureAccount();
+    if (!account) return;
+    let active = true;
+    const controller = new AbortController();
+    const snapshot = useAppStore.getState().projects;
+    void fetch('/api/projects', { cache: 'no-store', signal: controller.signal })
+      .then((response) => readApiJson<Project[]>(response, 'Không thể tải danh sách dự án'))
+      .then((data) => {
+        if (!Array.isArray(data)) throw new Error('Dữ liệu dự án không hợp lệ');
+        if (active && sameAccount(account)) {
+          if (useAppStore.getState().projects === snapshot) setProjects(data);
+          setProjectErrorSession(null);
+        }
+      })
+      .catch(() => { if (active && sameAccount(account)) setProjectErrorSession(account.session); });
+    return () => { active = false; controller.abort(); };
+  }, [user?.id, user?.role, notificationSession, retry, setProjects]);
 
   useEffect(() => {
     if (!formProjectId) return;
 
+    const account = captureAccount();
+    if (!account) return;
     let active = true;
+    const controller = new AbortController();
     const projectId = formProjectId;
     void (async () => {
       try {
-        const response = await fetch(`/api/projects/${projectId}/members`, { cache: 'no-store' });
+        const response = await fetch(`/api/projects/${projectId}/members`, { cache: 'no-store', signal: controller.signal });
         const data = await readApiJson<{
           members: Array<{
             status: string;
@@ -152,7 +252,7 @@ export function BoardView() {
             };
           }>;
         }>(response, 'Không thể tải thành viên dự án');
-        if (!active) return;
+        if (!active || !sameAccount(account)) return;
         // The task table stores TeamMember IDs, while the project endpoint
         // returns the account plus its matching TeamMember ID.  Only expose
         // approved members that can actually be assigned a task.
@@ -168,14 +268,14 @@ export function BoardView() {
         );
         setAssigneesProjectId(projectId);
       } catch {
-        if (!active) return;
+        if (!active || !sameAccount(account)) return;
         setProjectAssignees([]);
         setAssigneesProjectId(projectId);
       }
     })();
 
-    return () => { active = false; };
-  }, [formProjectId]);
+    return () => { active = false; controller.abort(); };
+  }, [formProjectId, notificationSession]);
 
   function openCreateDialog(status: Task['status'] = 'todo') {
     setEditConflict(false);
@@ -209,7 +309,9 @@ export function BoardView() {
 
   async function handleSave() {
     if (!formTitle.trim() || !formProjectId || formBusy || editConflict) return;
-    const account = useAppStore.getState().user;
+    const account = captureAccount();
+    if (!account) return;
+    beginWrite(account);
     setFormBusy(true);
     try {
       const body: Record<string, unknown> = {
@@ -249,6 +351,7 @@ export function BoardView() {
           return;
         }
         await ensureApiSuccess(response, 'Không thể cập nhật công việc');
+        if (!mounted.current || !sameAccount(account)) return;
         toast.success('Đã cập nhật công việc');
       } else {
         const response = await fetch('/api/tasks', {
@@ -258,14 +361,15 @@ export function BoardView() {
         });
         if (!sameAccount(account)) return;
         await ensureApiSuccess(response, 'Không thể tạo công việc');
+        if (!mounted.current || !sameAccount(account)) return;
         toast.success('Đã tạo công việc mới');
       }
       setDialogOpen(false);
-      await fetchTasks();
     } catch (error) {
-      if (sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+      if (mounted.current && sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
     } finally {
-      setFormBusy(false);
+      endWrite(account);
+      if (mounted.current && sameAccount(account)) setFormBusy(false);
     }
   }
 
@@ -282,7 +386,8 @@ export function BoardView() {
 
   async function reloadEditTask() {
     if (!editingTask || formBusy) return;
-    const account = useAppStore.getState().user;
+    const account = captureAccount();
+    if (!account) return;
     setFormBusy(true);
     try {
       const response = await fetch(`/api/tasks/${editingTask.id}`, { cache: 'no-store' });
@@ -297,37 +402,45 @@ export function BoardView() {
     } catch (error) {
       if (sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Không thể tải công việc mới nhất');
     } finally {
-      setFormBusy(false);
+      if (mounted.current && sameAccount(account)) setFormBusy(false);
     }
   }
 
   async function handleDeleteTask(id: string) {
+    const account = captureAccount();
+    if (!account) return;
+    beginWrite(account);
     try {
       const response = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
       await ensureApiSuccess(response, 'Không thể xóa công việc');
-      toast.success('Đã xóa công việc');
-      await fetchTasks();
+      if (mounted.current && sameAccount(account)) toast.success('Đã xóa công việc');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+      if (mounted.current && sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Có lỗi xảy ra');
+    } finally {
+      endWrite(account);
     }
   }
 
   async function handleStatusChange(task: Task, newStatus: Task['status']) {
+    const account = captureAccount();
+    if (!account) return;
+    beginWrite(account);
     try {
       const response = await fetch(`/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, expectedUpdatedAt: task.updatedAt }),
       });
+      if (!mounted.current || !sameAccount(account)) return;
       if (response.status === 409) {
         toast.warning('Công việc đã được thay đổi. Danh sách sẽ được tải lại; hãy kiểm tra rồi thử chuyển trạng thái lần nữa.');
-        await fetchTasks();
         return;
       }
       await ensureApiSuccess(response, 'Không thể cập nhật trạng thái');
-      await fetchTasks();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái');
+      if (mounted.current && sameAccount(account)) toast.error(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái');
+    } finally {
+      endWrite(account);
     }
   }
 
@@ -372,7 +485,7 @@ export function BoardView() {
               {currentProject ? getProjectDisplayName(currentProject.name) : 'Bảng công việc'}
             </h1>
             <Badge variant="outline" className="text-xs h-5 px-2 bg-muted/40 font-mono">
-              {filteredTasks.length} việc
+              {listLoaded ? `${filteredTasks.length} việc` : 'Đang tải'}
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -430,6 +543,13 @@ export function BoardView() {
           </Button>
         </div>
       </div>
+
+      {(listStatus === 'error' || projectErrorSession === notificationSession) && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          <span>Không thể tải dữ liệu mới nhất. {listLoaded ? 'Danh sách đã tải trước đó vẫn được giữ lại.' : 'Vui lòng thử lại.'}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => setRetry((value) => value + 1)}>Thử lại</Button>
+        </div>
+      )}
 
       {/* Filter & Search Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -500,7 +620,9 @@ export function BoardView() {
 
       {/* Main View Area */}
       <div className="flex-1 min-h-0">
-        {boardViewMode === 'table' ? (
+        {!listLoaded ? (
+          listStatus === 'loading' ? <p role="status" className="py-12 text-center text-sm text-muted-foreground">Đang tải công việc...</p> : null
+        ) : boardViewMode === 'table' ? (
           <TaskTableView tasks={filteredTasks} />
         ) : boardViewMode === 'calendar' ? (
           <TaskCalendarView tasks={filteredTasks} onTaskClick={(task) => openTaskDetail(task)} />
